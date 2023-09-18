@@ -70,7 +70,7 @@ layout(push_constant) uniform pushConstant { float CascadeSplits[DEPTH_CASCADES_
 
 layout(location = 0) out vec4 GlobalLightPos;
 layout(location = 1) out vec4 GlobalLightDir;
-layout(location = 2) out vec2 Rotation;
+layout(location = 2) flat out vec2 Rotation;
 layout(location = 3) out vert_out Out;
 
 void main()

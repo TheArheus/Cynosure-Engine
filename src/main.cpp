@@ -87,7 +87,7 @@ struct alignas(16) mesh_comp_culling_common_input
 
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {	
-	window VulkanWindow(1240, 720, "3D Renderer");
+	window VulkanWindow("3D Renderer");
 	game_code GameCode = VulkanWindow.LoadGameCode();
 	VulkanWindow.InitGraphics();
 
@@ -100,9 +100,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	vec4 TempLightPos = vec4(-4, 4, 2, 1);
 	LightSources.push_back({TempLightPos, vec4(1, 1, 0, 1)});
 
-	view_data ViewData = {};
-	ViewData.CameraPos = vec3(-4, 4, 2);
-	ViewData.ViewDir   = -ViewData.CameraPos;
+	view_data  ViewData = {};
+	ViewData.CameraPos  = vec3(-4, 4, 2);
+	ViewData.ViewDir    = -ViewData.CameraPos;
 	game_input GameInput{};
 	GameInput.Buttons = VulkanWindow.Buttons;
 
@@ -148,7 +148,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	std::vector<texture> GlobalShadow(DEPTH_CASCADES_COUNT); // TODO: Make it to work in a loop
 	for(texture& Shadow : GlobalShadow)
 	{
-		Shadow = texture(VulkanWindow.Gfx, 4096, 4096, 1, TextureInputData);
+		Shadow = texture(VulkanWindow.Gfx, PreviousPowerOfTwo(VulkanWindow.Gfx->Width) * 4, PreviousPowerOfTwo(VulkanWindow.Gfx->Width) * 4, 1, TextureInputData);
 	}
 
 	TextureInputData.Format = VK_FORMAT_R32_SFLOAT;
@@ -321,7 +321,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 	RendererInputData = {};
 	RendererInputData.UseDepth = true;
-	render_context  CascadeShadowContext(VulkanWindow.Gfx, 4096, 4096, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, RendererInputData);
+	render_context  CascadeShadowContext(VulkanWindow.Gfx, GlobalShadow[0].Width, GlobalShadow[0].Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, RendererInputData);
 	render_context  ShadowContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, RendererInputData);
 
 	RendererInputData.UseBackFace = true;
@@ -501,11 +501,11 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			vec4 ShadowOrigin = vec4(0, 0, 0, 1);
 			mat4 ShadowMatrix = WorldUpdate.LightView[CascadeIdx - 1] * WorldUpdate.LightProj[CascadeIdx - 1];
 			ShadowOrigin = ShadowMatrix * ShadowOrigin;
-			ShadowOrigin = ShadowOrigin * 4096.0f / 2.0f;
+			ShadowOrigin = ShadowOrigin * GlobalShadow[CascadeIdx - 1].Width / 2.0f;
 
 			vec4 RoundedOrigin = vec4(round(ShadowOrigin.x), round(ShadowOrigin.y), round(ShadowOrigin.z), round(ShadowOrigin.w));
 			vec4 RoundOffset = RoundedOrigin - ShadowOrigin;
-			RoundOffset = RoundOffset * 2.0f / 4096.0f;
+			RoundOffset = RoundOffset * 2.0f / GlobalShadow[CascadeIdx - 1].Width;
 			RoundOffset.z = 0.0f;
 			RoundOffset.w = 0.0f;
 			WorldUpdate.LightProj[CascadeIdx - 1].Line3 += RoundOffset;
@@ -577,7 +577,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				};
 				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, ShadowBarrier);
 
-				CascadeShadowContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, 4096, 4096, GlobalShadow[CascadeIdx], {1, 0});
+				CascadeShadowContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, GlobalShadow[CascadeIdx].Width, GlobalShadow[CascadeIdx].Height, GlobalShadow[CascadeIdx], {1, 0});
 				CascadeShadowContext.Begin(VulkanWindow.Gfx, PipelineContext);
 
 				CascadeShadowContext.SetStorageBufferView(VertexBuffer);

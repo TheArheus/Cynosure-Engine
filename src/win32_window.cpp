@@ -9,9 +9,9 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	WindowClass.WindowNames.push_back(_Name);
 
 	RECT AdjustRect = {};
-	AdjustRect.left = 100;
-	AdjustRect.top = 100;
-	AdjustRect.right = AdjustRect.left + Width;
+	AdjustRect.left   = 0;
+	AdjustRect.top    = 0;
+	AdjustRect.right  = AdjustRect.left + Width;
 	AdjustRect.bottom = AdjustRect.top + Height;
 
 	AdjustWindowRect(&AdjustRect, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), 0);

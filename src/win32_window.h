@@ -35,6 +35,7 @@ private:
 
 public:
 	window(unsigned int Width, unsigned int Height, const char* Name);
+	window(const char* Name) : window(GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), Name){}
 	window(window&& rhs) = default;
 	window& operator=(window&& rhs) = default;
 	~window()

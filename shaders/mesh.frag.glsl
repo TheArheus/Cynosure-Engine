@@ -75,8 +75,7 @@ float GetBlockerDistance(sampler2D ShadowSampler, vec2 ShadowCoord, float Receiv
 		vec2 Offset = vec2(Rotation.x * PoissonDisk[SampleIdx].x - Rotation.y * PoissonDisk[SampleIdx].y,
 						   Rotation.y * PoissonDisk[SampleIdx].x + Rotation.x * PoissonDisk[SampleIdx].y);
  
-		//float Depth = texture(ShadowSampler, ShadowCoord + Offset*TextureSize*sw).r;
-		float Depth = texture(ShadowSampler, ShadowCoord + PoissonDisk[SampleIdx]*TextureSize*sw).r;
+		float Depth = texture(ShadowSampler, ShadowCoord + Offset*TextureSize*sw).r;
         if (Depth < ReceiverDepth + Bias)
         {
             ++NumBlockerDistances;
@@ -140,8 +139,7 @@ float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, float Near, 
 		vec2 Offset = vec2(Rotation.x * PoissonDisk[SampleIdx].x - Rotation.y * PoissonDisk[SampleIdx].y,
 						   Rotation.y * PoissonDisk[SampleIdx].x + Rotation.x * PoissonDisk[SampleIdx].y);
 
-		//float ShadowDepth = texture(ShadowSampler, ShadowCoord + Offset*TextureSize*KernelSize).r;
-		float ShadowDepth = texture(ShadowSampler, ShadowCoord + PoissonDisk[SampleIdx]*TextureSize*KernelSize).r;
+		float ShadowDepth = texture(ShadowSampler, ShadowCoord + Offset*TextureSize*KernelSize).r;
 		Result += (ObjectDepth + Bias) > ShadowDepth ? 1.0 : 0.0;
 	}
 	float l = clamp(smoothstep(0.0f, 0.2f, dot(LightPos, Normal)), 0.0f, 1.0f);
