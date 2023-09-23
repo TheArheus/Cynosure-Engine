@@ -6,6 +6,8 @@
 
 #include <random>
 
+#define GBUFFER_COUNT 4
+
 // TODO: Fix image barriers and current layouts
 // 
 // TODO: Reorganize files for the corresponding files. For ex. win32_window files to platform folders and etc.
@@ -21,7 +23,6 @@
 //		NOTE: Array of shadow maps, shadow cube maps and cascaded shadow maps are needed 
 //		for every object
 //
-// TODO: Implement deffered rendering for efficient lights rendering in the scene
 // TODO: Make memory allocator. And make it to be used in STL
 //
 // TODO: Levels: if(!Levels[0].IsLoaded()) Levels[0].Load() else not
@@ -65,6 +66,7 @@ struct alignas(16) global_world_data
 // NOTE: Maybe I should create only the limited ammount of light sources? Not greater than 256?
 // I guess it should be filled up only inside the `UpdateAndRender` function
 // NOTE: I guess the total ammount of light coures should not be limited. But per object I guess, at least in the begining?
+// TODO: Radius and LightDir for directional lights
 struct alignas(16) light_source
 {
 	vec4 Pos;
@@ -138,12 +140,12 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	buffer LightSourcesBuffer(VulkanWindow.Gfx, sizeof(light_source) * 256, false, 256, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
 	texture::input_data TextureInputData = {};
-	TextureInputData.Format = VK_FORMAT_D32_SFLOAT;
-	TextureInputData.Usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	TextureInputData.Format    = VK_FORMAT_D32_SFLOAT;
+	TextureInputData.Usage     = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 	TextureInputData.ImageType = VK_IMAGE_TYPE_2D;
-	TextureInputData.ViewType = VK_IMAGE_VIEW_TYPE_2D;
+	TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_2D;
 	TextureInputData.MipLevels = 1;
-	TextureInputData.Layers = 1;
+	TextureInputData.Layers    = 1;
 	TextureInputData.Alignment = 0;
 	std::vector<texture> GlobalShadow(DEPTH_CASCADES_COUNT); // TODO: Make it to work in a loop
 	for(texture& Shadow : GlobalShadow)
@@ -151,10 +153,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		Shadow = texture(VulkanWindow.Gfx, PreviousPowerOfTwo(VulkanWindow.Gfx->Width) * 4, PreviousPowerOfTwo(VulkanWindow.Gfx->Width) * 4, 1, TextureInputData);
 	}
 
-	TextureInputData.Format = VK_FORMAT_R32_SFLOAT;
-	TextureInputData.Usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	TextureInputData.Format    = VK_FORMAT_R32_SFLOAT;
+	TextureInputData.Usage     = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	TextureInputData.MipLevels = GetImageMipLevels(PreviousPowerOfTwo(VulkanWindow.Gfx->Width), PreviousPowerOfTwo(VulkanWindow.Gfx->Height));
-	texture DepthPyramid(VulkanWindow.Gfx, PreviousPowerOfTwo(VulkanWindow.Gfx->Width), PreviousPowerOfTwo(VulkanWindow.Gfx->Height), 1, TextureInputData);
+	texture DepthPyramid(VulkanWindow.Gfx, PreviousPowerOfTwo(VulkanWindow.Gfx->Width), PreviousPowerOfTwo(VulkanWindow.Gfx->Height), 1, TextureInputData, VK_SAMPLER_REDUCTION_MODE_MAX);
 
 	vec2 PoissonDisk[64] = {};
 	PoissonDisk[0]  = vec2(-0.613392, 0.617481);
@@ -237,12 +239,36 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		}
 	}
 
-	TextureInputData.Format = VK_FORMAT_R32G32_SFLOAT;
-	TextureInputData.Usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	TextureInputData.Format    = VK_FORMAT_R32G32_SFLOAT;
+	TextureInputData.Usage     = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	TextureInputData.ImageType = VK_IMAGE_TYPE_3D;
-	TextureInputData.ViewType = VK_IMAGE_VIEW_TYPE_3D;
+	TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_3D;
 	TextureInputData.MipLevels = 1;
 	texture RandomAnglesTexture(VulkanWindow.Gfx, (void*)RandomAngles, 32, 32, 32, TextureInputData);
+
+	// NOTE: Rendering targets:
+	std::vector<texture> GBuffer(GBUFFER_COUNT);
+	TextureInputData = {};
+	TextureInputData.ImageType = VK_IMAGE_TYPE_2D;
+	TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_2D;
+	TextureInputData.MipLevels = 1;
+	TextureInputData.Layers    = 1;
+	TextureInputData.Alignment = 0;
+	TextureInputData.Format    = VulkanWindow.Gfx->SurfaceFormat.format;
+	TextureInputData.Usage     = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	texture GfxColorTarget(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData);
+	TextureInputData.Format    = VK_FORMAT_R32G32B32A32_SFLOAT;
+	TextureInputData.Usage     = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	GBuffer[0] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Position
+	GBuffer[1] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Normals
+	TextureInputData.Format    = VK_FORMAT_R8G8B8A8_UNORM;
+	GBuffer[2] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Diffuse Color
+	TextureInputData.Format    = VK_FORMAT_R32_SFLOAT;
+	GBuffer[3] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Specular
+	TextureInputData.Format    = VK_FORMAT_D32_SFLOAT;
+	TextureInputData.Usage     = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	texture GfxDepthTarget(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData);
+	texture DebugCameraViewDepthTarget(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData);
 
 	mesh_comp_culling_common_input MeshCompCullingCommonData = {};
 	MeshCompCullingCommonData.FrustrumCullingEnabled  = true;
@@ -255,79 +281,90 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	buffer MeshDrawCommandBuffer(VulkanWindow.Gfx, MiB(16), false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	buffer MeshDrawShadowCommandBuffer(VulkanWindow.Gfx, MiB(16), false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
+	// TODO: Check and fix this new implementation. In theory, this should be correct
 	shader_input GfxRootSignature;
-	GfxRootSignature.PushStorageBuffer(0)->
-					 PushUniformBuffer(1)->
-					 PushStorageBuffer(2)->
-					 PushUniformBuffer(3)->
-					 PushStorageBuffer(4)->
-					 PushImageSampler(5)->
-					 PushImageSampler(6, DEPTH_CASCADES_COUNT)->
-					 PushConstant((DEPTH_CASCADES_COUNT + 1) * sizeof(float))->
+	GfxRootSignature.PushStorageBuffer()->				// Vertex Data
+					 PushUniformBuffer()->				// World Global Data
+					 PushStorageBuffer()->				// MeshDrawCommands
 					 Build(VulkanWindow.Gfx);
 
+	shader_input ColorPassRootSignature;
+	ColorPassRootSignature.PushUniformBuffer()->					// World Global Data
+						   PushUniformBuffer()->					// Array of Light Sources
+						   PushStorageBuffer()->					// Poisson Disk
+						   PushImageSampler()->						// Random Rotations
+						   PushImageSampler()->						// G-Buffer Position Data
+						   PushImageSampler()->						// G-Buffer Normal Data
+						   PushImageSampler()->						// G-Buffer Diffuse Data
+						   PushImageSampler()->						// G-Buffer Specular Data
+						   PushStorageImage()->						// Color Target Texture
+						   PushImageSampler(DEPTH_CASCADES_COUNT)->	// Shadow Cascades
+						   PushConstant((DEPTH_CASCADES_COUNT + 1) * sizeof(float))-> // Cascade Splits
+						   Build(VulkanWindow.Gfx);
+
 	shader_input DebugRootSignature;
-	DebugRootSignature.PushStorageBuffer(0)->
-					   PushUniformBuffer(1)->
-					   PushStorageBuffer(2)->
+	DebugRootSignature.PushStorageBuffer()->
+					   PushUniformBuffer()->
+					   PushStorageBuffer()->
 					   Build(VulkanWindow.Gfx);
 
 	shader_input ShadowSignature;
-	ShadowSignature.PushStorageBuffer(0, 1, 0, VK_SHADER_STAGE_VERTEX_BIT)->
-					PushStorageBuffer(1, 1, 0, VK_SHADER_STAGE_VERTEX_BIT)->
+	ShadowSignature.PushStorageBuffer(1, 0, VK_SHADER_STAGE_VERTEX_BIT)->
+					PushStorageBuffer(1, 0, VK_SHADER_STAGE_VERTEX_BIT)->
 					PushConstant(sizeof(mat4))->
 					Build(VulkanWindow.Gfx);
 
 	shader_input CmpIndirectFrustRootSignature;
 	CmpIndirectFrustRootSignature.
-					 PushStorageBuffer(0)->				// Mesh Offsets
-					 PushStorageBuffer(1)->				// Common Data
-					 PushStorageBuffer(2)->				// Indirect Draw Indexed Command
-					 PushStorageBuffer(3)->				// Indirect Draw Indexed Command Counter
-					 PushStorageBuffer(4)->				// Shadow Indirect Draw Indexed Command
-					 PushStorageBuffer(5)->				// Shadow Indirect Draw Indexed Command Counter
-					 PushStorageBuffer(6)->				// Mesh Draw Command Data
-					 PushStorageBuffer(7)->				// Mesh Draw Shadow Command Data
-					 PushStorageBuffer(8)->				// Common Input
+					 PushStorageBuffer()->				// Mesh Offsets
+					 PushStorageBuffer()->				// Common Data
+					 PushStorageBuffer()->				// Indirect Draw Indexed Command
+					 PushStorageBuffer()->				// Indirect Draw Indexed Command Counter
+					 PushStorageBuffer()->				// Shadow Indirect Draw Indexed Command
+					 PushStorageBuffer()->				// Shadow Indirect Draw Indexed Command Counter
+					 PushStorageBuffer()->				// Mesh Draw Command Data
+					 PushStorageBuffer()->				// Mesh Draw Shadow Command Data
+					 PushStorageBuffer()->				// Common Input
 					 Build(VulkanWindow.Gfx);
 
 	shader_input CmpIndirectOcclRootSignature;
 	CmpIndirectOcclRootSignature.
-					 PushStorageBuffer(0)->				// Mesh Offsets
-					 PushStorageBuffer(1)->				// Common Data
-					 PushStorageBuffer(2)->				// Indirect Draw Indexed Command
-					 PushStorageBuffer(3)->				// Indirect Draw Indexed Command Counter
-					 PushStorageBuffer(4)->				// Mesh Draw Command Data
-					 PushStorageBuffer(5)->				// Common Input
-					 PushImageSampler(6)->				// Hierarchy-Z depth texture
+					 PushStorageBuffer()->				// Mesh Offsets
+					 PushStorageBuffer()->				// Common Data
+					 PushStorageBuffer()->				// Indirect Draw Indexed Command
+					 PushStorageBuffer()->				// Indirect Draw Indexed Command Counter
+					 PushStorageBuffer()->				// Mesh Draw Command Data
+					 PushStorageBuffer()->				// Common Input
+					 PushImageSampler()->				// Hierarchy-Z depth texture
 					 Build(VulkanWindow.Gfx);
 
 	shader_input CmpReduceRootSignature;
-	CmpReduceRootSignature.PushImageSampler(0, 1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Input  Texture
-						   PushStorageImage(1, 1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Output Texture
+	CmpReduceRootSignature.PushImageSampler(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Input  Texture
+						   PushStorageImage(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Output Texture
 						   PushConstant(sizeof(vec2))->	// Output Texture Size
 						   Build(VulkanWindow.Gfx);
 
 	// TODO: Maybe create hot load shaders and compile them and runtime inside
 	global_pipeline_context PipelineContext(VulkanWindow.Gfx);
-	render_context  GfxContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxRootSignature, {"..\\build\\mesh.vert.spv", "..\\build\\mesh.frag.spv"});
+	render_context GfxContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxRootSignature, {"..\\build\\mesh.vert.spv", "..\\build\\mesh.frag.spv"}, {GBuffer[0].Info.Format, GBuffer[1].Info.Format, GBuffer[2].Info.Format, GBuffer[3].Info.Format});
 
 	render_context::input_data RendererInputData = {};
-	RendererInputData.UseColor    = true;
-	RendererInputData.UseDepth    = true;
-	RendererInputData.UseBackFace = true;
-	RendererInputData.UseOutline  = true;
-	render_context  DebugContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, DebugRootSignature, {"..\\build\\mesh.dbg.vert.spv", "..\\build\\mesh.dbg.frag.spv"}, RendererInputData);
+	RendererInputData.UseColor			= true;
+	RendererInputData.UseDepth			= true;
+	RendererInputData.UseBackFace		= true;
+	RendererInputData.UseOutline		= true;
+	render_context  DebugContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, DebugRootSignature, {"..\\build\\mesh.dbg.vert.spv", "..\\build\\mesh.dbg.frag.spv"}, {GfxColorTarget.Info.Format}, RendererInputData);
 
 	RendererInputData = {};
-	RendererInputData.UseDepth = true;
-	render_context  CascadeShadowContext(VulkanWindow.Gfx, GlobalShadow[0].Width, GlobalShadow[0].Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, RendererInputData);
-	render_context  ShadowContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, RendererInputData);
+	RendererInputData.UseDepth			= true;
+	render_context  CascadeShadowContext(VulkanWindow.Gfx, GlobalShadow[0].Width, GlobalShadow[0].Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
+	render_context  ShadowContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 
-	RendererInputData.UseBackFace = true;
-	RendererInputData.CreateDepthTarget = true;
-	render_context  DebugCameraViewContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, RendererInputData);
+	RendererInputData.UseDepth		= true;
+	RendererInputData.UseBackFace	= true;
+	render_context  DebugCameraViewContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 
+	compute_context ColorPassContext(VulkanWindow.Gfx, ColorPassRootSignature, "..\\build\\color_pass.comp.spv");
 	compute_context FrustCullingContext(VulkanWindow.Gfx, CmpIndirectFrustRootSignature, "..\\build\\indirect_cull_frust.comp.spv");
 	compute_context OcclCullingContext(VulkanWindow.Gfx, CmpIndirectOcclRootSignature, "..\\build\\indirect_cull_occl.comp.spv");
 	compute_context DepthReduceContext(VulkanWindow.Gfx, CmpReduceRootSignature, "..\\build\\depth_reduce.comp.spv");
@@ -521,8 +558,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		{
 			PipelineContext.Begin(VulkanWindow.Gfx);
 
-			// NOTE: This makes everything slow when there are a lot of meshes with high ammount of vertices
+			// NOTE: Those buffer updates makes everything slow when there are a lot of meshes with high ammount of vertices
 			// TODO: Optimize the updates(update only when the actual data have been changed etc.)
+
 			if(!IsFirstFrame)
 				MeshDrawCommandDataBuffer.ReadBackSize(VulkanWindow.Gfx, GlobalMeshInstances.data(), GlobalMeshInstances.size() * sizeof(mesh_draw_command_input), PipelineContext);
 
@@ -593,7 +631,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			{
 				mat4 Shadow = DebugCameraView * CameraProj;
 
-				DebugCameraViewContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, DebugCameraViewContext.Width, DebugCameraViewContext.Height, DebugCameraViewContext.DepthTarget, {1, 0});
+				DebugCameraViewContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, DebugCameraViewContext.Width, DebugCameraViewContext.Height, DebugCameraViewDepthTarget, {1, 0});
 				DebugCameraViewContext.Begin(VulkanWindow.Gfx, PipelineContext);
 
 				DebugCameraViewContext.SetStorageBufferView(VertexBuffer);
@@ -614,21 +652,42 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				}
 				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, ShadowBarrier);
 
-				GfxContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxContext.ColorTarget, {0, 0, 0, 1});
-				GfxContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxContext.DepthTarget, {1, 0});
+				GfxContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GBuffer, {0, 0, 0, 0});
+				GfxContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxDepthTarget, {1, 0});
 				GfxContext.Begin(VulkanWindow.Gfx, PipelineContext);
 
 				GfxContext.SetStorageBufferView(VertexBuffer);
 				GfxContext.SetUniformBufferView(WorldUpdateBuffer);
 				GfxContext.SetStorageBufferView(MeshDrawCommandBuffer);
-				GfxContext.SetUniformBufferView(LightSourcesBuffer);
-				GfxContext.SetStorageBufferView(PoissonDiskBuffer);
-				GfxContext.SetImageSampler({RandomAnglesTexture}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-				GfxContext.SetImageSampler(GlobalShadow, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-				GfxContext.SetConstant(CascadeSplits, (DEPTH_CASCADES_COUNT + 1) * sizeof(float));
 				GfxContext.DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands);
 
 				GfxContext.End();
+			}
+
+			{
+				ColorPassContext.Begin(PipelineContext);
+
+				std::vector<VkImageMemoryBarrier> ColorPassBarrier = 
+				{
+					CreateImageBarrier(GfxColorTarget.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
+				};
+				for(u32 Idx = 0; Idx < GBUFFER_COUNT; Idx++)
+				{
+					ColorPassBarrier.push_back(CreateImageBarrier(GBuffer[Idx].Handle, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+				}
+				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, ColorPassBarrier);
+
+				ColorPassContext.SetUniformBufferView(WorldUpdateBuffer);
+				ColorPassContext.SetUniformBufferView(LightSourcesBuffer);
+				ColorPassContext.SetStorageBufferView(PoissonDiskBuffer);
+				ColorPassContext.SetImageSampler({RandomAnglesTexture}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				ColorPassContext.SetImageSampler(GBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				ColorPassContext.SetStorageImage({GfxColorTarget}, VK_IMAGE_LAYOUT_GENERAL);
+				ColorPassContext.SetImageSampler(GlobalShadow, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				ColorPassContext.SetConstant(CascadeSplits, (DEPTH_CASCADES_COUNT + 1) * sizeof(float));
+				ColorPassContext.Execute(VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height);
+
+				ColorPassContext.End();
 			}
 
 			{
@@ -636,7 +695,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 				std::vector<VkImageMemoryBarrier> DepthReadBarriers = 
 				{
-					CreateImageBarrier(DebugCameraViewContext.DepthTarget.Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+					CreateImageBarrier(DebugCameraViewDepthTarget.Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
 					CreateImageBarrier(DepthPyramid.Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
 				};
 				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, DepthReadBarriers);
@@ -648,7 +707,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 					vec2 VecDims(Max(1, DepthPyramid.Width  >> MipIdx),
 								 Max(1, DepthPyramid.Height >> MipIdx));
 
-					DepthReduceContext.SetImageSampler({MipIdx == 0 ? DebugCameraViewContext.DepthTarget : DepthPyramid}, MipIdx == 0 ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL, MipIdx == 0 ? MipIdx : (MipIdx - 1));
+					DepthReduceContext.SetImageSampler({MipIdx == 0 ? DebugCameraViewDepthTarget : DepthPyramid}, MipIdx == 0 ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL, MipIdx == 0 ? MipIdx : (MipIdx - 1));
 					DepthReduceContext.SetStorageImage({DepthPyramid}, VK_IMAGE_LAYOUT_GENERAL, MipIdx);
 					DepthReduceContext.SetConstant((void*)VecDims.E, sizeof(vec2));
 
@@ -663,11 +722,11 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				DepthReduceContext.End();
 			}
 
-			// NOTE: Only render in debug mode???
+			// NOTE: Looks not as expected with deferred rendering??
 			for(u32 DrawIdx = 0; DrawIdx < DebugGeometries.Offsets.size(); ++DrawIdx)
 			{
-				DebugContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxContext.ColorTarget, {0, 0, 0, 1});
-				DebugContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxContext.DepthTarget, {1, 0});
+				DebugContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, {GfxColorTarget}, {0, 0, 0, 1});
+				DebugContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxDepthTarget, {1, 0});
 				DebugContext.Begin(VulkanWindow.Gfx, PipelineContext);
 
 				DebugContext.SetStorageBufferView(DebugVertexBuffer);
@@ -693,9 +752,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				OcclCullingContext.End();
 			}
 
-			GfxContext.EmplaceColorTarget(VulkanWindow.Gfx);
+			PipelineContext.EmplaceColorTarget(VulkanWindow.Gfx, GfxColorTarget);
 			PipelineContext.Present(VulkanWindow.Gfx);
-			IsFirstFrame = false;
 		}
 
 		TimeEnd = window::GetTimestamp();
@@ -722,6 +780,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 		std::string Title = "Frame " + std::to_string(AvgCpuTime) + "ms, " + std::to_string(1.0 / AvgCpuTime * 1000.0) + "fps";
 		VulkanWindow.SetTitle(Title);
+		IsFirstFrame = false;
 	}
 
 	VulkanWindow.UnloadGameCode(GameCode);

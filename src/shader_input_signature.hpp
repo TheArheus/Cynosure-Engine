@@ -3,6 +3,7 @@
 class shader_input
 {
 	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
+	std::map<u32, u32> SetIndices;
 	std::vector<VkDescriptorSetLayout> Layouts;
 	u32 GlobalOffset = 0;
 	VkDevice Device;
@@ -14,74 +15,80 @@ public:
 		vkDestroyPipelineLayout(Device, Handle, nullptr);
 	}
 
-	shader_input* PushStorageBuffer(u32 Register, u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	shader_input* PushStorageBuffer(u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
 		Parameter.stageFlags = Flags;
-		Parameter.binding = Register;
+		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		Parameter.descriptorCount = 1;
+		Parameter.descriptorCount = Count;
 		Parameters[Space].push_back(Parameter);
+		SetIndices[Space] += Count;
 
 		return this;
 	}
 
-	shader_input* PushUniformBuffer(u32 Register, u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	shader_input* PushUniformBuffer(u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
 		Parameter.stageFlags = Flags;
-		Parameter.binding = Register;
+		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		Parameter.descriptorCount = 1;
+		Parameter.descriptorCount = Count;
 		Parameters[Space].push_back(Parameter);
+		SetIndices[Space] += Count;
 
 		return this;
 	}
 
-	shader_input* PushSampler(u32 Register, u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	shader_input* PushSampler(u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
 		Parameter.stageFlags = Flags;
-		Parameter.binding = Register;
+		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
 		Parameter.descriptorCount = Count;
 		Parameters[Space].push_back(Parameter);
+		SetIndices[Space] += Count;
 
 		return this;
 	}
 
-	shader_input* PushSampledImage(u32 Register, u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	shader_input* PushSampledImage(u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
 		Parameter.stageFlags = Flags;
-		Parameter.binding = Register;
+		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 		Parameter.descriptorCount = Count;
 		Parameters[Space].push_back(Parameter);
+		SetIndices[Space] += Count;
 
 		return this;
 	}
 
-	shader_input* PushStorageImage(u32 Register, u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	shader_input* PushStorageImage(u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
 		Parameter.stageFlags = Flags;
-		Parameter.binding = Register;
+		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		Parameter.descriptorCount = Count;
 		Parameters[Space].push_back(Parameter);
+		SetIndices[Space] += Count;
 
 		return this;
 	}
 
-	shader_input* PushImageSampler(u32 Register, u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	shader_input* PushImageSampler(u32 Count = 1, u32 Space = 0, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
 		Parameter.stageFlags = Flags;
-		Parameter.binding = Register;
+		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		Parameter.descriptorCount = Count;
 		Parameters[Space].push_back(Parameter);
+		SetIndices[Space] += Count;
 
 		return this;
 	}

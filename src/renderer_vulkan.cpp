@@ -227,7 +227,7 @@ DestroyObject()
 }
 
 VkPipeline renderer_backend::
-CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipelineShaderStageCreateInfo>& Stages, bool UseColor, bool UseDepth, bool BackFaceCull, bool UseOutline)
+CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipelineShaderStageCreateInfo>& Stages, const std::vector<VkFormat>& ColorAttachmentFormats, bool UseColor, bool UseDepth, bool BackFaceCull, bool UseOutline)
 {
 	VkGraphicsPipelineCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
 
@@ -236,26 +236,29 @@ CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipel
 	CreateInfo.stageCount = Stages.size();
 
 	VkPipelineRenderingCreateInfoKHR PipelineRenderingCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR};
-	PipelineRenderingCreateInfo.colorAttachmentCount = UseColor;
-	PipelineRenderingCreateInfo.pColorAttachmentFormats = UseColor ? &SurfaceFormat.format : nullptr;
-	PipelineRenderingCreateInfo.depthAttachmentFormat = UseDepth ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED;
+	PipelineRenderingCreateInfo.colorAttachmentCount    = ColorAttachmentFormats.size();
+	PipelineRenderingCreateInfo.pColorAttachmentFormats = UseColor ? ColorAttachmentFormats.data() : nullptr;
+	PipelineRenderingCreateInfo.depthAttachmentFormat   = UseDepth ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED;
 
 	VkPipelineVertexInputStateCreateInfo VertexInputState = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 
 	VkPipelineInputAssemblyStateCreateInfo InputAssemblyState = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
 	InputAssemblyState.topology = UseOutline ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-	VkPipelineColorBlendAttachmentState ColorAttachmentState = {};
+	std::vector<VkPipelineColorBlendAttachmentState> ColorAttachmentState(ColorAttachmentFormats.size());
+	for(u32 Idx = 0; Idx < ColorAttachmentFormats.size(); ++Idx)
+	{
+		ColorAttachmentState[Idx].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 #if DEBUG_COLOR_BLEND
-	ColorAttachmentState.blendEnable = true;
-	ColorAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-	ColorAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		ColorAttachmentState[Idx].blendEnable = true;
+		ColorAttachmentState[Idx].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		ColorAttachmentState[Idx].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
 #endif
+	}
 
 	VkPipelineColorBlendStateCreateInfo ColorBlendState = {VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
-	ColorAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	ColorBlendState.pAttachments = &ColorAttachmentState;
-	ColorBlendState.attachmentCount = 1;
+	ColorBlendState.pAttachments = ColorAttachmentState.data();
+	ColorBlendState.attachmentCount = ColorAttachmentState.size();
 
 	VkPipelineDepthStencilStateCreateInfo DepthStencilState = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
 	DepthStencilState.depthTestEnable = true;

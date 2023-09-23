@@ -120,7 +120,7 @@ struct global_pipeline_context
 		ImageCopyRegion.srcSubresource.layerCount = 1;
 		ImageCopyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		ImageCopyRegion.dstSubresource.layerCount = 1;
-		ImageCopyRegion.extent = {Texture.Width, Texture.Height, Texture.Depth};
+		ImageCopyRegion.extent = {u32(Texture.Width), u32(Texture.Height), u32(Texture.Depth)};
 
 		vkCmdCopyImage(*CommandList, Texture.Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Context->SwapchainImages[BackBufferIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &ImageCopyRegion);
 	}
@@ -320,36 +320,15 @@ public:
 		bool UseDepth;
 		bool UseBackFace;
 		bool UseOutline;
-		bool CreateColorTarget;
-		bool CreateDepthTarget;
 	};
 
 	template<typename T>
 	render_context(std::unique_ptr<T>& Context, u32 NewWidth, u32 NewHeight,
 				   const shader_input& Signature,
-				   std::initializer_list<const std::string> ShaderList, const input_data& InputData = {true, true, true, false, true, true}) : InputSignature(Signature), Width(NewWidth), Height(NewHeight), UseColorTarget(InputData.CreateColorTarget), UseDepthTarget(InputData.CreateDepthTarget)
+				   std::initializer_list<const std::string> ShaderList, const std::vector<VkFormat> ColorTargetFormats, const input_data& InputData = {true, true, true, false}) : InputSignature(Signature), Width(NewWidth), Height(NewHeight), UseColorTarget(InputData.UseColor), UseDepthTarget(InputData.UseDepth)
 	{		
 		RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
 		Device = Context->Device;
-
-		texture::input_data TextureInputData = {};
-		TextureInputData.ImageType = VK_IMAGE_TYPE_2D;
-		TextureInputData.ViewType = VK_IMAGE_VIEW_TYPE_2D;
-		TextureInputData.MipLevels = 1;
-		TextureInputData.Layers = 1;
-		TextureInputData.Alignment = 0;
-		if(InputData.CreateColorTarget)
-		{
-			TextureInputData.Format = Context->SurfaceFormat.format;
-			TextureInputData.Usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-			ColorTarget  = texture(Context, Width, Height, 1, TextureInputData);
-		}
-		if(InputData.CreateDepthTarget)
-		{
-			TextureInputData.Format = VK_FORMAT_D32_SFLOAT;
-			TextureInputData.Usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-			DepthTarget  = texture(Context, Width, Height, 1, TextureInputData);
-		}
 
 		for(const std::string Shader : ShaderList)
 		{
@@ -392,7 +371,7 @@ public:
 			}
 		}
 
-		Pipeline = Context->CreateGraphicsPipeline(Signature.Handle, ShaderStages, InputData.UseColor, InputData.UseDepth, InputData.UseBackFace, InputData.UseOutline);
+		Pipeline = Context->CreateGraphicsPipeline(Signature.Handle, ShaderStages, ColorTargetFormats, InputData.UseColor, InputData.UseDepth, InputData.UseBackFace, InputData.UseOutline);
 	}
 
 	void DestroyObject()
@@ -411,7 +390,11 @@ public:
 		PipelineContext = GlobalPipelineContext;
 
 		std::vector<VkImageMemoryBarrier> ImageBeginRenderBarriers = {};
-		if(UseColorTarget) ImageBeginRenderBarriers.push_back(CreateImageBarrier(ColorTarget.Handle, 0, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+		if(UseColorTarget) 
+		{
+			for(texture& ColorTarget : ColorTargets)
+				ImageBeginRenderBarriers.push_back(CreateImageBarrier(ColorTarget.Handle, 0, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+		}
 		if(UseDepthTarget) ImageBeginRenderBarriers.push_back(CreateImageBarrier(DepthTarget.Handle, 0, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
 		ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ImageBeginRenderBarriers);
 
@@ -427,6 +410,9 @@ public:
 
 	void End()
 	{
+		ColorTargets.clear();
+		DepthTarget = {};
+
 		GlobalOffset = 0;
 		PushConstantIdx = 0;
 
@@ -435,30 +421,38 @@ public:
 		std::vector<std::unique_ptr<descriptor_info>>().swap(BufferInfos);
 		std::vector<std::unique_ptr<descriptor_info[]>>().swap(BufferArrayInfos);
 		std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>().swap(RenderingAttachmentInfos);
+		std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>>().swap(RenderingAttachmentInfoArrays);
 
 		vkCmdEndRenderingKHR(*PipelineContext.CommandList);
 	}
 
-	void SetColorTarget(VkAttachmentLoadOp LoadOp, VkAttachmentStoreOp StoreOp, u32 RenderWidth, u32 RenderHeight, const texture& ColorAttachment, VkClearValue Clear)
+	void SetColorTarget(VkAttachmentLoadOp LoadOp, VkAttachmentStoreOp StoreOp, u32 RenderWidth, u32 RenderHeight, const std::vector<texture>& ColorAttachments, VkClearValue Clear)
 	{
+		ColorTargets = ColorAttachments;
+
 		RenderingInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
 		RenderingInfo.layerCount = 1;
 
-		std::unique_ptr<VkRenderingAttachmentInfoKHR> ColorInfo = std::make_unique<VkRenderingAttachmentInfoKHR>();
-		ColorInfo->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
-		ColorInfo->imageView = ColorAttachment.Views[0];
-		ColorInfo->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		ColorInfo->loadOp = LoadOp;
-		ColorInfo->storeOp = StoreOp;
-		ColorInfo->clearValue = Clear;
-		RenderingInfo.colorAttachmentCount = 1;
+		std::unique_ptr<VkRenderingAttachmentInfoKHR[]> ColorInfo((VkRenderingAttachmentInfoKHR*)calloc(sizeof(VkRenderingAttachmentInfoKHR), ColorAttachments.size()));
+		for(u32 AttachmentIdx = 0; AttachmentIdx < ColorAttachments.size(); ++AttachmentIdx)
+		{
+			ColorInfo[AttachmentIdx].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+			ColorInfo[AttachmentIdx].imageView = ColorAttachments[AttachmentIdx].Views[0];
+			ColorInfo[AttachmentIdx].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			ColorInfo[AttachmentIdx].loadOp = LoadOp;
+			ColorInfo[AttachmentIdx].storeOp = StoreOp;
+			ColorInfo[AttachmentIdx].clearValue = Clear;
+		}
+		RenderingInfo.colorAttachmentCount = ColorAttachments.size();
 		RenderingInfo.pColorAttachments = ColorInfo.get();
 
-		RenderingAttachmentInfos.push_back(std::move(ColorInfo));
+		RenderingAttachmentInfoArrays.push_back(std::move(ColorInfo));
 	}
 
 	void SetDepthTarget(VkAttachmentLoadOp LoadOp, VkAttachmentStoreOp StoreOp, u32 RenderWidth, u32 RenderHeight, const texture& DepthAttachment, VkClearValue Clear)
 	{
+		DepthTarget = DepthAttachment;
+
 		RenderingInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
 		RenderingInfo.layerCount = 1;
 
@@ -489,26 +483,6 @@ public:
 		RenderingInfo.pStencilAttachment = StencilInfo.get();
 
 		RenderingAttachmentInfos.push_back(std::move(StencilInfo));
-	}
-
-	template<typename T>
-	void EmplaceColorTarget(std::unique_ptr<T>& Context)
-	{
-		std::vector<VkImageMemoryBarrier> ImageCopyBarriers = 
-		{
-			CreateImageBarrier(ColorTarget.Handle, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
-			CreateImageBarrier(Context->SwapchainImages[PipelineContext.BackBufferIndex], 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL),
-		};
-		ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, ImageCopyBarriers);
-
-		VkImageCopy ImageCopyRegion = {};
-		ImageCopyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		ImageCopyRegion.srcSubresource.layerCount = 1;
-		ImageCopyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		ImageCopyRegion.dstSubresource.layerCount = 1;
-		ImageCopyRegion.extent = {Width, Height, 1};
-
-		vkCmdCopyImage(*PipelineContext.CommandList, ColorTarget.Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Context->SwapchainImages[PipelineContext.BackBufferIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &ImageCopyRegion);
 	}
 
 	void Draw(const buffer& VertexBuffer, u32 FirstVertex, u32 VertexCount)
@@ -627,7 +601,7 @@ public:
 	// TODO: Remove image layouts and move them inside texture structure
 	void SetSampledImage(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
-		std::unique_ptr<descriptor_info[]> ImageInfo(new descriptor_info[Textures.size()]);
+		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
 			ImageInfo[TextureIdx].imageLayout = Layout;
@@ -649,7 +623,7 @@ public:
 
 	void SetStorageImage(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
-		std::unique_ptr<descriptor_info[]> ImageInfo(new descriptor_info[Textures.size()]);
+		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
 			ImageInfo[TextureIdx].imageLayout = Layout;
@@ -671,7 +645,7 @@ public:
 
 	void SetImageSampler(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
-		std::unique_ptr<descriptor_info[]> ImageInfo(new descriptor_info[Textures.size()]);
+		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
 			ImageInfo[TextureIdx].imageLayout = Layout;
@@ -694,10 +668,10 @@ public:
 	u32 Width;
 	u32 Height;
 	
-	texture ColorTarget;
-	texture DepthTarget;
-	
 private:
+	
+	std::vector<texture> ColorTargets;
+	texture DepthTarget;
 
 	bool UseColorTarget;
 	bool UseDepthTarget;
@@ -710,9 +684,10 @@ private:
 
 	std::vector<VkPipelineShaderStageCreateInfo> ShaderStages;
 	std::vector<VkWriteDescriptorSet> DescriptorBindings;
-	std::vector<std::unique_ptr<descriptor_info>> BufferInfos;
+	std::vector<std::unique_ptr<descriptor_info>>   BufferInfos;
 	std::vector<std::unique_ptr<descriptor_info[]>> BufferArrayInfos;
-	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>> RenderingAttachmentInfos;
+	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>   RenderingAttachmentInfos;
+	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>> RenderingAttachmentInfoArrays;
 
 	VkFramebuffer Framebuffer;
 	VkFramebuffer GlobalShadowFramebuffer;
@@ -861,7 +836,7 @@ public:
 	// TODO: Remove image layouts and move them inside texture structure
 	void SetSampledImage(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
-		std::unique_ptr<descriptor_info[]> ImageInfo(new descriptor_info[Textures.size()]);
+		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
 			ImageInfo[TextureIdx].imageLayout = Layout;
@@ -883,7 +858,7 @@ public:
 
 	void SetStorageImage(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
-		std::unique_ptr<descriptor_info[]> ImageInfo(new descriptor_info[Textures.size()]);
+		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
 			ImageInfo[TextureIdx].imageLayout = Layout;
@@ -905,7 +880,7 @@ public:
 
 	void SetImageSampler(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
-		std::unique_ptr<descriptor_info[]> ImageInfo(new descriptor_info[Textures.size()]);
+		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
 			ImageInfo[TextureIdx].imageLayout = Layout;
