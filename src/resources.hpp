@@ -293,8 +293,7 @@ struct texture
 			ReductionMode.reductionMode = ReductionModeValue;
 
 			VkSamplerCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
-			if(ReductionModeValue != VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)
-				CreateInfo.pNext = &ReductionMode;
+			CreateInfo.pNext = &ReductionMode;
 			CreateInfo.magFilter = VK_FILTER_LINEAR;
 			CreateInfo.minFilter = VK_FILTER_LINEAR;
 			CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;

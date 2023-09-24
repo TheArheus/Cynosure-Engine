@@ -145,8 +145,8 @@ void main()
 	NewMin = clamp(NewMin * vec3(0.5, -0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
 	NewMax = clamp(NewMax * vec3(0.5, -0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
 
-	//vec2 HiZSize = vec2(MeshCullingCommonInput.HiZWidth, MeshCullingCommonInput.HiZHeight);
-	vec2 HiZSize = textureSize(DepthPyramid, 0);
+	vec2 HiZSize = vec2(MeshCullingCommonInput.HiZWidth, MeshCullingCommonInput.HiZHeight);
+	//vec2 HiZSize = textureSize(DepthPyramid, 0);
 
 	// Occlusion Culling
 	if(IsVisible && MeshCullingCommonInput.OcclusionCullingEnabled)
@@ -157,7 +157,7 @@ void main()
 		vec2  BoxCoord = (NewMax.xy + NewMin.xy) * 0.5;
 		float PyramidDepth = textureLod(DepthPyramid, BoxCoord, Lod).x;
 
-		IsVisible = IsVisible && (NewMin.z < (PyramidDepth + 0.05));
+		IsVisible = IsVisible && (NewMin.z < (PyramidDepth + 0.025));
 	}
 
 	MeshDrawCommandData[DrawIndex].IsVisible = IsVisible;

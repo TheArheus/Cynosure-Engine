@@ -6,7 +6,6 @@
 
 #include <random>
 
-#define GBUFFER_COUNT 4
 
 // TODO: Fix image barriers and current layouts
 // 
@@ -67,10 +66,13 @@ struct alignas(16) global_world_data
 // I guess it should be filled up only inside the `UpdateAndRender` function
 // NOTE: I guess the total ammount of light coures should not be limited. But per object I guess, at least in the begining?
 // TODO: Radius and LightDir for directional lights
+// NOTE: When light is point(w is a radius), then pos. Otherwise it is dir(w is cutoff angle for spot light).
 struct alignas(16) light_source
 {
 	vec4 Pos;
+	vec4 Dir;
 	vec4 Col;
+	u32  LightType;
 };
 
 struct alignas(16) mesh_comp_culling_common_input
@@ -98,9 +100,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	mesh Geometries; // TODO: Implement dirty flags so it could be updated sometimes in the loop
 	std::vector<mesh_draw_command_input> MeshDrawCommandData; // TODO: Dirty flag and asynchronous update via VK_PIPELINE_STAGE_TRANSFER_BIT
 	std::vector<light_source> LightSources;
-
-	vec4 TempLightPos = vec4(-4, 4, 2, 1);
-	LightSources.push_back({TempLightPos, vec4(1, 1, 0, 1)});
+	LightSources.push_back({vec4(-4, 4, 2, 2), vec4(), vec4(1, 1, 0, 1), light_type_point});
+	LightSources.push_back({vec4(-4, 4, 3, 2), vec4(), vec4(1, 0, 0, 1), light_type_point});
 
 	view_data  ViewData = {};
 	ViewData.CameraPos  = vec3(-4, 4, 2);
@@ -271,8 +272,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	texture DebugCameraViewDepthTarget(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData);
 
 	mesh_comp_culling_common_input MeshCompCullingCommonData = {};
-	MeshCompCullingCommonData.FrustrumCullingEnabled  = true;
-	MeshCompCullingCommonData.OcclusionCullingEnabled = true;
+	MeshCompCullingCommonData.FrustrumCullingEnabled  = false;
+	MeshCompCullingCommonData.OcclusionCullingEnabled = false;
 	MeshCompCullingCommonData.HiZWidth  = float(DepthPyramid.Width);
 	MeshCompCullingCommonData.HiZHeight = float(DepthPyramid.Height);
 	MeshCompCullingCommonData.NearZ = NearZ;
@@ -349,14 +350,14 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	render_context GfxContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxRootSignature, {"..\\build\\mesh.vert.spv", "..\\build\\mesh.frag.spv"}, {GBuffer[0].Info.Format, GBuffer[1].Info.Format, GBuffer[2].Info.Format, GBuffer[3].Info.Format});
 
 	render_context::input_data RendererInputData = {};
-	RendererInputData.UseColor			= true;
-	RendererInputData.UseDepth			= true;
-	RendererInputData.UseBackFace		= true;
-	RendererInputData.UseOutline		= true;
+	RendererInputData.UseColor		= true;
+	RendererInputData.UseDepth		= true;
+	RendererInputData.UseBackFace	= true;
+	RendererInputData.UseOutline	= true;
 	render_context  DebugContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, DebugRootSignature, {"..\\build\\mesh.dbg.vert.spv", "..\\build\\mesh.dbg.frag.spv"}, {GfxColorTarget.Info.Format}, RendererInputData);
 
 	RendererInputData = {};
-	RendererInputData.UseDepth			= true;
+	RendererInputData.UseDepth = true;
 	render_context  CascadeShadowContext(VulkanWindow.Gfx, GlobalShadow[0].Width, GlobalShadow[0].Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 	render_context  ShadowContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 
@@ -449,6 +450,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			ViewDir = ViewData.ViewDir;
 			ViewPos	= ViewData.CameraPos;
 		}
+
+		GlobalLightSources.push_back({vec4(ViewPos, 1), ViewDir, vec4(1, 0, 0, 1), light_type_spot});
 
 		float Aspect = (float)VulkanWindow.Gfx->Width / (float)VulkanWindow.Gfx->Height;
 
@@ -560,9 +563,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 			// NOTE: Those buffer updates makes everything slow when there are a lot of meshes with high ammount of vertices
 			// TODO: Optimize the updates(update only when the actual data have been changed etc.)
-
 			if(!IsFirstFrame)
+			{
 				MeshDrawCommandDataBuffer.ReadBackSize(VulkanWindow.Gfx, GlobalMeshInstances.data(), GlobalMeshInstances.size() * sizeof(mesh_draw_command_input), PipelineContext);
+			}
 
 			GeometryOffsets.UpdateSize(VulkanWindow.Gfx, GlobalGeometries.Offsets.data(), GlobalGeometries.Offsets.size() * sizeof(mesh::offset), PipelineContext);
 
@@ -751,6 +755,14 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 				OcclCullingContext.End();
 			}
+
+#if 0
+			std::vector<VkImageMemoryBarrier> ColorPassBarrier = 
+			{
+				CreateImageBarrier(GfxColorTarget.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
+			};
+			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, ColorPassBarrier);
+#endif
 
 			PipelineContext.EmplaceColorTarget(VulkanWindow.Gfx, GfxColorTarget);
 			PipelineContext.Present(VulkanWindow.Gfx);

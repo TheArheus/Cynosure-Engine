@@ -1,6 +1,10 @@
 #version 450
 
 #define SAMPLES_COUNT 64
+#define light_type_none 0
+#define light_type_directional 1
+#define light_type_point 2
+#define light_type_spot 3
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
@@ -27,7 +31,9 @@ struct global_world_data
 struct light_source
 {
 	vec4 Pos;
+	vec4 Dir;
 	vec4 Col;
+	uint Type;
 };
 
 layout(binding = 0) readonly uniform block1 { global_world_data WorldUpdate; };
@@ -141,6 +147,66 @@ float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, vec2 Rotatio
 	return Result;
 }
 
+void DirectionalLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Normal, vec3 CameraDir, vec4 LightDir, vec4 LightCol, vec3 Diffuse, float Specular)
+{
+	float AndleOfIncidence = max(dot(LightDir.xyz, Normal), 0.0);
+	vec3 Light = LightCol.xyz * LightCol.w;
+
+	vec3 HalfA = normalize(LightDir.xyz + CameraDir);
+	float BlinnTerm = clamp(dot(Normal, HalfA), 0, 1);
+	BlinnTerm = pow(BlinnTerm, Specular);
+
+	DiffuseResult  += Light * Diffuse * AndleOfIncidence;
+	SpecularResult += Light * BlinnTerm;
+}
+
+void PointLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord, vec3 Normal, vec3 CameraDir, vec4 LightPos, vec4 LightCol, vec3 Diffuse, float Specular)
+{
+	vec3  LightDir = LightPos.xyz - Coord.xyz;
+	float Distance = dot(LightDir, LightDir);
+
+	// Diffuse Calculations
+	float Attenuation = 1.0 / Distance;
+	LightDir = normalize(LightDir);
+	float AngleOfIncidence = max(dot(LightDir, Normal), 0.0);
+
+	vec3 Light = LightCol.xyz * LightCol.w * Attenuation;
+
+	// Specular Calculations
+	vec3 HalfA = normalize(LightDir + CameraDir);
+	float BlinnTerm = clamp(dot(Normal, HalfA), 0, 1);
+	BlinnTerm = pow(BlinnTerm, Specular);
+
+	DiffuseResult  += Light * Diffuse * AngleOfIncidence;
+	SpecularResult += Light * BlinnTerm;
+}
+
+void SpotLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord, vec3 Normal, vec3 CameraDir, vec4 LightPos, vec4 LightView, vec4 LightCol, vec3 Diffuse, float Specular)
+{
+	vec3  LightDir = LightPos.xyz - Coord.xyz;
+	float Distance = dot(LightDir, LightDir);
+
+	// Diffuse Calculations
+	float Attenuation = 1.0 / Distance;
+	LightDir = normalize(LightDir);
+	float AngleOfIncidence = max(dot(LightDir, Normal), 0.0);
+
+	float MinCos = cos(radians(LightPos.w));
+	float MaxCos = (MinCos + 1.0f) / 2.0f;
+	float CosA   = dot(-LightDir, LightView.xyz);
+	float SpotIntensity = smoothstep(MinCos, MaxCos, CosA);
+
+	vec3 Light = LightCol.xyz * LightCol.w * Attenuation * SpotIntensity;
+
+	// Specular Calculations
+	vec3 HalfA = normalize(LightDir + CameraDir);
+	float BlinnTerm = clamp(dot(Normal, HalfA), 0, 1);
+	BlinnTerm = pow(BlinnTerm, Specular);
+
+	DiffuseResult  += Light * Diffuse * AngleOfIncidence;
+	SpecularResult += Light * BlinnTerm;
+}
+
 void main()
 {
 	vec2 TextureDims = textureSize(PositionBuffer, 0).xy;
@@ -189,24 +255,12 @@ void main()
 		LightIdx < WorldUpdate.ColorSourceCount;
 		++LightIdx)
 	{
-		vec4 LightCol = LightSources[LightIdx].Col;
-		vec3 LightPos = LightSources[LightIdx].Pos.xyz;
-		vec3 LightDir = LightPos - LightSources[LightIdx].Pos.w * Coord.xyz;
-
-		// Diffuse Calculations
-		float Attenuation = 1.0 / dot(LightDir, LightDir);
-		LightDir = normalize(LightDir);
-		float AndleOfIncidence = max(dot(LightDir, Normal), 0.0);
-
-		vec3 Light = LightCol.xyz * LightCol.w * Attenuation;
-
-		// Specular Calculations
-		vec3 HalfA = normalize(LightDir + CamDir);
-		float BlinnTerm = clamp(dot(Normal, HalfA), 0, 1);
-		BlinnTerm = pow(BlinnTerm, 2.0);
-
-		LightDiffuse  += Light * Diffuse.xyz * AndleOfIncidence;
-		LightSpecular += Light * BlinnTerm;
+		if(LightSources[LightIdx].Type == light_type_directional)
+			DirectionalLight(LightDiffuse, LightSpecular, Normal, CamDir, LightSources[LightIdx].Dir, LightSources[LightIdx].Col, Diffuse.xyz, Specular);
+		else if(LightSources[LightIdx].Type == light_type_point)
+			PointLight(LightDiffuse, LightSpecular, Coord.xyz, Normal, CamDir, LightSources[LightIdx].Pos, LightSources[LightIdx].Col, Diffuse.xyz, Specular);
+		else if(LightSources[LightIdx].Type == light_type_spot)
+			SpotLight(LightDiffuse, LightSpecular, Coord.xyz, Normal, CamDir, LightSources[LightIdx].Pos, LightSources[LightIdx].Dir, LightSources[LightIdx].Col, Diffuse.xyz, Specular);
 	}
 
 	uint  Layer = 0;
@@ -222,10 +276,10 @@ void main()
 			Shadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation, CascadeSplits[CascadeIdx - 1], Normal, GlobalLightPos.xyz);
 			CascadeCol = CascadeColors[Layer];
 
-			float Fade = clamp((1.0 - (Pos.z * Pos.z) / (CascadeSplits[CascadeIdx] * CascadeSplits[CascadeIdx])) / 0.1, 0.0, 1.0);
+			float Fade = clamp((1.0 - (Pos.z * Pos.z) / (CascadeSplits[CascadeIdx] * CascadeSplits[CascadeIdx])) / 0.2, 0.0, 1.0);
 			if(Fade > 0.0 && Fade < 1.0)
 			{
-				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation, CascadeSplits[CascadeIdx - 1], Normal, GlobalLightPos.xyz);
+				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation, CascadeSplits[CascadeIdx], Normal, GlobalLightPos.xyz);
 				vec3  NextCascadeCol = CascadeColors[Layer + 1];
 				Shadow = mix(NextShadow, Shadow, Fade);
 				CascadeCol = mix(NextCascadeCol, CascadeCol, Fade);
@@ -235,18 +289,21 @@ void main()
 		}
 	}
 
-	vec3 ShadowCol = vec3(0.2);
+	vec3 ShadowCol = vec3(0.0001);
 
 #if DEBUG_COLOR_BLEND
-	imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0.1), 1));
+	imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(vec4(Diffuse.xyz, 1), vec4(1.0 / 2.0)));
 #else
 	if(WorldUpdate.DebugColors)
 	{
-		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(Diffuse.xyz*0.8 + (1.0 - Shadow), 1.0) * vec4(CascadeCol, 1.0));
+		vec4 FinalLight = vec4(Diffuse.xyz*0.2 + (1.0 - Shadow), 1.0) * vec4(CascadeCol, 1.0);
+		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(FinalLight, vec4(1.0 / 2.0)));
 	}
 	else
 	{
-		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4((Diffuse.xyz*0.8 + LightDiffuse + LightSpecular) * (1.0 - Shadow) + ShadowCol * Shadow, 1.0));
+		vec3 FinalLight = (Diffuse.xyz*0.2 + LightDiffuse + LightSpecular);
+		FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
+		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(vec4(FinalLight, 1), vec4(1.0 / 2.0)));
 	}
 #endif
 }

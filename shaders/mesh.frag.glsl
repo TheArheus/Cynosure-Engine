@@ -19,6 +19,10 @@ void main()
 {
 	OutputPosition = In.Coord;
 	OutputNormal   = In.Norm;
+#if DEBUG_COLOR_BLEND
+	OutputDiffuse  = vec4(vec3(0.1), 1.0);
+#else
 	OutputDiffuse  = In.Col;
+#endif
 	OutputSpecular = 2.0f;
 }
