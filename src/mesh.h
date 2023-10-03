@@ -7,9 +7,12 @@ enum bounding_generation : u32
 	generate_sphere = 0x2,
 };
 
+// TODO: Tangent space here
 struct alignas(16) vertex
 {
 	vec4 Position;
+	vec4 Tangent;
+	vec4 Bitangent;
 	vec2 TextureCoord;
 	u32  Normal;
 
@@ -95,9 +98,11 @@ struct mesh
 	mesh() = default;
 	mesh(const std::string& Path, u32 BoundingGeneration = 0);
 	mesh(std::initializer_list<std::string> Paths, u32 BoundingGeneration = 0);
+	void Reset() {MeshCount = 0; MeshIndex = 1;}
 
 	u32 Load(const std::string& Path, u32 BoundingGeneration = 0);
 	u32 Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices);
+	u32 Load() { MeshCount++; return MeshIndex++; };
 
 	void GenerateMeshlets();
 

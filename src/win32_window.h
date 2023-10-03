@@ -60,8 +60,8 @@ public:
 	game_code LoadGameCode();
 	void UnloadGameCode(game_code& Source);
 
-	void* LoadFunction(const char* FuncName);
-	void* GetProcAddr(const char* SourceName, const char* FuncName);
+	static void* LoadFunction(const char* FuncName);
+	static void* GetProcAddr(const char* SourceName, const char* FuncName);
 
 	buttons Buttons[256] = {};
 

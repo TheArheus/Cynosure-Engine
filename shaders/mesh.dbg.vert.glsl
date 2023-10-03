@@ -10,6 +10,8 @@
 struct vert_in
 {
 	vec4 Pos;
+	vec4 Tangent;
+	vec4 Bitangent;
 	vec2 TexPos;
 	uint Normal;
 };

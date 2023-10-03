@@ -63,8 +63,6 @@ struct mesh_comp_culling_common_input
 	plane Planes[6];
 	bool  FrustrumCullingEnabled;
 	bool  OcclusionCullingEnabled;
-	float HiZWidth;
-	float HiZHeight;
 	float NearZ;
 	uint  DrawCount;
 	uint  MeshCount;
@@ -145,8 +143,7 @@ void main()
 	NewMin = clamp(NewMin * vec3(0.5, -0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
 	NewMax = clamp(NewMax * vec3(0.5, -0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
 
-	vec2 HiZSize = vec2(MeshCullingCommonInput.HiZWidth, MeshCullingCommonInput.HiZHeight);
-	//vec2 HiZSize = textureSize(DepthPyramid, 0);
+	vec2 HiZSize = textureSize(DepthPyramid, 0);
 
 	// Occlusion Culling
 	if(IsVisible && MeshCullingCommonInput.OcclusionCullingEnabled)

@@ -38,6 +38,8 @@ struct material
 struct vert_in
 {
 	vec4 Pos;
+	vec4 Tangent;
+	vec4 Bitangent;
 	vec2 TexPos;
 	uint Normal;
 };
@@ -47,6 +49,7 @@ struct vert_out
 	vec4 Coord;
 	vec4 Norm;
 	vec4 Col;
+	vec2 TextCoord;
 };
 
 struct mesh_draw_command
@@ -57,25 +60,42 @@ struct mesh_draw_command
 	vec4 Rotate;
 };
 
+vec4 QuatMul(vec4 lhs, vec4 rhs)
+{
+	return vec4(lhs.xyz * rhs.w + rhs.xyz * lhs.w + cross(lhs.xyz, rhs.xyz), dot(-lhs.xyz, rhs.xyz) + lhs.w * rhs.w);
+}
+
 layout(binding = 0) readonly buffer  block0 {vert_in In[];};
 layout(binding = 1) readonly uniform block1 {global_world_data WorldUpdate;};
 layout(binding = 2) readonly buffer  block2 {mesh_draw_command MeshDrawCommands[];};
 
 layout(location = 0) out vert_out Out;
+layout(location = 4) out mat3     TBN;
 
 void main()
 {
 	uint VertexIndex   = gl_VertexIndex;
 	uint InstanceIndex = gl_InstanceIndex;
-	uint NormalX = (In[VertexIndex].Normal >> 24) & 0xff;
-	uint NormalY = (In[VertexIndex].Normal >> 16) & 0xff;
-	uint NormalZ = (In[VertexIndex].Normal >>  8) & 0xff;
-	vec3 Normal  = vec3(NormalX, NormalY, NormalZ) / 127.0 - 1.0;
-	Out.Norm     = normalize(vec4(Normal, 0.0));
-	Out.Col		 = MeshDrawCommands[InstanceIndex].Mat.LightEmmit;
 
-	Out.Coord   = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
-	gl_Position = WorldUpdate.Proj * WorldUpdate.View * Out.Coord;
+	vec3 Tang      = normalize(vec3(In[VertexIndex].Tangent  ));
+	vec3 Bitang    = normalize(vec3(In[VertexIndex].Bitangent));
+
+	Out.Coord      = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
+
+	uint NormalX   = (In[VertexIndex].Normal >> 24) & 0xff;
+	uint NormalY   = (In[VertexIndex].Normal >> 16) & 0xff;
+	uint NormalZ   = (In[VertexIndex].Normal >>  8) & 0xff;
+	vec3 Normal    = vec3(NormalX, NormalY, NormalZ) / 127.0 - 1.0;
+	Out.Norm       = vec4(Normal, 0.0);
+
+	TBN            = mat3(normalize(Tang   * MeshDrawCommands[InstanceIndex].Scale.xyz + MeshDrawCommands[InstanceIndex].Translate.xyz), 
+						  normalize(Bitang * MeshDrawCommands[InstanceIndex].Scale.xyz + MeshDrawCommands[InstanceIndex].Translate.xyz), 
+						  normalize(Normal * MeshDrawCommands[InstanceIndex].Scale.xyz + MeshDrawCommands[InstanceIndex].Translate.xyz));
+
+	Out.Col		   = MeshDrawCommands[InstanceIndex].Mat.LightEmmit;
+	Out.TextCoord  = In[VertexIndex].TexPos;
+
+	gl_Position    = WorldUpdate.Proj * WorldUpdate.View * Out.Coord;
 
 }
 

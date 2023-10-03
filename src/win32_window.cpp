@@ -202,7 +202,8 @@ game_code window::LoadGameCode()
 	return Source;
 };
 
-void window::UnloadGameCode(game_code& Source)
+void window::
+UnloadGameCode(game_code& Source)
 {
 	FreeLibrary(Source.Library);
 	DeleteFileA("..\\build\\game_code.temp.dll");
@@ -211,7 +212,8 @@ void window::UnloadGameCode(game_code& Source)
 	Source.UpdateAndRender = 0;
 };
 
-void* window::LoadFunction(const char* FuncName)
+void* window::
+LoadFunction(const char* FuncName)
 {
 	HMODULE Library = LoadLibraryA("..\\build\\game_code.temp.dll");
 
@@ -220,7 +222,8 @@ void* window::LoadFunction(const char* FuncName)
 	return Result;
 }
 
-void* window::GetProcAddr(const char* SourceName, const char* FuncName)
+void* window::
+GetProcAddr(const char* SourceName, const char* FuncName)
 {
 	HMODULE Library = LoadLibraryA(SourceName);
 

@@ -63,8 +63,6 @@ struct mesh_comp_culling_common_input
 	plane Planes[6];
 	bool  FrustrumCullingEnabled;
 	bool  OcclusionCullingEnabled;
-	float HiZWidth;
-	float HiZHeight;
 	float NearZ;
 	uint  DrawCount;
 	uint  MeshCount;

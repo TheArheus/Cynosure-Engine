@@ -1,69 +1,39 @@
 #include "intrinsics.h"
 #include "mesh.cpp"
 
-class mesh_object
-{
-public:
-	mesh_object(u32 NewMeshIdx) : MeshIndex(NewMeshIdx) {}; 
 
-	void AddInstance(vec4 Translate, vec4 Scale, bool IsVisible)
-	{
-		mesh_draw_command_input Command = {};
-		Command.Translate = Translate;
-		Command.Scale = Scale;
-		Command.IsVisible = IsVisible;
-		Command.MeshIndex = MeshIndex;
-		ObjectInstances.push_back(Command);
-	}
-
-	void AddInstance(mesh::material Mat, vec4 Translate, vec4 Scale, bool IsVisible)
-	{
-		mesh_draw_command_input Command = {};
-		Command.Mat = Mat;
-		Command.Translate = Translate;
-		Command.Scale = Scale;
-		Command.IsVisible = IsVisible;
-		Command.MeshIndex = MeshIndex;
-		ObjectInstances.push_back(Command);
-	}
-
-	void UpdateCommands(std::vector<mesh_draw_command_input>& DrawCommands)
-	{
-		DrawCommands.insert(DrawCommands.end(), ObjectInstances.begin(), ObjectInstances.end());
-	}
-
-	u32 MeshIndex;
-
-private:
-	std::vector<mesh_draw_command_input> ObjectInstances;
-};
-
-class game_object : mesh_object
-{
-public:
-	virtual void Setup()  = 0;
-	virtual void Update() = 0;
-
-private:
-	mesh_object Geometry;
-};
-
-class level
-{
-	std::vector<mesh> Geometries;
-	std::vector<game_object> Objects;
-};
-
-// NOTE: There could be initial level setup or generation of something
+// NOTE: Maybe initial engine setup???
 GameSetupFunc(GameSetup)
 {
 	srand(128);
-	u32 SceneRadius = 10;
+	MemorySize = MiB(128);
+}
 
-	mesh_object CubeGeometry(Geometries.Load("..\\assets\\cube.obj", generate_aabb | generate_sphere));
-	//mesh_object KittenGeometry(Geometries.Load("..\\assets\\kitten.obj", generate_aabb | generate_sphere));
-	//mesh_object PlaneGeometry(Geometries.Load("..\\assets\\f22.obj", generate_aabb | generate_sphere));
-	//mesh_object BunnyGeometry(Geometries.Load("..\\assets\\stanford-bunny.obj", generate_aabb | generate_sphere));
+GameUpdateAndRenderFunc(GameUpdateAndRender)
+{
+	u32 SceneRadius = 10;
+	LightSources.push_back({vec4(-4, 4, 2, 2), vec4(), vec4(1, 1, 0, 1), light_type_point});
+	LightSources.push_back({vec4(-4, 4, 3, 2), vec4(), vec4(1, 0, 0, 1), light_type_point});
+
+	mesh_object CubeGeometry;
+	mesh_object KittenGeometry;
+	mesh_object PlaneGeometry;
+	mesh_object BunnyGeometry;
+	if(!SceneIsLoaded)
+	{
+		CubeGeometry.MeshIndex = Geometries.Load("..\\assets\\cube.obj", generate_aabb | generate_sphere);
+		//KittenGeometry.MeshIndex = Geometries.Load("..\\assets\\kitten.obj", generate_aabb | generate_sphere);
+		//PlaneGeometry.MeshIndex = Geometries.Load("..\\assets\\f22.obj", generate_aabb | generate_sphere);
+		//BunnyGeometry.MeshIndex = Geometries.Load("..\\assets\\stanford-bunny.obj", generate_aabb | generate_sphere);
+		SceneIsLoaded = true;
+	}
+	else
+	{
+		CubeGeometry.MeshIndex = Geometries.Load();
+		//KittenGeometry.MeshIndex = Geometries.Load();
+		//PlaneGeometry.MeshIndex = Geometries.Load();
+		//BunnyGeometry.MeshIndex = Geometries.Load();
+	}
 
 	for(u32 DataIdx = 0;
 		DataIdx < 512;
@@ -100,10 +70,7 @@ GameSetupFunc(GameSetup)
 	//KittenGeometry.UpdateCommands(MeshDrawCommands);
 	//PlaneGeometry.UpdateCommands(MeshDrawCommands);
 	//BunnyGeometry.UpdateCommands(MeshDrawCommands);
-}
 
-GameUpdateAndRenderFunc(GameUpdateAndRender)
-{
 	float CameraSpeed = 0.01f;
 	if(GameInput.Buttons[EC_R].IsDown)
 	{

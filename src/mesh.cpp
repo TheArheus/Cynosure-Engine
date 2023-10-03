@@ -129,32 +129,61 @@ Load(const std::string& Path, u32 BoundingGeneration)
 	u32 VertexCount = 0;
 	for(u32 VertexIndex = 0;
 		VertexIndex < IndexCount;
-		++VertexIndex)
+		VertexIndex += 3)
 	{
-		vertex Vert = {};
+		vertex Vert1 = {};
+		vertex Vert2 = {};
+		vertex Vert3 = {};
 
-		vec3 Pos = Coords[CoordIndices[VertexIndex]];
-		Vert.Position = vec4(Pos, 1.0f);
+		Vert1.Position = vec4(Coords[CoordIndices[VertexIndex + 0]], 1.0);
+		Vert2.Position = vec4(Coords[CoordIndices[VertexIndex + 1]], 1.0);
+		Vert3.Position = vec4(Coords[CoordIndices[VertexIndex + 2]], 1.0);
 
 		if(TextCoords.size() != 0)
 		{
-			vec2 TextCoord = TextCoords[TextCoordIndices[VertexIndex]];
-			Vert.TextureCoord = TextCoord;
+			Vert1.TextureCoord = TextCoords[TextCoordIndices[VertexIndex + 0]];
+			Vert2.TextureCoord = TextCoords[TextCoordIndices[VertexIndex + 1]];
+			Vert3.TextureCoord = TextCoords[TextCoordIndices[VertexIndex + 2]];
 		}
 
 		if(NormalIndices.size() != 0)
 		{
-			vec3 Norm = Normals[NormalIndices[VertexIndex]];
-			Vert.Normal = ((u8(Norm.x*127 + 127) << 24) | (u8(Norm.y*127 + 127) << 16) | (u8(Norm.z*127 + 127) << 8) | 0);
+			vec3 Norm1 = Normals[NormalIndices[VertexIndex + 0]];
+			vec3 Norm2 = Normals[NormalIndices[VertexIndex + 1]];
+			vec3 Norm3 = Normals[NormalIndices[VertexIndex + 2]];
+			Vert1.Normal = ((u8(Norm1.x*127 + 127) << 24) | (u8(Norm1.y*127 + 127) << 16) | (u8(Norm1.z*127 + 127) << 8) | 0);
+			Vert2.Normal = ((u8(Norm2.x*127 + 127) << 24) | (u8(Norm2.y*127 + 127) << 16) | (u8(Norm2.z*127 + 127) << 8) | 0);
+			Vert3.Normal = ((u8(Norm3.x*127 + 127) << 24) | (u8(Norm3.y*127 + 127) << 16) | (u8(Norm3.z*127 + 127) << 8) | 0);
 		} 
 
-		if(UniqueVertices.count(Vert) == 0)
-		{
-			UniqueVertices[Vert] = static_cast<u32>(VertexCount++);
-			Vertices.push_back(Vert);
-		}
+		vec4 AB  = Vert2.Position - Vert1.Position;
+		vec4 AC  = Vert3.Position - Vert1.Position;
+		vec2 DAB = Vert2.TextureCoord - Vert1.TextureCoord;
+		vec2 DAC = Vert3.TextureCoord - Vert1.TextureCoord;
 
-		Indices[VertexIndex] = UniqueVertices[Vert];
+		r32 Det = 1.0f / (DAB.x * DAC.y - DAB.y * DAC.x);
+
+		Vert1.Tangent   = Vert2.Tangent   = Vert3.Tangent   = vec4( AB.x * DAC.y - AC.x * DAB.y,  AB.y * DAC.y - AC.y * DAB.y,  AB.z * DAC.y - AC.z * DAB.y, 0) * Det;
+		Vert1.Bitangent = Vert2.Bitangent = Vert3.Bitangent = vec4(-AB.x * DAC.y + AC.x * DAB.y, -AB.y * DAC.y + AC.y * DAB.y, -AB.z * DAC.y + AC.z * DAB.y, 0) * Det;
+
+		if(UniqueVertices.count(Vert1) == 0)
+		{
+			UniqueVertices[Vert1] = static_cast<u32>(VertexCount++);
+			Vertices.push_back(Vert1);
+		}
+		if(UniqueVertices.count(Vert2) == 0)
+		{
+			UniqueVertices[Vert2] = static_cast<u32>(VertexCount++);
+			Vertices.push_back(Vert2);
+		}
+		if(UniqueVertices.count(Vert3) == 0)
+		{
+			UniqueVertices[Vert3] = static_cast<u32>(VertexCount++);
+			Vertices.push_back(Vert3);
+		}
+		Indices[VertexIndex + 0] = UniqueVertices[Vert1];
+		Indices[VertexIndex + 1] = UniqueVertices[Vert2];
+		Indices[VertexIndex + 2] = UniqueVertices[Vert3];
 	}
 
 	VertexIndices.insert(VertexIndices.end(), Indices.begin(), Indices.end());

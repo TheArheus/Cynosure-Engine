@@ -19,6 +19,8 @@ struct material
 struct vert_in
 {
 	vec4 Pos;
+	vec4 Tangent;
+	vec4 Bitangent;
 	vec2 TexPos;
 	uint Normal;
 };
@@ -49,6 +51,11 @@ struct mesh_draw_command
 	vec4 Scale;
 	vec4 Rotate;
 };
+
+vec4 QuatMul(vec4 lhs, vec4 rhs)
+{
+	return vec4(lhs.xyz * rhs.w + rhs.xyz * lhs.w + cross(lhs.xyz, rhs.xyz), dot(-lhs.xyz, rhs.xyz) + lhs.w * rhs.w);
+}
 
 layout(binding = 0) readonly buffer block0
 {

@@ -41,11 +41,12 @@ layout(binding = 1) uniform block2 { light_source LightSources[256]; };
 layout(binding = 2) buffer  block3 { vec2 PoissonDisk[64]; };
 layout(binding = 3) uniform sampler3D RandomAnglesTexture;
 layout(binding = 4) uniform sampler2D PositionBuffer;
-layout(binding = 5) uniform sampler2D NormalBuffer;
-layout(binding = 6) uniform sampler2D DiffuseBuffer;
-layout(binding = 7) uniform sampler2D SpecularBuffer;
-layout(binding = 8) uniform writeonly image2D ColorTarget;
-layout(binding = 9) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
+layout(binding = 5) uniform sampler2D VertexNormalBuffer;
+layout(binding = 6) uniform sampler2D FragmentNormalBuffer;
+layout(binding = 7) uniform sampler2D DiffuseBuffer;
+layout(binding = 8) uniform sampler2D SpecularBuffer;
+layout(binding = 9) uniform writeonly image2D ColorTarget;
+layout(binding = 10) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
 layout(push_constant) uniform pushConstant { float CascadeSplits[DEPTH_CASCADES_COUNT + 1]; };
 
 float GetRandomValue(vec2 Seed)
@@ -150,7 +151,7 @@ float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, vec2 Rotatio
 void DirectionalLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Normal, vec3 CameraDir, vec4 LightDir, vec4 LightCol, vec3 Diffuse, float Specular)
 {
 	float AndleOfIncidence = max(dot(LightDir.xyz, Normal), 0.0);
-	vec3 Light = LightCol.xyz * LightCol.w;
+	vec3 Light = LightCol.xyz;
 
 	vec3 HalfA = normalize(LightDir.xyz + CameraDir);
 	float BlinnTerm = clamp(dot(Normal, HalfA), 0, 1);
@@ -163,17 +164,16 @@ void DirectionalLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 
 void PointLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord, vec3 Normal, vec3 CameraDir, vec4 LightPos, vec4 LightCol, vec3 Diffuse, float Specular)
 {
 	vec3  LightDir = LightPos.xyz - Coord.xyz;
-	float Distance = dot(LightDir, LightDir);
+	float Distance = length(LightDir);
 
 	// Diffuse Calculations
 	float Attenuation = 1.0 / Distance;
-	LightDir = normalize(LightDir);
-	float AngleOfIncidence = max(dot(LightDir, Normal), 0.0);
+	float AngleOfIncidence = max(dot(normalize(LightDir / Distance), Normal), 0.0);
 
-	vec3 Light = LightCol.xyz * LightCol.w * Attenuation;
+	vec3 Light = LightCol.xyz * Attenuation;
 
 	// Specular Calculations
-	vec3 HalfA = normalize(LightDir + CameraDir);
+	vec3  HalfA = normalize(LightDir + CameraDir);
 	float BlinnTerm = clamp(dot(Normal, HalfA), 0, 1);
 	BlinnTerm = pow(BlinnTerm, Specular);
 
@@ -196,7 +196,7 @@ void SpotLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord, 
 	float CosA   = dot(-LightDir, LightView.xyz);
 	float SpotIntensity = smoothstep(MinCos, MaxCos, CosA);
 
-	vec3 Light = LightCol.xyz * LightCol.w * Attenuation * SpotIntensity;
+	vec3 Light = LightCol.xyz * Attenuation * SpotIntensity;
 
 	// Specular Calculations
 	vec3 HalfA = normalize(LightDir + CameraDir);
@@ -214,12 +214,13 @@ void main()
     if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y) {
         return;
     }
-	//TextCoord = floor(TextCoord / TextureDims);
 
-	vec4  Coord    = texelFetch(PositionBuffer, ivec2(TextCoord), 0); //texture(PositionBuffer, TextCoord);
-	vec3  Normal   = texelFetch(NormalBuffer, ivec2(TextCoord), 0).xyz; //texture(NormalBuffer, TextCoord).xyz;
-	vec4  Diffuse  = texelFetch(DiffuseBuffer, ivec2(TextCoord), 0); //texture(DiffuseBuffer, TextCoord);
-	float Specular = texelFetch(SpecularBuffer, ivec2(TextCoord), 0).x; //texture(SpecularBuffer, TextCoord).x;
+	vec4  Coord    = texelFetch(PositionBuffer, ivec2(TextCoord), 0);
+	vec3  VertexNormal   = normalize(texelFetch(VertexNormalBuffer, ivec2(TextCoord), 0).xyz);
+	vec3  FragmentNormal = normalize(texelFetch(FragmentNormalBuffer, ivec2(TextCoord), 0).xyz);
+	vec4  Diffuse  = texelFetch(DiffuseBuffer, ivec2(TextCoord), 0);
+	float Specular = texelFetch(SpecularBuffer, ivec2(TextCoord), 0).x;
+	FragmentNormal = VertexNormal;
 
 	vec4 ShadowPos[4];
 	for(uint CascadeIdx = 0;
@@ -255,12 +256,16 @@ void main()
 		LightIdx < WorldUpdate.ColorSourceCount;
 		++LightIdx)
 	{
+		vec4 LightSourcePos = LightSources[LightIdx].Pos;
+		vec4 LightSourceDir = LightSources[LightIdx].Dir;
+		vec4 LightSourceCol = LightSources[LightIdx].Col;
+
 		if(LightSources[LightIdx].Type == light_type_directional)
-			DirectionalLight(LightDiffuse, LightSpecular, Normal, CamDir, LightSources[LightIdx].Dir, LightSources[LightIdx].Col, Diffuse.xyz, Specular);
+			DirectionalLight(LightDiffuse, LightSpecular, FragmentNormal, CamDir, LightSourceDir, LightSourceCol, Diffuse.xyz, Specular);
 		else if(LightSources[LightIdx].Type == light_type_point)
-			PointLight(LightDiffuse, LightSpecular, Coord.xyz, Normal, CamDir, LightSources[LightIdx].Pos, LightSources[LightIdx].Col, Diffuse.xyz, Specular);
+			PointLight(LightDiffuse, LightSpecular, Coord.xyz, FragmentNormal, CamDir, LightSourcePos, LightSourceCol, Diffuse.xyz, Specular);
 		else if(LightSources[LightIdx].Type == light_type_spot)
-			SpotLight(LightDiffuse, LightSpecular, Coord.xyz, Normal, CamDir, LightSources[LightIdx].Pos, LightSources[LightIdx].Dir, LightSources[LightIdx].Col, Diffuse.xyz, Specular);
+			SpotLight(LightDiffuse, LightSpecular, Coord.xyz, FragmentNormal, CamDir, LightSourcePos, LightSourceDir, LightSourceCol, Diffuse.xyz, Specular);
 	}
 
 	uint  Layer = 0;
@@ -273,13 +278,13 @@ void main()
 		if(abs(Pos.z) < CascadeSplits[CascadeIdx])
 		{
 			Layer  = CascadeIdx - 1;
-			Shadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation, CascadeSplits[CascadeIdx - 1], Normal, GlobalLightPos.xyz);
+			Shadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation, CascadeSplits[CascadeIdx - 1], VertexNormal, GlobalLightPos.xyz);
 			CascadeCol = CascadeColors[Layer];
 
 			float Fade = clamp((1.0 - (Pos.z * Pos.z) / (CascadeSplits[CascadeIdx] * CascadeSplits[CascadeIdx])) / 0.2, 0.0, 1.0);
 			if(Fade > 0.0 && Fade < 1.0)
 			{
-				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation, CascadeSplits[CascadeIdx], Normal, GlobalLightPos.xyz);
+				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation, CascadeSplits[CascadeIdx], VertexNormal, GlobalLightPos.xyz);
 				vec3  NextCascadeCol = CascadeColors[Layer + 1];
 				Shadow = mix(NextShadow, Shadow, Fade);
 				CascadeCol = mix(NextCascadeCol, CascadeCol, Fade);

@@ -23,6 +23,9 @@
 #include <initializer_list>
 #include <type_traits>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 enum button_symbol
 {
 	EC_LBUTTON        = 0x01,
@@ -239,13 +242,233 @@ struct alignas(16) mesh_draw_command_input
 	bool IsVisible;
 };
 
-class ENGINE_EXPORT_CODE game_engine_code
+// NOTE: When light is point(w is a radius), then pos. Otherwise it is dir(w is cutoff angle for spot light).
+struct alignas(16) light_source
 {
+	vec4 Pos;
+	vec4 Dir;
+	vec4 Col;
+	u32  LightType;
 };
 
-#define GameSetupFunc(name) void ENGINE_EXPORT_CODE name(std::vector<mesh_draw_command_input>& MeshDrawCommands, mesh& Geometries)
+struct texture_data
+{
+	u32 Width;
+	u32 Height;
+	u32 Depth;
+	void* Data;
+};
+
+class allocator
+{
+public:
+	allocator(const std::size_t MemSize, void* const NewStart) noexcept : Size(MemSize), Start(NewStart), Used(0), AllocCount(0) {assert(MemSize > 0);}
+	allocator(const allocator&) = delete;
+	allocator& operator=(allocator&) = delete;
+
+	allocator(allocator&& Oth) noexcept : Size(Oth.Size), Used(Oth.Used), AllocCount(Oth.AllocCount), Start(Oth.Start)
+	{
+		Oth.Size = 0;
+		Oth.Used = 0;
+		Oth.Start = nullptr;
+		Oth.AllocCount = 0;
+	}
+	allocator& operator=(allocator&& Oth) noexcept
+	{
+		Size = Oth.Size;
+		Used = Oth.Used;
+		Start = Oth.Start;
+		AllocCount = Oth.AllocCount;
+
+		Oth.Size = 0;
+		Oth.Used = 0;
+		Oth.Start = nullptr;
+		Oth.AllocCount = 0;
+
+		return *this;
+	}
+
+	virtual ~allocator() noexcept
+	{
+		assert(Used == 0 && AllocCount == 0);
+	}
+
+	virtual void* Allocate(const std::size_t& Size, const std::uintptr_t& Alignment = sizeof(std::uintptr_t)) = 0;
+	virtual void  Free(void* const Mem) = 0;
+
+	size_t Size;
+	size_t Used;
+	size_t AllocCount;
+
+protected:
+	void* Start;
+};
+
+class linear_allocator : public allocator
+{
+public:
+	linear_allocator(const std::size_t MemSize, void* const Start) : allocator(MemSize, Start), Current(Start) {}
+	linear_allocator(linear_allocator&& Other) : allocator(std::move(Other)), Current(Other.Current) { Other.Current = nullptr; }
+	~linear_allocator() noexcept
+	{
+		Clear();
+	}
+
+	linear_allocator& operator=(linear_allocator&& Other)
+	{
+		allocator::operator=(std::move(Other));
+
+		Current = Other.Current;
+		Other.Current = nullptr;
+
+		return *this;
+	}
+
+	virtual void* Allocate(const std::size_t& AllocSize, const std::uintptr_t& Alignment = sizeof(std::uintptr_t)) override
+	{
+		assert(Size > 0 && Alignment > 0);
+
+		uintptr_t Ptr = (std::uintptr_t)Current;
+		uintptr_t Aligned = AlignUp(Ptr, Alignment);
+		size_t Forward = Aligned - Ptr;
+
+		if(Used + Forward + AllocSize > Size) return nullptr;
+
+		void* AlignedAddr = (void*)((uintptr_t)Current + Forward);
+		Current = (void*)((uintptr_t)AlignedAddr + AllocSize);
+		Used = (uintptr_t)Current - (uintptr_t)Start;
+
+		AllocCount++;
+		return AlignedAddr;
+	}
+
+	virtual void Free(void* const Mem) noexcept override {}
+
+	virtual void Clear() noexcept
+	{
+		Current = Start;
+		AllocCount = 0;
+		Used = 0;
+	}
+
+	virtual void Rewind(void* const Mark) noexcept
+	{
+		assert(Current >= Mark && Start <= Mark);
+		Current = Mark;
+		Used = (uintptr_t)Current - (uintptr_t)Start;
+	}
+
+protected:
+	void* Current;
+};
+
+template<typename T, class alloc_type>
+class allocator_adapter
+{
+public:
+	typedef T value_type;
+
+	allocator_adapter() = delete;
+	allocator_adapter(alloc_type& NewAllocator) noexcept : Allocator(NewAllocator) {}
+
+	template<typename U>
+	allocator_adapter(const allocator_adapter<U, alloc_type> Other) noexcept : Allocator(Other.Allocator) {}
+
+	[[nodiscard]] constexpr value_type* allocate(const std::size_t& AllocCount)
+	{
+		return (value_type*)Allocator.Allocate(AllocCount * sizeof(value_type), alignof(value_type));
+	}
+
+	constexpr void deallocate(value_type* Ptr, [[maybe_unused]] std::size_t DeallocCount) noexcept
+	{
+		Allocator.Free(Ptr);
+	}
+
+	std::size_t MaxAllocationSize() const noexcept
+	{
+		return Allocator.Size;
+	}
+
+	bool operator==(const allocator_adapter<T, alloc_type>& Other) const noexcept
+	{
+		if constexpr(std::is_base_of_v<alloc_type, linear_allocator>)
+		{
+			return Allocator.Start == Other.Allocator.Start;
+		}
+		// TODO: Other allocator types if needed
+		else
+		{
+			return true;
+		}
+	}
+
+	bool operator!=(const allocator_adapter<T, alloc_type>& Other) const noexcept
+	{
+		return !(*this == Other);
+	}
+
+	alloc_type& Allocator;
+};
+
+// TODO: different object types: mesh/game object, particle object, maybe something else???
+class mesh_object
+{
+public:
+	mesh_object() = default;
+	mesh_object(u32 NewMeshIdx) : MeshIndex(NewMeshIdx) {}; 
+
+	void AddInstance(vec4 Translate, vec4 Scale, bool IsVisible)
+	{
+		mesh_draw_command_input Command = {};
+		Command.Translate = Translate;
+		Command.Scale = Scale;
+		Command.IsVisible = IsVisible;
+		Command.MeshIndex = MeshIndex;
+		ObjectInstances.push_back(Command);
+	}
+
+	void AddInstance(mesh::material Mat, vec4 Translate, vec4 Scale, bool IsVisible)
+	{
+		mesh_draw_command_input Command = {};
+		Command.Mat = Mat;
+		Command.Translate = Translate;
+		Command.Scale = Scale;
+		Command.IsVisible = IsVisible;
+		Command.MeshIndex = MeshIndex;
+		ObjectInstances.push_back(Command);
+	}
+
+	void UpdateCommands(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& DrawCommands)
+	{
+		DrawCommands.insert(DrawCommands.end(), ObjectInstances.begin(), ObjectInstances.end());
+	}
+
+	u32 MeshIndex;
+
+private:
+	std::vector<mesh_draw_command_input> ObjectInstances;
+};
+
+// TODO: Think how to implement for a multiple scenes at one time
+// TODO: Choose a scene at runtime
+class scene
+{
+public:
+	virtual bool LoadScene() = 0;
+	virtual void Update() = 0;
+
+	bool IsLoaded = false;
+
+	std::vector<texture_data> Textures;
+	std::vector<light_source, allocator_adapter<light_source, linear_allocator>> LightSources;
+
+	mesh Meshes;
+	mesh_object ObjectCommands;
+};
+
+#define GameSetupFunc(name) void ENGINE_EXPORT_CODE name(u32& MemorySize)
 typedef GameSetupFunc(game_setup);
 
-#define GameUpdateAndRenderFunc(name) void ENGINE_EXPORT_CODE name(const game_input& GameInput, view_data& ViewData)
+#define GameUpdateAndRenderFunc(name) void ENGINE_EXPORT_CODE name(bool& SceneIsLoaded, std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& MeshDrawCommands, mesh& Geometries, std::vector<light_source, allocator_adapter<light_source, linear_allocator>>& LightSources, const game_input& GameInput, view_data& ViewData)
 typedef GameUpdateAndRenderFunc(game_update_and_render);
 
