@@ -44,34 +44,30 @@ layout(location = 4) out float OutputSpecular;
 
 void main()
 {
-	vec3 ViewDir = normalize((WorldUpdate.CameraPos - In.Coord).xyz);
-	float HeightScale = 0.1;
+	vec3  ViewDir = normalize(TBN * (WorldUpdate.CameraPos - In.Coord).xyz);
+	float HeightScale = 0.01;
 
-	const float MinLayers = 8;
-	const float MaxLayers = 64;
-	float LayersCount = mix(MaxLayers, MinLayers, max(dot(vec3(0, 0, 1), ViewDir), 0.0));
-	float LayersDepth = 1.0 / LayersCount;
+	const float MinLayers   = 8 ;
+	const float MaxLayers   = 64;
+	float LayersCount       = mix(MaxLayers, MinLayers, abs(dot(vec3(0, 0, 1), ViewDir)));
+	float LayersDepth       = 1.0 / LayersCount;
 	float CurrentLayerDepth = 0.0;
 
-	vec2 P = ViewDir.xy * HeightScale;
-	vec2 DeltaTextCoord = P / LayersCount;
-
-	vec2 CurrentTextCoord = In.TextCoord;
-	float CurrentDepth = texture(HeightSampler, CurrentTextCoord).x;
+	vec2  DeltaTextCoord   = (ViewDir.xy * HeightScale) / (LayersCount);
+	vec2  CurrentTextCoord = In.TextCoord;
+	float CurrentDepth     = 1.0 - texture(HeightSampler, CurrentTextCoord).x;
 	while(CurrentLayerDepth < CurrentDepth)
 	{
-		CurrentTextCoord -= DeltaTextCoord;
-		CurrentDepth = texture(HeightSampler, CurrentTextCoord).x;
+		CurrentTextCoord  -= DeltaTextCoord;
+		CurrentDepth       = 1.0 - texture(HeightSampler, CurrentTextCoord).x;
 		CurrentLayerDepth += LayersDepth;
 	}
 
 	vec2 PrevTextCoord = CurrentTextCoord + DeltaTextCoord;
 
 	float AfterDepth  = CurrentDepth - CurrentLayerDepth;
-	float BeforeDepth = texture(HeightSampler, CurrentTextCoord).x - CurrentLayerDepth + LayersDepth;
-
-	float Weight = AfterDepth / (AfterDepth - BeforeDepth);
-	vec2 TextCoord = PrevTextCoord * Weight + CurrentTextCoord * (1.0 - Weight);
+	float BeforeDepth = 1.0 - texture(HeightSampler, CurrentTextCoord).x - CurrentLayerDepth + LayersDepth;
+	vec2  TextCoord   = mix(PrevTextCoord, CurrentTextCoord, AfterDepth / (AfterDepth - BeforeDepth));
 
 	if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard;
 

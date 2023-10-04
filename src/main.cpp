@@ -386,9 +386,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	texture_data Normal1;
 	texture_data Height1;
 
-	Diffuse1.Data = (void*)stbi_load("..\\assets\\brick-wall.diff.png", (int*)&Diffuse1.Width, (int*)&Diffuse1.Height, (int*)&Diffuse1.Depth, 4);
-	Normal1.Data  = (void*)stbi_load("..\\assets\\brick-wall.norm.png", (int*)&Normal1.Width, (int*)&Normal1.Height, (int*)&Normal1.Depth, 4);
-	Height1.Data  = (void*)stbi_load("..\\assets\\brick-wall.disp.png", (int*)&Height1.Width, (int*)&Height1.Height, (int*)&Height1.Depth, 4);
+	Diffuse1.Data = (void*)stbi_load("..\\assets\\brick-wall2.diff.tga", (int*)&Diffuse1.Width, (int*)&Diffuse1.Height, (int*)&Diffuse1.Depth, 4);
+	Normal1.Data  = (void*)stbi_load("..\\assets\\brick-wall2.norm.tga", (int*)&Normal1.Width, (int*)&Normal1.Height, (int*)&Normal1.Depth, 4);
+	Height1.Data  = (void*)stbi_load("..\\assets\\brick-wall2.disp.png", (int*)&Height1.Width, (int*)&Height1.Height, (int*)&Height1.Depth, 4);
 
 	TextureInputData.Format    = VK_FORMAT_R8G8B8A8_SRGB;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;

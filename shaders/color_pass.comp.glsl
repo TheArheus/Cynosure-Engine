@@ -168,7 +168,7 @@ void PointLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord,
 
 	// Diffuse Calculations
 	float Attenuation = 1.0 / Distance;
-	float AngleOfIncidence = max(dot(normalize(LightDir / Distance), Normal), 0.0);
+	float AngleOfIncidence = max(dot(normalize(LightDir), Normal), 0.0);
 
 	vec3 Light = LightCol.xyz * Attenuation;
 
@@ -220,7 +220,6 @@ void main()
 	vec3  FragmentNormal = normalize(texelFetch(FragmentNormalBuffer, ivec2(TextCoord), 0).xyz);
 	vec4  Diffuse  = texelFetch(DiffuseBuffer, ivec2(TextCoord), 0);
 	float Specular = texelFetch(SpecularBuffer, ivec2(TextCoord), 0).x;
-	FragmentNormal = VertexNormal;
 
 	vec4 ShadowPos[4];
 	for(uint CascadeIdx = 0;
@@ -248,7 +247,7 @@ void main()
 	vec4 GlobalLightPos = WorldUpdate.GlobalLightPos;
 	vec4 GlobalLightDir = normalize(-WorldUpdate.GlobalLightPos);
 
-	vec3 CamDir   = WorldUpdate.CameraDir.xyz;
+	vec3 CamDir   = WorldUpdate.CameraPos.xyz - Coord.xyz;
 
 	vec3 LightDiffuse   = vec3(0);
 	vec3 LightSpecular  = vec3(0);

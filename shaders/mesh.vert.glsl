@@ -77,25 +77,21 @@ void main()
 	uint VertexIndex   = gl_VertexIndex;
 	uint InstanceIndex = gl_InstanceIndex;
 
-	vec3 Tang      = normalize(vec3(In[VertexIndex].Tangent  ));
-	vec3 Bitang    = normalize(vec3(In[VertexIndex].Bitangent));
+	Out.Coord     = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
 
-	Out.Coord      = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
+	uint NormalX  = (In[VertexIndex].Normal >> 24) & 0xff;
+	uint NormalY  = (In[VertexIndex].Normal >> 16) & 0xff;
+	uint NormalZ  = (In[VertexIndex].Normal >>  8) & 0xff;
+	vec3 Normal   = normalize(vec3(NormalX, NormalY, NormalZ) / 127.0 - 1.0);
+	vec3 Tang     = normalize(vec3(In[VertexIndex].Tangent  ));
+	vec3 Bitang   = normalize(vec3(In[VertexIndex].Bitangent));
 
-	uint NormalX   = (In[VertexIndex].Normal >> 24) & 0xff;
-	uint NormalY   = (In[VertexIndex].Normal >> 16) & 0xff;
-	uint NormalZ   = (In[VertexIndex].Normal >>  8) & 0xff;
-	vec3 Normal    = vec3(NormalX, NormalY, NormalZ) / 127.0 - 1.0;
-	Out.Norm       = vec4(Normal, 0.0);
+	TBN           = mat3(Tang, Bitang, Normal);
 
-	TBN            = mat3(normalize(Tang   * MeshDrawCommands[InstanceIndex].Scale.xyz + MeshDrawCommands[InstanceIndex].Translate.xyz), 
-						  normalize(Bitang * MeshDrawCommands[InstanceIndex].Scale.xyz + MeshDrawCommands[InstanceIndex].Translate.xyz), 
-						  normalize(Normal * MeshDrawCommands[InstanceIndex].Scale.xyz + MeshDrawCommands[InstanceIndex].Translate.xyz));
+	Out.Norm      = vec4(Normal, 0.0);
+	Out.Col		  = MeshDrawCommands[InstanceIndex].Mat.LightEmmit;
+	Out.TextCoord = In[VertexIndex].TexPos;
 
-	Out.Col		   = MeshDrawCommands[InstanceIndex].Mat.LightEmmit;
-	Out.TextCoord  = In[VertexIndex].TexPos;
-
-	gl_Position    = WorldUpdate.Proj * WorldUpdate.View * Out.Coord;
-
+	gl_Position   = WorldUpdate.Proj * WorldUpdate.View * Out.Coord;
 }
 
