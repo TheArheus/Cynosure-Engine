@@ -10,8 +10,9 @@
 struct game_code
 {
 	HMODULE Library;
-	game_setup* Setup;
-	game_update_and_render* UpdateAndRender;
+	game_setup*  Setup;
+	game_start*  Start;
+	game_update* Update;
 };
 
 u32 GetImageMipLevels(u32 Width, u32 Height)

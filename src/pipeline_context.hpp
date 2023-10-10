@@ -325,7 +325,7 @@ public:
 	template<typename T>
 	render_context(std::unique_ptr<T>& Context, u32 NewWidth, u32 NewHeight,
 				   const shader_input& Signature,
-				   std::initializer_list<const std::string> ShaderList, const std::vector<VkFormat> ColorTargetFormats, const input_data& InputData = {true, true, true, false}) : InputSignature(Signature), Width(NewWidth), Height(NewHeight), UseColorTarget(InputData.UseColor), UseDepthTarget(InputData.UseDepth)
+				   std::initializer_list<const std::string> ShaderList, const std::vector<VkFormat>& ColorTargetFormats, const input_data& InputData = {true, true, true, false}) : InputSignature(Signature), Width(NewWidth), Height(NewHeight), UseColorTarget(InputData.UseColor), UseDepthTarget(InputData.UseDepth)
 	{		
 		RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
 		Device = Context->Device;

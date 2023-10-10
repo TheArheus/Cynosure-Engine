@@ -5,6 +5,7 @@ struct resource_layout
 	VkImageLayout ImageLayout;
 };
 
+// TODO: Add a constructor for using outside staging buffer
 struct buffer
 {
 	buffer() = default;

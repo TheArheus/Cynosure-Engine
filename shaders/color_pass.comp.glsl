@@ -36,17 +36,17 @@ struct light_source
 	uint Type;
 };
 
-layout(binding = 0) readonly uniform block1 { global_world_data WorldUpdate; };
-layout(binding = 1) uniform block2 { light_source LightSources[256]; };
-layout(binding = 2) buffer  block3 { vec2 PoissonDisk[64]; };
-layout(binding = 3) uniform sampler3D RandomAnglesTexture;
-layout(binding = 4) uniform sampler2D PositionBuffer;
-layout(binding = 5) uniform sampler2D VertexNormalBuffer;
-layout(binding = 6) uniform sampler2D FragmentNormalBuffer;
-layout(binding = 7) uniform sampler2D DiffuseBuffer;
-layout(binding = 8) uniform sampler2D SpecularBuffer;
-layout(binding = 9) uniform writeonly image2D ColorTarget;
-layout(binding = 10) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
+layout(binding = 0)   readonly uniform block1 { global_world_data WorldUpdate; };
+layout(binding = 1)   uniform block2 { light_source LightSources[256]; };
+layout(binding = 2)   buffer  block3 { vec2 PoissonDisk[64]; };
+layout(binding = 3)   uniform sampler3D RandomAnglesTexture;
+layout(binding = 4)   uniform sampler2D DepthStencilBuffer; // Use depth/stencil here
+layout(binding = 5)   uniform sampler2D VertexNormalBuffer;
+layout(binding = 6)   uniform sampler2D FragmentNormalBuffer;
+layout(binding = 7)   uniform sampler2D DiffuseBuffer;
+layout(binding = 8)   uniform sampler2D SpecularBuffer;
+layout(binding = 9)   uniform writeonly image2D ColorTarget;
+layout(binding = 10)  uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
 layout(push_constant) uniform pushConstant { float CascadeSplits[DEPTH_CASCADES_COUNT + 1]; };
 
 float GetRandomValue(vec2 Seed)
@@ -58,6 +58,15 @@ float GetRandomValue(vec2 Seed)
 float GetSearchWidth(float ReceiverDepth, float Near)
 {
     return WorldUpdate.GlobalLightSize * (ReceiverDepth - Near) / WorldUpdate.CameraPos.z;
+}
+
+vec3 WorldPosFromDepth(vec2 TextCoord, float Depth) {
+	TextCoord.y = 1 - TextCoord.y;
+    vec4 ClipSpacePosition = vec4(TextCoord * 2.0 - 1.0, Depth, 1.0);
+    vec4 ViewSpacePosition = inverse(WorldUpdate.Proj * WorldUpdate.DebugView) * ClipSpacePosition;
+    ViewSpacePosition /= ViewSpacePosition.w;
+
+    return ViewSpacePosition.xyz;
 }
  
 float GetBlockerDistance(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation, float ReceiverDepth, float Bias, float Near)
@@ -151,7 +160,7 @@ float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, vec2 Rotatio
 void DirectionalLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Normal, vec3 CameraDir, vec4 LightDir, vec4 LightCol, vec3 Diffuse, float Specular)
 {
 	float AndleOfIncidence = max(dot(LightDir.xyz, Normal), 0.0);
-	vec3 Light = LightCol.xyz;
+	vec3 Light = LightCol.xyz * LightCol.w;
 
 	vec3 HalfA = normalize(LightDir.xyz + CameraDir);
 	float BlinnTerm = clamp(dot(Normal, HalfA), 0, 1);
@@ -170,7 +179,7 @@ void PointLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord,
 	float Attenuation = 1.0 / Distance;
 	float AngleOfIncidence = max(dot(normalize(LightDir), Normal), 0.0);
 
-	vec3 Light = LightCol.xyz * Attenuation;
+	vec3 Light = LightCol.xyz * LightCol.w * Attenuation;
 
 	// Specular Calculations
 	vec3  HalfA = normalize(LightDir + CameraDir);
@@ -209,17 +218,19 @@ void SpotLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord, 
 
 void main()
 {
-	vec2 TextureDims = textureSize(PositionBuffer, 0).xy;
+	vec2 TextureDims = textureSize(DepthStencilBuffer, 0).xy;
 	vec2 TextCoord   = gl_GlobalInvocationID.xy;
     if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y) {
         return;
     }
 
-	vec4  Coord    = texelFetch(PositionBuffer, ivec2(TextCoord), 0);
+	float Depth    = texelFetch(DepthStencilBuffer, ivec2(TextCoord), 0).r;
 	vec3  VertexNormal   = normalize(texelFetch(VertexNormalBuffer, ivec2(TextCoord), 0).xyz);
 	vec3  FragmentNormal = normalize(texelFetch(FragmentNormalBuffer, ivec2(TextCoord), 0).xyz);
 	vec4  Diffuse  = texelFetch(DiffuseBuffer, ivec2(TextCoord), 0);
 	float Specular = texelFetch(SpecularBuffer, ivec2(TextCoord), 0).x;
+
+	vec4 Coord = vec4(WorldPosFromDepth(TextCoord / TextureDims, Depth), 1);
 
 	vec4 ShadowPos[4];
 	for(uint CascadeIdx = 0;

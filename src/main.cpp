@@ -7,8 +7,23 @@
 #include <random>
 
 
+// TODO: Implement correct materials per object instance
+// TODO: Implement correct mesh object creation, update and other functions architecture
+//           Use entity component system for objects
+//           Posibility for oop with objects if needed
+//           Maybe event system will be needed in the future?
+//
+// TODO: Implement sound system with openal???
+//           Find API to implement this
+//
+// TODO: Use scene class and use vector of scene classes for multiple scenes
+//           Change between them at runtime and posibility to change them while main app is running(right now it is not quite work)
+//
+// TODO: Use only one staging buffer instead of many (a lot of memory usage here, current solution is totally not optimal)
+// TODO: Posibility to use only outer samplers(do not create a sampler for each texture)
 // TODO: Fix image barriers and current layouts
 // 
+// TODO: Implement good while loop architecture
 // TODO: Reorganize files for the corresponding files. For ex. win32_window files to platform folders and etc.
 
 struct indirect_draw_indexed_command
@@ -222,15 +237,14 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	TextureInputData.Format    = VulkanWindow.Gfx->SurfaceFormat.format;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	texture GfxColorTarget(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData);
-	TextureInputData.Format    = VK_FORMAT_R32G32B32A32_SFLOAT;
+	TextureInputData.Format    = VK_FORMAT_R16G16B16A16_SFLOAT;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-	GBuffer[0] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Position
-	GBuffer[1] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Vertex Normals
-	GBuffer[2] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Fragment Normals
+	GBuffer[0] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Vertex Normals
+	GBuffer[1] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Fragment Normals
 	TextureInputData.Format    = VK_FORMAT_R8G8B8A8_UNORM;
-	GBuffer[3] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Diffuse Color
+	GBuffer[2] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Diffuse Color
 	TextureInputData.Format    = VK_FORMAT_R32_SFLOAT;
-	GBuffer[4] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Specular
+	GBuffer[3] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Specular
 	TextureInputData.Format    = VK_FORMAT_D32_SFLOAT;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 	texture GfxDepthTarget(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData);
@@ -260,7 +274,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 						   PushUniformBuffer()->					// Array of Light Sources
 						   PushStorageBuffer()->					// Poisson Disk
 						   PushImageSampler()->						// Random Rotations
-						   PushImageSampler()->						// G-Buffer Position Data
+						   PushImageSampler()->						// G-Buffer DepthStencil Data
 						   PushImageSampler()->						// G-Buffer Vertex Normal Data
 						   PushImageSampler()->						// G-Buffer Fragment Normal Data
 						   PushImageSampler()->						// G-Buffer Diffuse Data
@@ -313,8 +327,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 						   Build(VulkanWindow.Gfx);
 
 	// TODO: Maybe create hot load shaders and compile them and runtime inside
+	std::vector<VkFormat> GfxFormats;
+	for(u32 FormatIdx = 0; FormatIdx < GBuffer.size(); ++FormatIdx) GfxFormats.push_back(GBuffer[FormatIdx].Info.Format);
 	global_pipeline_context PipelineContext(VulkanWindow.Gfx);
-	render_context GfxContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxRootSignature, {"..\\build\\mesh.vert.spv", "..\\build\\mesh.frag.spv"}, {GBuffer[0].Info.Format, GBuffer[1].Info.Format, GBuffer[2].Info.Format, GBuffer[3].Info.Format, GBuffer[4].Info.Format});
+	render_context GfxContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxRootSignature, {"..\\build\\mesh.vert.spv", "..\\build\\mesh.frag.spv"}, GfxFormats);
 
 	render_context::input_data RendererInputData = {};
 	RendererInputData.UseColor		= true;
@@ -411,7 +427,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	while(VulkanWindow.IsRunning())
 	{
 		mesh DebugGeometries;
-		GlobalGeometries.Reset();
 
 		linear_allocator SystemsAllocator(GlobalMemorySize, MemoryBlock);
 		linear_allocator LightSourcesAlloc(sizeof(light_source) * 1024, SystemsAllocator.Allocate(sizeof(light_source) * 2048));
@@ -426,26 +441,33 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		auto Result = VulkanWindow.ProcessMessages();
 		if(Result) return *Result;
 
-		if(VulkanWindow.Buttons[EC_L].IsDown)
-		{
-			IsCameraLocked = !IsCameraLocked;
-		}
 		if(VulkanWindow.Buttons[EC_LCONTROL].IsDown && VulkanWindow.Buttons[EC_R].IsDown)
 		{
 			// TODO: Check if the date of the creation is not the same
 			// Otherwise do not load the source
 			VulkanWindow.UnloadGameCode(GameCode);
 			GameCode = VulkanWindow.LoadGameCode();
+			SceneIsLoaded  = false;
 		}
+
+		GameInput.DeltaTime = TimeElapsed;
+		if(GameCode.Start && !SceneIsLoaded)
+		{
+			GameCode.Start(SceneIsLoaded, GlobalGeometries);
+		}
+		GlobalGeometries.Reset();
+		if(GameCode.Update)
+		{
+			GameCode.Update(GlobalMeshInstances, GlobalGeometries, GlobalLightSources, GameInput, ViewData);
+		}
+
 		if(VulkanWindow.Buttons[EC_I].IsDown)
 		{
 			IsDebugColors = !IsDebugColors;
 		}
-
-		GameInput.DeltaTime = TimeElapsed;
-		if(GameCode.UpdateAndRender)
+		if(VulkanWindow.Buttons[EC_L].IsDown)
 		{
-			GameCode.UpdateAndRender(SceneIsLoaded, GlobalMeshInstances, GlobalGeometries, GlobalLightSources, GameInput, ViewData);
+			IsCameraLocked = !IsCameraLocked;
 		}
 		if(!IsCameraLocked)
 		{
@@ -456,17 +478,14 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 		float Aspect = (float)VulkanWindow.Gfx->Width / (float)VulkanWindow.Gfx->Height;
 
-		// NOTE: Global Sun Position and light direction of it
-		vec3 LightPos   =  vec3(-4, 4, 2);
-		vec3 LightDir   = -Normalize(LightPos);
-		mat4 TestLightView = LookAtRH(LightDir, vec3(0), UpVector);
-		mat4 TestLightProj = OrthoRH(-10, 10, -10, 10, -10, 10);
-
 		mat4 CameraProj = PerspRH(45.0f, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, NearZ, FarZ);
 		mat4 CameraView = LookAtRH(ViewData.CameraPos, ViewData.CameraPos + ViewData.ViewDir, UpVector);
 		mat4 DebugCameraView = LookAtRH(ViewPos, ViewPos + ViewDir, UpVector);
 		GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, CameraProj, 1);
 
+		// NOTE: Global Sun Position and light direction of it
+		vec3 LightPos   =  vec3(-4, 4, 2);
+		vec3 LightDir   = -Normalize(LightPos);
 		WorldUpdate = {};
 		WorldUpdate.View			= CameraView;
 		WorldUpdate.DebugView		= DebugCameraView;
@@ -489,8 +508,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		{
 			std::vector<vertex> DebugFrustum;
 
-			float LightFarZ  = CascadeSplits[CascadeIdx];
 			float LightNearZ = CascadeSplits[CascadeIdx - 1];
+			float LightFarZ  = CascadeSplits[CascadeIdx];
 			float LightDistZ = LightFarZ - LightNearZ;
 
 			mat4 CameraCascadeProj = PerspRH(45.0f, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, LightNearZ, LightFarZ);
@@ -682,6 +701,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				std::vector<VkImageMemoryBarrier> ColorPassBarrier = 
 				{
 					CreateImageBarrier(GfxColorTarget.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
+					CreateImageBarrier(GfxDepthTarget.Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
 				};
 				for(u32 Idx = 0; Idx < GBUFFER_COUNT; Idx++)
 				{
@@ -693,6 +713,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				ColorPassContext.SetUniformBufferView(LightSourcesBuffer);
 				ColorPassContext.SetStorageBufferView(PoissonDiskBuffer);
 				ColorPassContext.SetImageSampler({RandomAnglesTexture}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				ColorPassContext.SetImageSampler({GfxDepthTarget}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				ColorPassContext.SetImageSampler(GBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				ColorPassContext.SetStorageImage({GfxColorTarget}, VK_IMAGE_LAYOUT_GENERAL);
 				ColorPassContext.SetImageSampler(GlobalShadow, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

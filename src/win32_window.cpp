@@ -195,8 +195,9 @@ game_code window::LoadGameCode()
 
 	if(Source.Library)
 	{
-		Source.Setup = (game_setup*)GetProcAddress(Source.Library, "GameSetup");
-		Source.UpdateAndRender = (game_update_and_render*)GetProcAddress(Source.Library, "GameUpdateAndRender");
+		Source.Setup  = (game_setup *)GetProcAddress(Source.Library, "GameSetup");
+		Source.Start  = (game_start *)GetProcAddress(Source.Library, "GameStart");
+		Source.Update = (game_update*)GetProcAddress(Source.Library, "GameUpdate");
 	}
 
 	return Source;
@@ -208,8 +209,9 @@ UnloadGameCode(game_code& Source)
 	FreeLibrary(Source.Library);
 	DeleteFileA("..\\build\\game_code.temp.dll");
 
-	Source.Setup = 0;
-	Source.UpdateAndRender = 0;
+	Source.Setup  = 0;
+	Source.Start  = 0;
+	Source.Update = 0;
 };
 
 void* window::

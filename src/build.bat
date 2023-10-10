@@ -13,14 +13,14 @@ set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console
 
 set PlatformCppFiles="..\src\main.cpp"
 set GameCppFiles="..\src\game_main.cpp"
-rem set CppFiles= 
-rem for /R %%f in (*.cpp) do (
+rem set GameCppFiles= 
+rem for /R "..\src\game_objects" %%f in (*.cpp) do (
 rem 	set CppFiles=!CppFiles! "%%f"
 rem )
 
 set DepthCascades=-DDEPTH_CASCADES_COUNT=3
 set UseDebugColorBlend=-DDEBUG_COLOR_BLEND=0
-set GBUFFER_COUNT=-DGBUFFER_COUNT=5
+set GBUFFER_COUNT=-DGBUFFER_COUNT=4
 
 glslangValidator ..\shaders\mesh.vert.glsl %DepthCascades% -o ..\build\mesh.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.frag.glsl %DepthCascades% %UseDebugColorBlend% -gVS -g -o ..\build\mesh.frag.spv -e main --target-env vulkan1.3
@@ -35,6 +35,8 @@ glslangValidator ..\shaders\depth_reduce.comp.glsl -o ..\build\depth_reduce.comp
 
 if not exist ..\build\ mkdir ..\build\
 pushd ..\build\
-cl %CommonCompFlags% %GameCppFiles% %DepthCascades% /Fe"game_code" /Fd"game_code" -DENGINE_EXPORT_CODE -LD /link %CommonLinkFlags% /EXPORT:GameUpdateAndRender /EXPORT:GameSetup
+rem There would be compile all object behaviors
+cl %CommonCompFlags% %GameCppFiles% %DepthCascades% /Fe"game_code" /Fd"game_code" -DENGINE_EXPORT_CODE -LD /link %CommonLinkFlags% /EXPORT:GameSetup /EXPORT:GameStart /EXPORT:GameUpdate
+
 cl %CommonCompFlags% /I%VulkanInc% user32.lib kernel32.lib vulkan-1.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBUFFER_COUNT% /Fe"Cynosure Engine" /Fd"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib%
 popd

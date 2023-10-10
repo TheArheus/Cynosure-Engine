@@ -410,7 +410,6 @@ public:
 	alloc_type& Allocator;
 };
 
-// TODO: different object types: mesh/game object, particle object, maybe something else???
 class mesh_object
 {
 public:
@@ -449,26 +448,20 @@ private:
 	std::vector<mesh_draw_command_input> ObjectInstances;
 };
 
-// TODO: Think how to implement for a multiple scenes at one time
-// TODO: Choose a scene at runtime
-class scene
+
+class object_behavior
 {
 public:
-	virtual bool LoadScene() = 0;
+	virtual void Start() = 0;
 	virtual void Update() = 0;
-
-	bool IsLoaded = false;
-
-	std::vector<texture_data> Textures;
-	std::vector<light_source, allocator_adapter<light_source, linear_allocator>> LightSources;
-
-	mesh Meshes;
-	mesh_object ObjectCommands;
 };
 
 #define GameSetupFunc(name) void ENGINE_EXPORT_CODE name(u32& MemorySize)
 typedef GameSetupFunc(game_setup);
 
-#define GameUpdateAndRenderFunc(name) void ENGINE_EXPORT_CODE name(bool& SceneIsLoaded, std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& MeshDrawCommands, mesh& Geometries, std::vector<light_source, allocator_adapter<light_source, linear_allocator>>& LightSources, const game_input& GameInput, view_data& ViewData)
-typedef GameUpdateAndRenderFunc(game_update_and_render);
+#define GameStartFunc(name) void ENGINE_EXPORT_CODE name(bool& SceneIsLoaded, mesh& Geometries)
+typedef GameStartFunc(game_start);
+
+#define GameUpdateFunc(name) void ENGINE_EXPORT_CODE name(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& MeshDrawCommands, mesh& Geometries, std::vector<light_source, allocator_adapter<light_source, linear_allocator>>& LightSources, const game_input& GameInput, view_data& ViewData)
+typedef GameUpdateFunc(game_update);
 

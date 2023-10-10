@@ -2,38 +2,33 @@
 #include "mesh.cpp"
 
 
-// NOTE: Maybe initial engine setup???
+// NOTE: Initial engine setup
 GameSetupFunc(GameSetup)
 {
 	srand(128);
 	MemorySize = MiB(128);
 }
 
-GameUpdateAndRenderFunc(GameUpdateAndRender)
+GameStartFunc(GameStart)
+{
+	mesh_object CubeGeometry(Geometries.Load("..\\assets\\cube.obj", generate_aabb | generate_sphere));
+	//mesh_object KittenGeometry(Geometries.Load("..\\assets\\kitten.obj", generate_aabb | generate_sphere));
+	//mesh_object PlaneGeometry(Geometries.Load("..\\assets\\f22.obj", generate_aabb | generate_sphere));
+	//mesh_object BunnyGeometry(Geometries.Load("..\\assets\\stanford-bunny.obj", generate_aabb | generate_sphere));
+	
+	SceneIsLoaded = true;
+}
+
+GameUpdateFunc(GameUpdate)
 {
 	u32 SceneRadius = 10;
 	LightSources.push_back({vec4(-4, 4, 2, 2), vec4(), vec4(1, 1, 0, 1), light_type_point});
 	LightSources.push_back({vec4(-4, 4, 3, 2), vec4(), vec4(1, 0, 0, 1), light_type_point});
 
-	mesh_object CubeGeometry;
-	mesh_object KittenGeometry;
-	mesh_object PlaneGeometry;
-	mesh_object BunnyGeometry;
-	if(!SceneIsLoaded)
-	{
-		CubeGeometry.MeshIndex = Geometries.Load("..\\assets\\cube.obj", generate_aabb | generate_sphere);
-		//KittenGeometry.MeshIndex = Geometries.Load("..\\assets\\kitten.obj", generate_aabb | generate_sphere);
-		//PlaneGeometry.MeshIndex = Geometries.Load("..\\assets\\f22.obj", generate_aabb | generate_sphere);
-		//BunnyGeometry.MeshIndex = Geometries.Load("..\\assets\\stanford-bunny.obj", generate_aabb | generate_sphere);
-		SceneIsLoaded = true;
-	}
-	else
-	{
-		CubeGeometry.MeshIndex = Geometries.Load();
-		//KittenGeometry.MeshIndex = Geometries.Load();
-		//PlaneGeometry.MeshIndex = Geometries.Load();
-		//BunnyGeometry.MeshIndex = Geometries.Load();
-	}
+	mesh_object CubeGeometry(Geometries.Load());
+	//mesh_object KittenGeometry(Geometries.Load());
+	//mesh_object PlaneGeometry(Geometries.Load());
+	//mesh_object BunnyGeometry(Geometries.Load());
 
 	for(u32 DataIdx = 0;
 		DataIdx < 512;
