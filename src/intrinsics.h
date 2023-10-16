@@ -257,8 +257,33 @@ struct texture_data
 	u32 Height;
 	u32 Depth;
 	void* Data;
+
+	texture_data() = default;
+	texture_data(const char* Path)
+	{
+		Load(Path);
+	}
+
+	texture_data(const texture_data&) = delete;
+	texture_data& operator=(const texture_data&) = delete;
+
+	void Load(const char* Path)
+	{
+		Data = (void*)stbi_load(Path, (int*)&Width, (int*)&Height, (int*)&Depth, 4);
+	}
+
+	void Delete()
+	{
+		stbi_image_free(Data);
+	}
+
+	~texture_data()
+	{
+		Delete();
+	}
 };
 
+// TODO: Move allocators out
 class allocator
 {
 public:
@@ -410,20 +435,34 @@ public:
 	alloc_type& Allocator;
 };
 
-class mesh_object
+#define GameSceneStartFunc()  void Start(mesh& GlobalMeshes)
+#define GameSceneUpdateFunc() void Update(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalInstances)
+
+// TODO: Make a proper material code for each object
+struct object_behavior
 {
-public:
-	mesh_object() = default;
-	mesh_object(u32 NewMeshIdx) : MeshIndex(NewMeshIdx) {}; 
+	mesh Mesh;
+	texture_data Texture;
+	texture_data NormalMap;
+	texture_data SpecularMap;
+	texture_data DisplaceMap;
+	std::vector<mesh_draw_command_input> Instances;
+	u32  MeshIdx;
+	bool IsInitialized = false;
+
+	virtual ~object_behavior() {};
+
+	virtual void Start()  = 0;
+	virtual void Update() = 0;
 
 	void AddInstance(vec4 Translate, vec4 Scale, bool IsVisible)
 	{
 		mesh_draw_command_input Command = {};
 		Command.Translate = Translate;
 		Command.Scale = Scale;
+		Command.MeshIndex = MeshIdx;
 		Command.IsVisible = IsVisible;
-		Command.MeshIndex = MeshIndex;
-		ObjectInstances.push_back(Command);
+		Instances.push_back(Command);
 	}
 
 	void AddInstance(mesh::material Mat, vec4 Translate, vec4 Scale, bool IsVisible)
@@ -432,36 +471,69 @@ public:
 		Command.Mat = Mat;
 		Command.Translate = Translate;
 		Command.Scale = Scale;
+		Command.MeshIndex = MeshIdx;
 		Command.IsVisible = IsVisible;
-		Command.MeshIndex = MeshIndex;
-		ObjectInstances.push_back(Command);
+		Instances.push_back(Command);
 	}
 
-	void UpdateCommands(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& DrawCommands)
+	void Reset()
 	{
-		DrawCommands.insert(DrawCommands.end(), ObjectInstances.begin(), ObjectInstances.end());
+		Instances.clear();
 	}
-
-	u32 MeshIndex;
-
-private:
-	std::vector<mesh_draw_command_input> ObjectInstances;
 };
 
-
-class object_behavior
+struct scene
 {
-public:
-	virtual void Start() = 0;
-	virtual void Update() = 0;
+	bool IsInitialized = false;
+	std::vector<std::unique_ptr<object_behavior>> Objects;
+	std::vector<light_source> LightSources;
+
+	scene() = default;
+	virtual ~scene() {};
+
+	virtual GameSceneStartFunc()  = 0;
+	virtual GameSceneUpdateFunc() = 0;
+
+	// TODO: something better here
+	void Reset()
+	{
+		for(std::unique_ptr<object_behavior>& Object : Objects)
+		{
+			Object->Reset();
+		}
+		LightSources.clear();
+	}
 };
 
-#define GameSetupFunc(name) void ENGINE_EXPORT_CODE name(u32& MemorySize)
-typedef GameSetupFunc(game_setup);
+#if 0
+class scene_manager
+{
+	std::vector<std::unique_ptr<scene>> Scenes;
+	u32 CurrentScene = 0;
 
-#define GameStartFunc(name) void ENGINE_EXPORT_CODE name(bool& SceneIsLoaded, mesh& Geometries)
-typedef GameStartFunc(game_start);
+	// TODO: Load a scenes by their file names. Load and unload if scene was recompiled(many if needed, but for this I need to check this every times in the loop I guess but that is a lot of work and think about something better)
+	void LoadScene();
+	void StartScene();
+	void UpdateScene();
+};
 
-#define GameUpdateFunc(name) void ENGINE_EXPORT_CODE name(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& MeshDrawCommands, mesh& Geometries, std::vector<light_source, allocator_adapter<light_source, linear_allocator>>& LightSources, const game_input& GameInput, view_data& ViewData)
-typedef GameUpdateFunc(game_update);
+void scene_manager::StartScene()
+{
+	if(!Scenes[CurrentScene]->IsInitialized) Scenes[CurrentScene]->Start();
+}
+
+void scene_manager::UpdateScene(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& MeshDrawCommands)
+{
+	if(Scenes[CurrentScene]->IsInitialized)
+	{
+		Scenes[CurrentScene]->Update();
+
+		for(std::unique_ptr<object_behavior>& Object : Scenes[CurrentScene]->Objects)
+			
+	}
+}
+#endif
+
+#define GameSceneCreateFunc(name) scene* name()
+typedef GameSceneCreateFunc(game_scene_create);
 

@@ -32,6 +32,27 @@ Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices)
 	return MeshIndex++;
 }
 
+void mesh::
+Load(mesh& NewMesh)
+{
+	offset NewOffset = {};
+	NewOffset.VertexOffset = Vertices.size();
+	NewOffset.IndexOffset  = VertexIndices.size();
+
+	Vertices.insert(Vertices.end(), NewMesh.Vertices.begin(), NewMesh.Vertices.end());
+	VertexIndices.insert(VertexIndices.end(), NewMesh.VertexIndices.begin(), NewMesh.VertexIndices.end());
+
+	NewOffset.AABB = NewMesh.Offsets[0].AABB;
+	NewOffset.BoundingSphere = NewMesh.Offsets[0].BoundingSphere;
+
+	NewOffset.VertexCount = NewMesh.Vertices.size();
+	NewOffset.IndexCount  = NewMesh.VertexIndices.size();
+	Offsets.push_back(NewOffset);
+
+	MeshCount++;
+	MeshIndex++;
+}
+
 u32 mesh::
 Load(const std::string& Path, u32 BoundingGeneration)
 {

@@ -24,6 +24,7 @@
 // TODO: Fix image barriers and current layouts
 // 
 // TODO: Implement good while loop architecture
+// TODO: Make everything to use memory allocator
 // TODO: Reorganize files for the corresponding files. For ex. win32_window files to platform folders and etc.
 
 struct indirect_draw_indexed_command
@@ -75,7 +76,6 @@ struct alignas(16) mesh_comp_culling_common_input
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {
 	window VulkanWindow("3D Renderer");
-	game_code GameCode = VulkanWindow.LoadGameCode();
 	VulkanWindow.InitGraphics();
 
 	double TargetFrameRate = 1.0 / 60 * 1000.0; // Frames Per Milliseconds
@@ -86,11 +86,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	game_input GameInput{};
 	GameInput.Buttons = VulkanWindow.Buttons;
 
-	u32 GlobalMemorySize = 0;
-	if(GameCode.Setup)
-	{
-		GameCode.Setup(GlobalMemorySize);
-	}
+	u32 GlobalMemorySize = MiB(128);
 	void* MemoryBlock = malloc(GlobalMemorySize);
 
 	float NearZ = 0.01f;
@@ -398,13 +394,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	// TODO: create necessary textures on scene load. Maybe think about something better on the architecture here
 	// Every type of the textures(diffuse, specular, normal etc) should be here?
 	std::vector<texture> Textures;
-	texture_data Diffuse1;
-	texture_data Normal1;
-	texture_data Height1;
-
-	Diffuse1.Data = (void*)stbi_load("..\\assets\\brick-wall2.diff.tga", (int*)&Diffuse1.Width, (int*)&Diffuse1.Height, (int*)&Diffuse1.Depth, 4);
-	Normal1.Data  = (void*)stbi_load("..\\assets\\brick-wall2.norm.tga", (int*)&Normal1.Width, (int*)&Normal1.Height, (int*)&Normal1.Depth, 4);
-	Height1.Data  = (void*)stbi_load("..\\assets\\brick-wall2.disp.png", (int*)&Height1.Width, (int*)&Height1.Height, (int*)&Height1.Depth, 4);
+	texture_data Diffuse1("..\\assets\\brick-wall2.diff.tga");
+	texture_data Normal1("..\\assets\\brick-wall2.norm.tga");
+	texture_data Height1("..\\assets\\brick-wall2.disp.png");
 
 	TextureInputData.Format    = VK_FORMAT_R8G8B8A8_SRGB;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -419,6 +411,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	stbi_image_free(Diffuse1.Data);
 	stbi_image_free(Normal1.Data);
 	stbi_image_free(Height1.Data);
+
+	game_scene_create* CreateCubeGameScene = (game_scene_create*)window::GetProcAddr("..\\build\\cube_scene.dll", "CubeSceneCreate");
+	std::unique_ptr<scene> GameScene(CreateCubeGameScene());
 
 	double TimeLast = window::GetTimestamp();
 	double TimeElapsed = 0.0;
@@ -443,23 +438,19 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 		if(VulkanWindow.Buttons[EC_LCONTROL].IsDown && VulkanWindow.Buttons[EC_R].IsDown)
 		{
-			// TODO: Check if the date of the creation is not the same
-			// Otherwise do not load the source
-			VulkanWindow.UnloadGameCode(GameCode);
-			GameCode = VulkanWindow.LoadGameCode();
-			SceneIsLoaded  = false;
+			// TODO: Load and unload game scenes (will be inside of the scene manager)
 		}
 
 		GameInput.DeltaTime = TimeElapsed;
-		if(GameCode.Start && !SceneIsLoaded)
+
+		if(!GameScene->IsInitialized)
 		{
-			GameCode.Start(SceneIsLoaded, GlobalGeometries);
+			GameScene->Start(GlobalGeometries);
 		}
-		GlobalGeometries.Reset();
-		if(GameCode.Update)
-		{
-			GameCode.Update(GlobalMeshInstances, GlobalGeometries, GlobalLightSources, GameInput, ViewData);
-		}
+
+		GameScene->Reset();
+		GameScene->Update(GlobalMeshInstances);
+		GlobalLightSources.insert(GlobalLightSources.end(), GameScene->LightSources.begin(), GameScene->LightSources.end());
 
 		if(VulkanWindow.Buttons[EC_I].IsDown)
 		{
@@ -476,16 +467,15 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		}
 		//GlobalLightSources.push_back({vec4(ViewPos, 1), ViewDir, vec4(1, 0, 0, 1), light_type_spot});
 
-		float Aspect = (float)VulkanWindow.Gfx->Width / (float)VulkanWindow.Gfx->Height;
+		float Aspect  = (float)VulkanWindow.Gfx->Width / (float)VulkanWindow.Gfx->Height;
+		vec3 LightPos =  vec3(-4, 4, 2);
+		vec3 LightDir = -Normalize(LightPos);
 
 		mat4 CameraProj = PerspRH(45.0f, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, NearZ, FarZ);
 		mat4 CameraView = LookAtRH(ViewData.CameraPos, ViewData.CameraPos + ViewData.ViewDir, UpVector);
 		mat4 DebugCameraView = LookAtRH(ViewPos, ViewPos + ViewDir, UpVector);
 		GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, CameraProj, 1);
 
-		// NOTE: Global Sun Position and light direction of it
-		vec3 LightPos   =  vec3(-4, 4, 2);
-		vec3 LightDir   = -Normalize(LightPos);
 		WorldUpdate = {};
 		WorldUpdate.View			= CameraView;
 		WorldUpdate.DebugView		= DebugCameraView;
@@ -574,6 +564,63 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		MeshCompCullingCommonData.Proj = CameraProj;
 		MeshCompCullingCommonData.View = WorldUpdate.DebugView;
 		WorldUpdate.ColorSourceCount = GlobalLightSources.size();
+
+		float CameraSpeed = 0.01f;
+		if(GameInput.Buttons[EC_R].IsDown)
+		{
+			ViewData.CameraPos += vec3(0, 4.0f*CameraSpeed, 0);
+		}
+		if(GameInput.Buttons[EC_F].IsDown)
+		{
+			ViewData.CameraPos -= vec3(0, 4.0f*CameraSpeed, 0);
+		}
+		if(GameInput.Buttons[EC_W].IsDown)
+		{
+			ViewData.CameraPos += (ViewData.ViewDir * CameraSpeed);
+		}
+		if(GameInput.Buttons[EC_S].IsDown)
+		{
+			ViewData.CameraPos -= (ViewData.ViewDir * CameraSpeed);
+		}
+#if 0
+		vec3 z = (ViewData.ViewDir - ViewData.CameraPos).Normalize();
+		vec3 x = Cross(vec3(0, 1, 0), z).Normalize();
+		vec3 y = Cross(z, x);
+		vec3 Horizontal = x;
+		if(GameInput.Buttons[EC_D].IsDown)
+		{
+			ViewData.CameraPos -= Horizontal * CameraSpeed;
+		}
+		if(GameInput.Buttons[EC_A].IsDown)
+		{
+			ViewData.CameraPos += Horizontal * CameraSpeed;
+		}
+#endif
+		if(GameInput.Buttons[EC_LEFT].IsDown)
+		{
+			quat ViewDirQuat(ViewData.ViewDir, 0);
+			quat RotQuat( CameraSpeed * 2, vec3(0, 1, 0));
+			ViewData.ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
+		if(GameInput.Buttons[EC_RIGHT].IsDown)
+		{
+			quat ViewDirQuat(ViewData.ViewDir, 0);
+			quat RotQuat(-CameraSpeed * 2, vec3(0, 1, 0));
+			ViewData.ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
+		vec3 U = Cross(vec3(0, 1, 0), ViewData.ViewDir);
+		if(GameInput.Buttons[EC_UP].IsDown)
+		{
+			quat ViewDirQuat(ViewData.ViewDir, 0);
+			quat RotQuat( CameraSpeed / 2, U);
+			ViewData.ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
+		if(GameInput.Buttons[EC_DOWN].IsDown)
+		{
+			quat ViewDirQuat(ViewData.ViewDir, 0);
+			quat RotQuat(-CameraSpeed / 2, U);
+			ViewData.ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
 
 		if(!VulkanWindow.IsGfxPaused)
 		{
@@ -824,7 +871,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	}
 
 	free(MemoryBlock);
-	VulkanWindow.UnloadGameCode(GameCode);
 
 	return 0;
 }

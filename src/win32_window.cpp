@@ -186,44 +186,6 @@ void window::InitGraphics()
 	Gfx = std::make_unique<renderer_backend>(Handle, WindowClass.Inst);
 }
 
-game_code window::LoadGameCode()
-{
-	game_code Source = {};
-
-	CopyFile("..\\build\\game_code.dll", "..\\build\\game_code.temp.dll", FALSE);
-	Source.Library = LoadLibraryA("..\\build\\game_code.temp.dll");
-
-	if(Source.Library)
-	{
-		Source.Setup  = (game_setup *)GetProcAddress(Source.Library, "GameSetup");
-		Source.Start  = (game_start *)GetProcAddress(Source.Library, "GameStart");
-		Source.Update = (game_update*)GetProcAddress(Source.Library, "GameUpdate");
-	}
-
-	return Source;
-};
-
-void window::
-UnloadGameCode(game_code& Source)
-{
-	FreeLibrary(Source.Library);
-	DeleteFileA("..\\build\\game_code.temp.dll");
-
-	Source.Setup  = 0;
-	Source.Start  = 0;
-	Source.Update = 0;
-};
-
-void* window::
-LoadFunction(const char* FuncName)
-{
-	HMODULE Library = LoadLibraryA("..\\build\\game_code.temp.dll");
-
-	void* Result = (void*)GetProcAddress(Library, FuncName);
-
-	return Result;
-}
-
 void* window::
 GetProcAddr(const char* SourceName, const char* FuncName)
 {

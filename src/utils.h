@@ -7,14 +7,6 @@
 #include <Volk/volk.h>
 #include <Volk/volk.c>
 
-struct game_code
-{
-	HMODULE Library;
-	game_setup*  Setup;
-	game_start*  Start;
-	game_update* Update;
-};
-
 u32 GetImageMipLevels(u32 Width, u32 Height)
 {
 	u32 Result = 1;

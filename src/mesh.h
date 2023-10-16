@@ -100,9 +100,10 @@ struct mesh
 	mesh(std::initializer_list<std::string> Paths, u32 BoundingGeneration = 0);
 	void Reset() {MeshCount = 0; MeshIndex = 1;}
 
-	u32 Load(const std::string& Path, u32 BoundingGeneration = 0);
-	u32 Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices);
-	u32 Load() { MeshCount++; return MeshIndex++; };
+	u32  Load(const std::string& Path, u32 BoundingGeneration = 0);
+	u32  Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices);
+	void Load(mesh& NewMesh);
+	u32  Load() { MeshCount++; return MeshIndex++; };
 
 	void GenerateMeshlets();
 

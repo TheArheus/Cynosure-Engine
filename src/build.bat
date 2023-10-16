@@ -13,10 +13,6 @@ set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console
 
 set PlatformCppFiles="..\src\main.cpp"
 set GameCppFiles="..\src\game_main.cpp"
-rem set GameCppFiles= 
-rem for /R "..\src\game_objects" %%f in (*.cpp) do (
-rem 	set CppFiles=!CppFiles! "%%f"
-rem )
 
 set DepthCascades=-DDEPTH_CASCADES_COUNT=3
 set UseDebugColorBlend=-DDEBUG_COLOR_BLEND=0
@@ -35,8 +31,47 @@ glslangValidator ..\shaders\depth_reduce.comp.glsl -o ..\build\depth_reduce.comp
 
 if not exist ..\build\ mkdir ..\build\
 pushd ..\build\
-rem There would be compile all object behaviors
-cl %CommonCompFlags% %GameCppFiles% %DepthCascades% /Fe"game_code" /Fd"game_code" -DENGINE_EXPORT_CODE -LD /link %CommonLinkFlags% /EXPORT:GameSetup /EXPORT:GameStart /EXPORT:GameUpdate
 
+for %%f in ("..\src\game_scenes\*.cpp") do (
+	set FileName=%%f
+	set BaseName=%%~nf
+    set ExportName=
+    
+	for /F "tokens=1,* delims=_" %%a in ("!BaseName!") do (
+        call :ProcessToken %%a
+        set "RestOfName=%%b"
+    )
+
+    :NextToken
+    if not "!RestOfName!"=="" (
+        for /F "tokens=1,* delims=_" %%a in ("!RestOfName!") do (
+            call :ProcessToken %%a
+            set "RestOfName=%%b"
+        )
+        goto NextToken
+    )
+    
+    set ExportName=!ExportName!Create
+	cl %CommonCompFlags% "!FileName!" /LD /Fe"!BaseName!" /Fd"!BaseName!" -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName%
+)
 cl %CommonCompFlags% /I%VulkanInc% user32.lib kernel32.lib vulkan-1.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBUFFER_COUNT% /Fe"Cynosure Engine" /Fd"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib%
+
 popd
+
+goto :eof
+
+:ProcessToken
+	call :CapitalizeFirstLetter %1
+	set "ExportName=!ExportName!!CapWord!"
+
+goto :eof
+
+:CapitalizeFirstLetter
+    set InputWord=%1
+    set FirstChar=%InputWord:~0,1%
+    set RemainingChars=%InputWord:~1%
+    for %%i in (A B C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
+        if /i "!FirstChar!"=="%%i" set FirstChar=%%i
+    )
+    set CapWord=!FirstChar!!RemainingChars!
+    exit /b

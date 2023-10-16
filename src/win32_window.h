@@ -57,10 +57,6 @@ public:
 	r32 GetMousePosX(){ return MouseX / Width;  }
 	r32 GetMousePosY(){ return MouseY / Height; }
 
-	game_code LoadGameCode();
-	void UnloadGameCode(game_code& Source);
-
-	static void* LoadFunction(const char* FuncName);
 	static void* GetProcAddr(const char* SourceName, const char* FuncName);
 
 	buttons Buttons[256] = {};
