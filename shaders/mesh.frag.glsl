@@ -35,10 +35,11 @@ layout(binding = 5) uniform sampler2D HeightSampler;
 layout(location = 0) in vert_in In;
 layout(location = 4) in mat3    TBN;
 
-layout(location = 0) out vec4  OutputVertexNormal;
-layout(location = 1) out vec4  OutputFragmentNormal;
-layout(location = 2) out vec4  OutputDiffuse;
-layout(location = 3) out float OutputSpecular;
+layout(location = 0) out vec4  OutputVertexPosition;
+layout(location = 1) out vec4  OutputVertexNormal;
+layout(location = 2) out vec4  OutputFragmentNormal;
+layout(location = 3) out vec4  OutputDiffuse;
+layout(location = 4) out float OutputSpecular;
 
 
 void main()
@@ -70,8 +71,9 @@ void main()
 
 	if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard;
 
-	OutputVertexNormal   = In.Norm;
-	OutputFragmentNormal = vec4(TBN * (texture(NormalSampler, TextCoord).xyz * 2.0 - 1.0), 0);
+	OutputVertexPosition = In.Coord;
+	OutputVertexNormal   = normalize(In.Norm);
+	OutputFragmentNormal = normalize(vec4(TBN * (texture(NormalSampler, TextCoord).xyz * 2.0 - 1.0), 0));
 
 #if DEBUG_COLOR_BLEND
 	OutputDiffuse  = vec4(vec3(0.1), 1.0);

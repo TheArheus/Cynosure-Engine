@@ -8,7 +8,7 @@
 template<typename T>
 constexpr T Pi = T(3.1415926535897932384626433832795028841971693993751058209749445923078164062);
 #else
-#define Pi (3.1415926535897932384626433832795028841971693993751058209749445923078164062)
+constexpr auto Pi (3.1415926535897932384626433832795028841971693993751058209749445923078164062);
 #endif
 
 template<typename T>
@@ -1039,18 +1039,6 @@ Max(const v4<T>& a, const v4<T>& b)
 	return Result;
 }
 
-using vec2 = v2<float>;
-using vec3 = v3<float>;
-using vec4 = v4<float>;
-
-using ivec2 = v2<int32_t>;
-using ivec3 = v3<int32_t>;
-using ivec4 = v4<int32_t>;
-
-using uvec2 = v2<uint32_t>;
-using uvec3 = v3<uint32_t>;
-using uvec4 = v4<uint32_t>;
-
 inline float
 Lerp(float a, float t, float b)
 {
@@ -1109,6 +1097,208 @@ inline v3<T>
 Cross(v3<T> A, v3<T> B)
 {
     v3<T> Result = {};
+
+    Result.x = (A.y * B.z - A.z * B.y);
+    Result.y = (A.z * B.x - A.x * B.z);
+    Result.z = (A.x * B.y - A.y * B.x);
+
+    return Result;
+}
+
+using vec2 = v2<float>;
+using vec3 = v3<float>;
+using vec4 = v4<float>;
+
+using ivec2 = v2<int32_t>;
+using ivec3 = v3<int32_t>;
+using ivec4 = v4<int32_t>;
+
+using uvec2 = v2<uint32_t>;
+using uvec3 = v3<uint32_t>;
+using uvec4 = v4<uint32_t>;
+
+inline float 
+Dot(const vec2& lhs, const vec2& rhs)
+{
+	return lhs.x * rhs.x + lhs.y * rhs.y;
+}
+
+inline float 
+LengthSq(const vec2& v)
+{
+	return Dot(v, v);
+}
+
+inline float 
+Length(const vec2& v)
+{
+	return sqrtf(LengthSq(v));
+}
+
+inline vec2
+Normalize(vec2& v)
+{
+	vec2 Result = v / v.Length();
+	return Result;
+}
+
+inline float 
+Dot(const vec3& lhs, const vec3& rhs)
+{
+	return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+inline float 
+LengthSq(const vec3& v)
+{
+	return Dot(v, v);
+}
+
+inline float 
+Length(const vec3& v)
+{
+	return sqrtf(LengthSq(v));
+}
+
+inline vec3
+Normalize(vec3& v)
+{
+	vec3 Result = v / v.Length();
+	return Result;
+}
+
+inline float 
+Dot(const vec4& lhs, const vec4& rhs)
+{
+	return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
+}
+
+inline float 
+LengthSq(const vec4& v)
+{
+	return Dot(v, v);
+}
+
+inline float 
+Length(const vec4& v)
+{
+	return sqrtf(LengthSq(v));
+}
+
+inline vec4
+Normalize(vec4& v)
+{
+	vec4 Result = v / v.Length();
+	return Result;
+}
+
+inline vec2
+Min(const vec2& a, const vec2& b)
+{
+	vec2 Result = {};
+	Result.x = Min(a.x, b.x);
+	Result.y = Min(a.y, b.y);
+	return Result;
+}
+
+inline vec3
+Min(const vec3& a, const vec3& b)
+{
+	vec3 Result = {};
+	Result.x = Min(a.x, b.x);
+	Result.y = Min(a.y, b.y);
+	Result.z = Min(a.z, b.z);
+	return Result;
+}
+
+inline vec4
+Min(const vec4& a, const vec4& b)
+{
+	vec4 Result = {};
+	Result.x = Min(a.x, b.x);
+	Result.y = Min(a.y, b.y);
+	Result.z = Min(a.z, b.z);
+	Result.w = Min(a.w, b.w);
+	return Result;
+}
+
+inline vec2
+Max(const vec2& a, const vec2& b)
+{
+	vec2 Result = {};
+	Result.x = Max(a.x, b.x);
+	Result.y = Max(a.y, b.y);
+	return Result;
+}
+
+inline vec3
+Max(const vec3& a, const vec3& b)
+{
+	vec3 Result = {};
+	Result.x = Max(a.x, b.x);
+	Result.y = Max(a.y, b.y);
+	Result.z = Max(a.z, b.z);
+	return Result;
+}
+
+inline vec4
+Max(const vec4& a, const vec4& b)
+{
+	vec4 Result = {};
+	Result.x = Max(a.x, b.x);
+	Result.y = Max(a.y, b.y);
+	Result.z = Max(a.z, b.z);
+	Result.w = Max(a.w, b.w);
+	return Result;
+}
+
+inline vec2
+Lerp(vec2 a, float t, vec2 b)
+{
+    vec2 Result = {};
+
+    Result.x = Lerp(a.x, t, b.x);
+    Result.y = Lerp(a.y, t, b.y);
+
+    return Result;
+}
+
+inline vec3
+Lerp(vec3 a, float t, vec3 b)
+{
+    vec3 Result = {};
+
+    Result.x = Lerp(a.x, t, b.x);
+    Result.y = Lerp(a.y, t, b.y);
+    Result.z = Lerp(a.z, t, b.z);
+
+    return Result;
+}
+
+inline vec4
+Lerp(vec4 a, float t, vec4 b)
+{
+    vec4 Result = {};
+
+    Result.x = Lerp(a.x, t, b.x);
+    Result.y = Lerp(a.y, t, b.y);
+    Result.z = Lerp(a.z, t, b.z);
+    Result.w = Lerp(a.w, t, b.w);
+
+    return Result;
+}
+
+inline float
+Cross(vec2 A, vec2 B)
+{
+    float Result = A.x * B.y - A.y * B.x;
+    return Result;
+}
+
+inline vec3
+Cross(vec3 A, vec3 B)
+{
+    vec3 Result = {};
 
     Result.x = (A.y * B.z - A.z * B.y);
     Result.y = (A.z * B.x - A.x * B.z);

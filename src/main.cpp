@@ -126,7 +126,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	std::vector<texture> GlobalShadow(DEPTH_CASCADES_COUNT); // TODO: Make it to work in a loop
 	for(texture& Shadow : GlobalShadow)
 	{
-		Shadow = texture(VulkanWindow.Gfx, PreviousPowerOfTwo(VulkanWindow.Gfx->Width) * 4, PreviousPowerOfTwo(VulkanWindow.Gfx->Width) * 4, 1, TextureInputData);
+		Shadow = texture(VulkanWindow.Gfx, PreviousPowerOfTwo(VulkanWindow.Gfx->Width) * 4, PreviousPowerOfTwo(VulkanWindow.Gfx->Width) * 4, 1, TextureInputData, VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
 	}
 
 	TextureInputData.Format    = VK_FORMAT_R32_SFLOAT;
@@ -201,26 +201,46 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	PoissonDisk[63] = vec2(-0.178564, -0.596057);
 	buffer PoissonDiskBuffer(VulkanWindow.Gfx, PoissonDisk, sizeof(vec2) * 64, false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-	vec2 RandomAngles[32][32][32] = {};
-	u32 Resolution = 32;
-	for(u32 x = 0; x < Resolution; x++)
+	const u32 Res = 32;
+	vec2  RandomAngles[Res][Res][Res] = {};
+	for(u32 x = 0; x < Res; x++)
 	{
-		for(u32 y = 0; y < Resolution; y++)
+		for(u32 y = 0; y < Res; y++)
 		{
-			for(u32 z = 0; z < Resolution; z++)
+			for(u32 z = 0; z < Res; z++)
 			{
-				float RandomAngle = float(rand()) / RAND_MAX * 2.0f / Pi;
-				RandomAngles[x][y][z] = vec2(cosf(RandomAngle) * 0.5 + 0.5, sinf(RandomAngle) * 0.5 + 0.5);
+				RandomAngles[x][y][z] = vec2(cosf(float(rand()) / RAND_MAX * 2.0f / Pi), 
+											 sinf(float(rand()) / RAND_MAX * 2.0f / Pi));
 			}
 		}
 	}
-
+	vec2 RandomRotations[16] = {};
+	for(u32 RotIdx = 0; RotIdx < 16; ++RotIdx)
+	{
+		RandomRotations[RotIdx] = vec2(float(rand()) / RAND_MAX * 2.0 - 1.0, float(rand()) / RAND_MAX * 2.0 - 1.0);
+	}
 	TextureInputData.Format    = VK_FORMAT_R32G32_SFLOAT;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	TextureInputData.ImageType = VK_IMAGE_TYPE_3D;
 	TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_3D;
 	TextureInputData.MipLevels = 1;
-	texture RandomAnglesTexture(VulkanWindow.Gfx, (void*)RandomAngles, 32, 32, 32, TextureInputData);
+	texture RandomAnglesTexture(VulkanWindow.Gfx, (void*)RandomAngles, 32, 32, 32, TextureInputData, VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+	TextureInputData.ImageType = VK_IMAGE_TYPE_2D;
+	TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_2D;
+	texture NoiseTexture(VulkanWindow.Gfx, (void*)RandomRotations, 4, 4, 1, TextureInputData, VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+
+	vec3 RandomSamples[64] = {};
+	for(u32 RotIdx = 0; RotIdx < 64; ++RotIdx)
+	{
+		vec3 Sample = vec3(float(rand()) / RAND_MAX * 2.0f - 1.0,
+						   float(rand()) / RAND_MAX * 2.0f - 1.0,
+						   float(rand()) / RAND_MAX).Normalize();
+		Sample = Sample * float(rand()) / RAND_MAX * 2.0f - 1.0;
+		float Scale = RotIdx / 64.0;
+		Scale = Lerp(0.1, Scale, 1.0);
+		RandomSamples[RotIdx] = Sample * Scale;
+	}
+	buffer RandomSamplesBuffer(VulkanWindow.Gfx, (void*)RandomSamples, sizeof(vec3) * 64, false, 0, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 	// NOTE: Rendering targets:
 	std::vector<texture> GBuffer(GBUFFER_COUNT);
@@ -233,14 +253,17 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	TextureInputData.Format    = VulkanWindow.Gfx->SurfaceFormat.format;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	texture GfxColorTarget(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData);
-	TextureInputData.Format    = VK_FORMAT_R16G16B16A16_SFLOAT;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	TextureInputData.Format    = VK_FORMAT_R16G16B16A16_SFLOAT;
 	GBuffer[0] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Vertex Normals
-	GBuffer[1] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Fragment Normals
+	TextureInputData.Format    = VK_FORMAT_R16G16B16A16_SFLOAT;
+	GBuffer[1] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Vertex Normals
+	GBuffer[2] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Fragment Normals
 	TextureInputData.Format    = VK_FORMAT_R8G8B8A8_UNORM;
-	GBuffer[2] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Diffuse Color
+	GBuffer[3] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Diffuse Color
 	TextureInputData.Format    = VK_FORMAT_R32_SFLOAT;
-	GBuffer[3] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Specular
+	GBuffer[4] = texture(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData); // Specular
+	texture AmbientOcclusionData(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData);
 	TextureInputData.Format    = VK_FORMAT_D32_SFLOAT;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 	texture GfxDepthTarget(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 1, TextureInputData);
@@ -275,10 +298,23 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 						   PushImageSampler()->						// G-Buffer Fragment Normal Data
 						   PushImageSampler()->						// G-Buffer Diffuse Data
 						   PushImageSampler()->						// G-Buffer Specular Data
+						   PushImageSampler()->						// Ambient Occlusion Data
 						   PushStorageImage()->						// Color Target Texture
 						   PushImageSampler(DEPTH_CASCADES_COUNT)->	// Shadow Cascades
 						   PushConstant((DEPTH_CASCADES_COUNT + 1) * sizeof(float))-> // Cascade Splits
 						   Build(VulkanWindow.Gfx);
+
+	shader_input AmbientOcclusionRootSignature;
+	AmbientOcclusionRootSignature.PushUniformBuffer()->					// World Global Data
+								  PushStorageBuffer()->					// Poisson Disk
+								  PushImageSampler()->					// Random Rotations
+								  PushImageSampler()->					// G-Buffer DepthStencil Data
+								  PushImageSampler()->					// G-Buffer Vertex Normal Data
+								  PushImageSampler()->					// G-Buffer Fragment Normal Data
+								  PushImageSampler()->					// G-Buffer Diffuse Data
+								  PushImageSampler()->					// G-Buffer Specular Data
+								  PushStorageImage()->					// Ambient Occlusion Target Texture
+								  Build(VulkanWindow.Gfx);
 
 	shader_input DebugRootSignature;
 	DebugRootSignature.PushStorageBuffer()->
@@ -319,8 +355,14 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	shader_input CmpReduceRootSignature;
 	CmpReduceRootSignature.PushImageSampler(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Input  Texture
 						   PushStorageImage(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Output Texture
-						   PushConstant(sizeof(vec2))->	// Output Texture Size
+						   PushConstant(sizeof(vec2), VK_SHADER_STAGE_COMPUTE_BIT)->	// Output Texture Size
 						   Build(VulkanWindow.Gfx);
+
+	shader_input BlurRootSignature;
+	BlurRootSignature.PushImageSampler(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Input  Texture
+					  PushStorageImage(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Output Texture
+					  PushConstant(sizeof(vec3), VK_SHADER_STAGE_COMPUTE_BIT)->		// Texture Size, Conv Size 
+					  Build(VulkanWindow.Gfx);
 
 	// TODO: Maybe create hot load shaders and compile them and runtime inside
 	std::vector<VkFormat> GfxFormats;
@@ -345,9 +387,11 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	render_context  DebugCameraViewContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 
 	compute_context ColorPassContext(VulkanWindow.Gfx, ColorPassRootSignature, "..\\build\\color_pass.comp.spv");
+	compute_context AmbientOcclusionContext(VulkanWindow.Gfx, AmbientOcclusionRootSignature, "..\\build\\screen_space_ambient_occlusion.comp.spv");
 	compute_context FrustCullingContext(VulkanWindow.Gfx, CmpIndirectFrustRootSignature, "..\\build\\indirect_cull_frust.comp.spv");
 	compute_context OcclCullingContext(VulkanWindow.Gfx, CmpIndirectOcclRootSignature, "..\\build\\indirect_cull_occl.comp.spv");
 	compute_context DepthReduceContext(VulkanWindow.Gfx, CmpReduceRootSignature, "..\\build\\depth_reduce.comp.spv");
+	compute_context BlurContext(VulkanWindow.Gfx, BlurRootSignature, "..\\build\\blur.comp.spv");
 
 	float CascadeSplits[DEPTH_CASCADES_COUNT + 1] = {};
 	CascadeSplits[0] = NearZ;
@@ -743,25 +787,65 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			}
 
 			{
+				AmbientOcclusionContext.Begin(PipelineContext);
+
+				std::vector<VkImageMemoryBarrier> AmbientOcclusionPassBarrier = 
+				{
+					CreateImageBarrier(AmbientOcclusionData.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
+					CreateImageBarrier(GfxDepthTarget.Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+				};
+				for(u32 Idx = 0; Idx < GBUFFER_COUNT; Idx++)
+				{
+					AmbientOcclusionPassBarrier.push_back(CreateImageBarrier(GBuffer[Idx].Handle, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+				}
+				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, AmbientOcclusionPassBarrier);
+
+				AmbientOcclusionContext.SetUniformBufferView(WorldUpdateBuffer);
+				AmbientOcclusionContext.SetStorageBufferView(RandomSamplesBuffer);
+				AmbientOcclusionContext.SetImageSampler({NoiseTexture}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				//AmbientOcclusionContext.SetImageSampler({GfxDepthTarget}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				AmbientOcclusionContext.SetImageSampler(GBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				AmbientOcclusionContext.SetStorageImage({AmbientOcclusionData}, VK_IMAGE_LAYOUT_GENERAL);
+				AmbientOcclusionContext.Execute(VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height);
+
+				AmbientOcclusionContext.End();
+			}
+
+			{
+				BlurContext.Begin(PipelineContext);
+
+				std::vector<VkImageMemoryBarrier> BlurPassBarrier = 
+				{
+					CreateImageBarrier(AmbientOcclusionData.Handle, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL),
+				};
+				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, BlurPassBarrier);
+
+				vec3 BlurInput(VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 9);
+				BlurContext.SetImageSampler({AmbientOcclusionData}, VK_IMAGE_LAYOUT_GENERAL);
+				BlurContext.SetStorageImage({AmbientOcclusionData}, VK_IMAGE_LAYOUT_GENERAL);
+				BlurContext.SetConstant((void*)BlurInput.E, sizeof(vec3));
+				BlurContext.Execute(VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height);
+
+				BlurContext.End();
+			}
+
+			{
 				ColorPassContext.Begin(PipelineContext);
 
 				std::vector<VkImageMemoryBarrier> ColorPassBarrier = 
 				{
 					CreateImageBarrier(GfxColorTarget.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
-					CreateImageBarrier(GfxDepthTarget.Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+					CreateImageBarrier(AmbientOcclusionData.Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
 				};
-				for(u32 Idx = 0; Idx < GBUFFER_COUNT; Idx++)
-				{
-					ColorPassBarrier.push_back(CreateImageBarrier(GBuffer[Idx].Handle, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
-				}
 				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, ColorPassBarrier);
 
 				ColorPassContext.SetUniformBufferView(WorldUpdateBuffer);
 				ColorPassContext.SetUniformBufferView(LightSourcesBuffer);
 				ColorPassContext.SetStorageBufferView(PoissonDiskBuffer);
 				ColorPassContext.SetImageSampler({RandomAnglesTexture}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-				ColorPassContext.SetImageSampler({GfxDepthTarget}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				//ColorPassContext.SetImageSampler({GfxDepthTarget}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				ColorPassContext.SetImageSampler(GBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				ColorPassContext.SetImageSampler({AmbientOcclusionData}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				ColorPassContext.SetStorageImage({GfxColorTarget}, VK_IMAGE_LAYOUT_GENERAL);
 				ColorPassContext.SetImageSampler(GlobalShadow, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				ColorPassContext.SetConstant(CascadeSplits, (DEPTH_CASCADES_COUNT + 1) * sizeof(float));

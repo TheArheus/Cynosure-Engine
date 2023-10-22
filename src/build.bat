@@ -16,7 +16,7 @@ set GameCppFiles="..\src\game_main.cpp"
 
 set DepthCascades=-DDEPTH_CASCADES_COUNT=3
 set UseDebugColorBlend=-DDEBUG_COLOR_BLEND=0
-set GBUFFER_COUNT=-DGBUFFER_COUNT=4
+set GBUFFER_COUNT=-DGBUFFER_COUNT=5
 
 glslangValidator ..\shaders\mesh.vert.glsl %DepthCascades% -o ..\build\mesh.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.frag.glsl %DepthCascades% %UseDebugColorBlend% -gVS -g -o ..\build\mesh.frag.spv -e main --target-env vulkan1.3
@@ -25,9 +25,11 @@ glslangValidator ..\shaders\mesh.dbg.frag.glsl %DepthCascades% -o ..\build\mesh.
 glslangValidator ..\shaders\mesh.sdw.vert.glsl %DepthCascades% -o ..\build\mesh.sdw.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.sdw.frag.glsl -o ..\build\mesh.sdw.frag.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\color_pass.comp.glsl %UseDebugColorBlend% %DepthCascades% -gVS -g -o ..\build\color_pass.comp.spv -e main --target-env vulkan1.3
+glslangValidator ..\shaders\screen_space_ambient_occlusion.comp.glsl %DepthCascades% -gVS -g -o ..\build\screen_space_ambient_occlusion.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\indirect_cull_frust.comp.glsl -o ..\build\indirect_cull_frust.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\indirect_cull_occl.comp.glsl -o ..\build\indirect_cull_occl.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\depth_reduce.comp.glsl -o ..\build\depth_reduce.comp.spv -e main --target-env vulkan1.3
+glslangValidator ..\shaders\blur.comp.glsl -o ..\build\blur.comp.spv -e main --target-env vulkan1.3
 
 if not exist ..\build\ mkdir ..\build\
 pushd ..\build\

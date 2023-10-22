@@ -276,11 +276,6 @@ struct texture_data
 	{
 		stbi_image_free(Data);
 	}
-
-	~texture_data()
-	{
-		Delete();
-	}
 };
 
 // TODO: Move allocators out

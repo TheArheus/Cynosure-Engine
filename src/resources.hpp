@@ -288,7 +288,7 @@ struct texture
 	{
 		sampler() = default;
 
-		sampler(VkDevice& Device, u32 MipLevelCount, VkSamplerReductionMode ReductionModeValue)
+		sampler(VkDevice& Device, u32 MipLevelCount, VkSamplerReductionMode ReductionModeValue, VkSamplerAddressMode AddressMode)
 		{
 			VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
 			ReductionMode.reductionMode = ReductionModeValue;
@@ -298,9 +298,9 @@ struct texture
 			CreateInfo.magFilter = VK_FILTER_LINEAR;
 			CreateInfo.minFilter = VK_FILTER_LINEAR;
 			CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-			CreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-			CreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-			CreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			CreateInfo.addressModeU = AddressMode;
+			CreateInfo.addressModeV = AddressMode;
+			CreateInfo.addressModeW = AddressMode;
 			CreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 			CreateInfo.compareEnable = false;
 			CreateInfo.compareOp = VK_COMPARE_OP_NEVER;
@@ -326,11 +326,11 @@ struct texture
 	texture() = default;
 
 	template<class T, class heap>
-	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
+	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
 	{
 		Info = InputData;
 		Device = App->Device;
-		Sampler = sampler(Device, InputData.MipLevels, ReductionMode);
+		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
 
 		CreateResource(App->MemoryProperties, Heap, Offset, NewWidth, NewHeight, DepthOrArraySize, InputData.ImageType, InputData.Format, InputData.Usage, InputData.MipLevels, InputData.Layers, InputData.Alignment);
 		Update(App, Data);
@@ -346,11 +346,11 @@ struct texture
 	}
 
 	template<class T, class heap>
-	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
+	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
 	{
 		Info = InputData;
 		Device = App->Device;
-		Sampler = sampler(Device, InputData.MipLevels, ReductionMode);
+		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
 
 		CreateResource(App->MemoryProperties, Heap, Offset, NewWidth, NewHeight, DepthOrArraySize, InputData.ImageType, InputData.Format, InputData.Usage, InputData.MipLevels, InputData.Layers, InputData.Alignment);
 
@@ -365,11 +365,11 @@ struct texture
 	}
 
 	template<class T>
-	texture(std::unique_ptr<T>& App, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
+	texture(std::unique_ptr<T>& App, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
 	{
 		Info = InputData;
 		Device = App->Device;
-		Sampler = sampler(Device, InputData.MipLevels, ReductionMode);
+		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
 
 		CreateResource(App->MemoryProperties, NewWidth, NewHeight, DepthOrArraySize, InputData.ImageType, InputData.Format, InputData.Usage, InputData.MipLevels, InputData.Layers, InputData.Alignment);
 		Update(App, Data);
@@ -385,11 +385,11 @@ struct texture
 	}
 
 	template<class T>
-	texture(std::unique_ptr<T>& App, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
+	texture(std::unique_ptr<T>& App, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
 	{
 		Info = InputData;
 		Device = App->Device;
-		Sampler = sampler(Device, InputData.MipLevels, ReductionMode);
+		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
 
 		CreateResource(App->MemoryProperties, NewWidth, NewHeight, DepthOrArraySize, InputData.ImageType, InputData.Format, InputData.Usage, InputData.MipLevels, InputData.Layers, InputData.Alignment);
 
