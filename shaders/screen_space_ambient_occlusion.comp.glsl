@@ -33,14 +33,6 @@ layout(binding = 6) uniform  sampler2D DiffuseBuffer;
 layout(binding = 7) uniform  sampler2D SpecularBuffer;
 layout(binding = 8) uniform  writeonly image2D OcclusionTarget;
 
-vec3 WorldPosFromDepth(vec2 TextCoord, float Depth) {
-	TextCoord.y = 1 - TextCoord.y;
-    vec4 ClipSpacePosition = vec4(TextCoord * 2.0 - 1.0, Depth, 1.0);
-    vec4 ViewSpacePosition = inverse(WorldUpdate.Proj * WorldUpdate.DebugView) * ClipSpacePosition;
-    ViewSpacePosition /= ViewSpacePosition.w;
-
-    return ViewSpacePosition.xyz;
-}
 
 void main()
 {

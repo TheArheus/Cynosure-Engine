@@ -160,11 +160,9 @@ vec3 DoDiffuse(vec3 LightCol, vec3 ToLightDir, vec3 Normal)
 
 vec3 DoSpecular(vec3 LightCol, vec3 ToLightDir, vec3 CameraDir, vec3 Normal, float Specular)
 {
-	vec3  HalfA = normalize(ToLightDir + CameraDir);
-	float BlinnTerm = max(dot(Normal, HalfA), 0);
-	BlinnTerm = pow(BlinnTerm, Specular);
-
-	return LightCol * BlinnTerm;
+	vec3  Refl = normalize(reflect(-ToLightDir, Normal));
+	float BlinnTerm = max(dot(Refl, CameraDir), 0);
+	return LightCol * pow(BlinnTerm, Specular);
 }
 
 float DoAttenuation(float Radius, float Distance)
@@ -185,7 +183,7 @@ void DirectionalLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 
 {
 	vec3  ToLightDir = LightDir;
 	float Distance = length(ToLightDir);
-	ToLightDir /= Distance;
+	ToLightDir = normalize(ToLightDir);
 
 	vec3 NewDiffuse   = DoDiffuse(LightCol, ToLightDir, Normal) * Intensity;
 	vec3 NewSpecular  = DoSpecular(LightCol, ToLightDir, CameraDir, Normal, Specular) * Intensity;
@@ -198,11 +196,11 @@ void PointLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord,
 {
 	vec3  ToLightDir = LightPos - Coord;
 	float Distance = length(ToLightDir);
-	ToLightDir /= Distance;
+	ToLightDir = normalize(ToLightDir);
 
 	float Attenuation = DoAttenuation(Radius, Distance);
-	vec3 NewDiffuse   = DoDiffuse(LightCol, ToLightDir, Normal) * Attenuation * Intensity;
-	vec3 NewSpecular  = DoSpecular(LightCol, ToLightDir, CameraDir, Normal, Specular) * Attenuation * Intensity;
+	vec3  NewDiffuse  = DoDiffuse(LightCol, ToLightDir, Normal) * Attenuation * Intensity;
+	vec3  NewSpecular = DoSpecular(LightCol, ToLightDir, CameraDir, Normal, Specular) * Attenuation * Intensity;
 
 	DiffuseResult  += NewDiffuse;
 	SpecularResult += NewSpecular;
@@ -211,7 +209,7 @@ void PointLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord,
 void SpotLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord, vec3 Normal, vec3 CameraDir, vec3 LightPos, float Radius, vec3 LightView, vec3 LightCol, float Intensity, vec3 Diffuse, float Specular)
 {
 	vec3  LightPosDir = LightPos - Coord;
-	float Distance = dot(LightPosDir, LightPosDir);
+	float Distance = length(LightPosDir);
 
 	float Attenuation   = DoAttenuation(Radius, Distance);
 	float SpotIntensity = DoSpotCone(Radius, LightPosDir, LightView.xyz);
@@ -231,7 +229,8 @@ void main()
     }
 
 	vec4  CoordWS  = texelFetch(VertexPosBuffer, ivec2(TextCoord), 0);
-	vec3  VertexNormal     = texelFetch(VertexNormalBuffer, ivec2(TextCoord), 0).xyz;
+	vec3  VertexNormalWS   = normalize(texelFetch(VertexNormalBuffer, ivec2(TextCoord), 0).xyz);
+	vec3  VertexNormalVS   = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(VertexNormalWS, 1)).xyz);
 	vec3  FragmentNormalWS = normalize(texelFetch(FragmentNormalBuffer, ivec2(TextCoord), 0).xyz);
 	vec3  FragmentNormalVS = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(FragmentNormalWS, 1)).xyz);
 	vec4  Diffuse  = texelFetch(DiffuseBuffer, ivec2(TextCoord), 0);
@@ -278,11 +277,17 @@ void main()
 		float Radius          = LightSources[LightIdx].Pos.w;
 
 		if(LightSources[LightIdx].Type == light_type_directional)
+		{
 			DirectionalLight(LightDiffuse, LightSpecular, FragmentNormalVS, ViewDirVS, LightSourceDirVS, LightSourceCol, Intensity, Diffuse.xyz, Specular);
+		}
 		else if(LightSources[LightIdx].Type == light_type_point)
+		{
 			PointLight(LightDiffuse, LightSpecular, CoordVS.xyz, FragmentNormalVS, ViewDirVS, LightSourcePosVS, Radius, LightSourceCol, Intensity, Diffuse.xyz, Specular);
+		}
 		else if(LightSources[LightIdx].Type == light_type_spot)
+		{
 			SpotLight(LightDiffuse, LightSpecular, CoordVS.xyz, FragmentNormalVS, ViewDirVS, LightSourcePosVS, Radius, LightSourceDirVS, LightSourceCol, Intensity, Diffuse.xyz, Specular);
+		}
 	}
 
 	uint  Layer = 0;
@@ -295,13 +300,13 @@ void main()
 		if(abs(CoordVS.z) < CascadeSplits[CascadeIdx])
 		{
 			Layer  = CascadeIdx - 1;
-			Shadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation, CascadeSplits[CascadeIdx - 1], VertexNormal, GlobalLightPos.xyz);
+			Shadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation, CascadeSplits[CascadeIdx - 1], VertexNormalWS, GlobalLightPos.xyz);
 			CascadeCol = CascadeColors[Layer];
 
 			float Fade = clamp((1.0 - (CoordVS.z * CoordVS.z) / (CascadeSplits[CascadeIdx] * CascadeSplits[CascadeIdx])) / 0.2, 0.0, 1.0);
 			if(Fade > 0.0 && Fade < 1.0)
 			{
-				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation, CascadeSplits[CascadeIdx], VertexNormal, GlobalLightPos.xyz);
+				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation, CascadeSplits[CascadeIdx], VertexNormalWS, GlobalLightPos.xyz);
 				vec3  NextCascadeCol = CascadeColors[Layer + 1];
 				Shadow = mix(NextShadow, Shadow, Fade);
 				CascadeCol = mix(NextCascadeCol, CascadeCol, Fade);
@@ -323,8 +328,8 @@ void main()
 	}
 	else
 	{
-		vec3 FinalLight = (Diffuse.xyz*0.2 + LightDiffuse + LightSpecular)*AmbientOcclusion;
-		FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
+		vec3 FinalLight = (Diffuse.xyz*0.2 + LightDiffuse + LightSpecular) * AmbientOcclusion;
+		//FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(vec4(FinalLight, 1), vec4(1.0 / 2.0)));
 	}
 #endif

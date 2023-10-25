@@ -30,7 +30,8 @@ struct vert_in
 layout(binding = 1) readonly uniform block1 { global_world_data WorldUpdate; };
 layout(binding = 3) uniform sampler2D DiffuseSampler;
 layout(binding = 4) uniform sampler2D NormalSampler;
-layout(binding = 5) uniform sampler2D HeightSampler;
+layout(binding = 5) uniform sampler2D SpecularSampler;
+layout(binding = 6) uniform sampler2D HeightSampler;
 
 layout(location = 0) in vert_in In;
 layout(location = 4) in mat3    TBN;
@@ -44,42 +45,46 @@ layout(location = 4) out float OutputSpecular;
 
 void main()
 {
+	OutputVertexPosition = In.Coord;
+	OutputVertexNormal   = In.Norm;
+#if 1
 	vec3  ViewDir = normalize(TBN * (WorldUpdate.CameraPos - In.Coord).xyz);
-	float HeightScale = 0.01;
+	ViewDir *= vec3(1, -1, 1); // NOTE: this is just a hack
+	float HeightScale = 0.04;
 
-	const float MinLayers   = 8 ;
-	const float MaxLayers   = 64;
-	float LayersCount       = mix(MaxLayers, MinLayers, abs(dot(vec3(0, 0, 1), ViewDir)));
+	const float MinLayers   = 32 ;
+	const float MaxLayers   = 128;
+	float LayersCount       = mix(MaxLayers, MinLayers, max(dot(vec3(0, 0, 1), ViewDir), 0.0));
 	float LayersDepth       = 1.0 / LayersCount;
 	float CurrentLayerDepth = 0.0;
 
-	vec2  DeltaTextCoord   = (ViewDir.xy * HeightScale) / (LayersCount);
+	vec2  DeltaTextCoord   = ViewDir.xy * HeightScale * LayersDepth;
 	vec2  CurrentTextCoord = In.TextCoord;
-	float CurrentDepth     = 1.0 - texture(HeightSampler, CurrentTextCoord).x;
+	float CurrentDepth     = 1.0 - texture(HeightSampler, CurrentTextCoord).r;
 	while(CurrentLayerDepth < CurrentDepth)
 	{
 		CurrentTextCoord  -= DeltaTextCoord;
-		CurrentDepth       = 1.0 - texture(HeightSampler, CurrentTextCoord).x;
+		CurrentDepth       = 1.0 - texture(HeightSampler, CurrentTextCoord).r;
 		CurrentLayerDepth += LayersDepth;
 	}
 
 	vec2 PrevTextCoord = CurrentTextCoord + DeltaTextCoord;
 
 	float AfterDepth  = CurrentDepth - CurrentLayerDepth;
-	float BeforeDepth = 1.0 - texture(HeightSampler, CurrentTextCoord).x - CurrentLayerDepth + LayersDepth;
-	vec2  TextCoord   = mix(PrevTextCoord, CurrentTextCoord, AfterDepth / (AfterDepth - BeforeDepth));
+	float BeforeDepth = 1.0 - texture(HeightSampler, PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
+	float Weight	  = AfterDepth / (AfterDepth - BeforeDepth);
+	vec2  TextCoord   = mix(PrevTextCoord, CurrentTextCoord, Weight);
 
 	if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard;
-
-	OutputVertexPosition = In.Coord;
-	OutputVertexNormal   = normalize(In.Norm);
-	OutputFragmentNormal = normalize(vec4(TBN * (texture(NormalSampler, TextCoord).xyz * 2.0 - 1.0), 0));
-
-#if DEBUG_COLOR_BLEND
-	OutputDiffuse  = vec4(vec3(0.1), 1.0);
 #else
-	OutputDiffuse  = In.Col * vec4(texture(DiffuseSampler, TextCoord).xyz, 1);
+	vec2 TextCoord = In.TextCoord;
 #endif
 
-	OutputSpecular = 2.0f;
+	OutputFragmentNormal = vec4(TBN * (texture(NormalSampler, TextCoord).rgb * 2.0 - 1.0), 0);
+#if DEBUG_COLOR_BLEND
+	OutputDiffuse		 = vec4(vec3(0.1), 1.0);
+#else
+	OutputDiffuse		 = In.Col * vec4(texture(DiffuseSampler, TextCoord).rgb, 1);
+#endif
+	OutputSpecular		 = texture(SpecularSampler, TextCoord).r;
 }

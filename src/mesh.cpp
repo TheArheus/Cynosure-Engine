@@ -96,32 +96,9 @@ Load(const std::string& Path, u32 BoundingGeneration)
 			if (Content[0] == 'f')
 			{
 				u32 Indices[3][3] = {};
-				char* ToParse = const_cast<char*>(Content.c_str()) + 1;
-
-				int Idx = 0;
-				int Type = 0;
-				while(*ToParse++)
-				{
-					if(*ToParse != '/')
-					{
-						Indices[Type][Idx] = atoi(ToParse);
-					}
-					
-					while ((*ToParse != ' ') && (*ToParse != '/') && (*ToParse))
-					{
-						ToParse++;
-					}
-
-					if(*ToParse == '/')
-					{
-						Type++;
-					}
-					if(*ToParse == ' ')
-					{
-						Type = 0;
-						Idx++;
-					}
-				}
+				sscanf(Content.c_str(), "f %u/%u/%u %u/%u/%u %u/%u/%u", &Indices[0][0], &Indices[1][0], &Indices[2][0], 
+																		&Indices[0][1], &Indices[1][1], &Indices[2][1], 
+																		&Indices[0][2], &Indices[1][2], &Indices[2][2]);
 
 				CoordIndices.push_back(Indices[0][0]-1);
 				CoordIndices.push_back(Indices[0][1]-1);
@@ -167,25 +144,33 @@ Load(const std::string& Path, u32 BoundingGeneration)
 			Vert3.TextureCoord = TextCoords[TextCoordIndices[VertexIndex + 2]];
 		}
 
-		if(NormalIndices.size() != 0)
-		{
-			vec3 Norm1 = Normals[NormalIndices[VertexIndex + 0]];
-			vec3 Norm2 = Normals[NormalIndices[VertexIndex + 1]];
-			vec3 Norm3 = Normals[NormalIndices[VertexIndex + 2]];
-			Vert1.Normal = ((u8(Norm1.x*127 + 127) << 24) | (u8(Norm1.y*127 + 127) << 16) | (u8(Norm1.z*127 + 127) << 8) | 0);
-			Vert2.Normal = ((u8(Norm2.x*127 + 127) << 24) | (u8(Norm2.y*127 + 127) << 16) | (u8(Norm2.z*127 + 127) << 8) | 0);
-			Vert3.Normal = ((u8(Norm3.x*127 + 127) << 24) | (u8(Norm3.y*127 + 127) << 16) | (u8(Norm3.z*127 + 127) << 8) | 0);
-		} 
-
 		vec4 AB  = Vert2.Position - Vert1.Position;
 		vec4 AC  = Vert3.Position - Vert1.Position;
 		vec2 DAB = Vert2.TextureCoord - Vert1.TextureCoord;
 		vec2 DAC = Vert3.TextureCoord - Vert1.TextureCoord;
 
-		r32 Det = 1.0f / (DAB.x * DAC.y - DAB.y * DAC.x);
+		r32 Dir = (DAC.x * DAB.y - DAC.y * DAB.x) < 0.0 ? -1.0 : 1.0;
 
-		Vert1.Tangent   = Vert2.Tangent   = Vert3.Tangent   = vec4( AB.x * DAC.y - AC.x * DAB.y,  AB.y * DAC.y - AC.y * DAB.y,  AB.z * DAC.y - AC.z * DAB.y, 0) * Det;
-		Vert1.Bitangent = Vert2.Bitangent = Vert3.Bitangent = vec4(-AB.x * DAC.y + AC.x * DAB.y, -AB.y * DAC.y + AC.y * DAB.y, -AB.z * DAC.y + AC.z * DAB.y, 0) * Det;
+		vec3 Tangent   = ((AC * DAC.x - AB * DAB.x) * Dir);
+		vec3 Bitangent = ((AB * DAB.y - AC * DAC.y) * Dir);
+
+		if(NormalIndices.size() != 0)
+		{
+			vec3 Norm1 = Normals[NormalIndices[VertexIndex + 0]];
+			vec3 Norm2 = Normals[NormalIndices[VertexIndex + 1]];
+			vec3 Norm3 = Normals[NormalIndices[VertexIndex + 2]];
+
+			Vert1.Tangent   = vec4(Tangent - Norm1 * Dot(Tangent, Norm1), 0);
+			Vert2.Tangent   = vec4(Tangent - Norm2 * Dot(Tangent, Norm2), 0);
+			Vert3.Tangent   = vec4(Tangent - Norm3 * Dot(Tangent, Norm3), 0);
+			Vert1.Bitangent = vec4(Bitangent - Norm1 * Dot(Bitangent, Norm1) - vec3(Vert1.Tangent) * Dot(Bitangent, vec3(Vert1.Tangent)), 0);
+			Vert2.Bitangent = vec4(Bitangent - Norm2 * Dot(Bitangent, Norm2) - vec3(Vert2.Tangent) * Dot(Bitangent, vec3(Vert2.Tangent)), 0);
+			Vert3.Bitangent = vec4(Bitangent - Norm3 * Dot(Bitangent, Norm3) - vec3(Vert3.Tangent) * Dot(Bitangent, vec3(Vert3.Tangent)), 0);
+
+			Vert1.Normal = ((u8(Norm1.x*127 + 127) << 24) | (u8(Norm1.y*127 + 127) << 16) | (u8(Norm1.z*127 + 127) << 8) | 0);
+			Vert2.Normal = ((u8(Norm2.x*127 + 127) << 24) | (u8(Norm2.y*127 + 127) << 16) | (u8(Norm2.z*127 + 127) << 8) | 0);
+			Vert3.Normal = ((u8(Norm3.x*127 + 127) << 24) | (u8(Norm3.y*127 + 127) << 16) | (u8(Norm3.z*127 + 127) << 8) | 0);
+		} 
 
 		if(UniqueVertices.count(Vert1) == 0)
 		{

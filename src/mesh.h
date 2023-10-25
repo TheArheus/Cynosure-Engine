@@ -54,10 +54,10 @@ struct hash<vertex>
 // NOTE: In Array of directional lights first one is always being set up by sun light
 enum light_type : u32
 {
-	light_type_none,
-	light_type_directional,
-	light_type_point,
-	light_type_spot,
+	light_type_none = 0,
+	light_type_directional = 1,
+	light_type_point = 2,
+	light_type_spot = 3,
 };
 
 struct mesh

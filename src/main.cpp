@@ -8,6 +8,9 @@
 
 
 // TODO: Implement correct materials per object instance
+//			Implement objects that could emmit light
+//			Also implement visualization of light source
+//
 // TODO: Implement correct mesh object creation, update and other functions architecture
 //           Use entity component system for objects
 //           Posibility for oop with objects if needed
@@ -285,6 +288,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 					 PushStorageBuffer()->				// MeshDrawCommands
 					 PushImageSampler(1, 0, VK_SHADER_STAGE_FRAGMENT_BIT)->				// Diffuse Texture
 					 PushImageSampler(1, 0, VK_SHADER_STAGE_FRAGMENT_BIT)->				// Normal Map Texture
+					 PushImageSampler(1, 0, VK_SHADER_STAGE_FRAGMENT_BIT)->				// Specular Map Texture
 					 PushImageSampler(1, 0, VK_SHADER_STAGE_FRAGMENT_BIT)->				// Height Map Texture
 					 Build(VulkanWindow.Gfx);
 
@@ -438,9 +442,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	// TODO: create necessary textures on scene load. Maybe think about something better on the architecture here
 	// Every type of the textures(diffuse, specular, normal etc) should be here?
 	std::vector<texture> Textures;
-	texture_data Diffuse1("..\\assets\\brick-wall2.diff.tga");
-	texture_data Normal1("..\\assets\\brick-wall2.norm.tga");
-	texture_data Height1("..\\assets\\brick-wall2.disp.png");
+	texture_data Diffuse1("..\\assets\\bricks4\\brick-wall.diff.tga");
+	texture_data Normal1("..\\assets\\bricks4\\brick-wall.norm.tga");
+	texture_data Specular1("..\\assets\\bricks4\\brick-wall.spec.tga");
+	texture_data Height1("..\\assets\\bricks4\\brick-wall.disp.png");
 
 	TextureInputData.Format    = VK_FORMAT_R8G8B8A8_SRGB;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -451,10 +456,12 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	TextureInputData.Alignment = 0;
 	Textures.push_back(texture(VulkanWindow.Gfx, Diffuse1.Data, Diffuse1.Width, Diffuse1.Height, 1, TextureInputData));
 	Textures.push_back(texture(VulkanWindow.Gfx, Normal1.Data, Normal1.Width, Normal1.Height, 1, TextureInputData));
+	Textures.push_back(texture(VulkanWindow.Gfx, Specular1.Data, Normal1.Width, Normal1.Height, 1, TextureInputData));
 	Textures.push_back(texture(VulkanWindow.Gfx, Height1.Data, Height1.Width, Height1.Height, 1, TextureInputData));
-	stbi_image_free(Diffuse1.Data);
-	stbi_image_free(Normal1.Data);
-	stbi_image_free(Height1.Data);
+	Diffuse1.Delete();
+	Normal1.Delete();
+	Specular1.Delete();
+	Height1.Delete();
 
 	game_scene_create* CreateCubeGameScene = (game_scene_create*)window::GetProcAddr("..\\build\\cube_scene.dll", "CubeSceneCreate");
 	std::unique_ptr<scene> GameScene(CreateCubeGameScene());
@@ -781,6 +788,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				GfxContext.SetImageSampler({Textures[0]}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				GfxContext.SetImageSampler({Textures[1]}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				GfxContext.SetImageSampler({Textures[2]}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				GfxContext.SetImageSampler({Textures[3]}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				GfxContext.DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands);
 
 				GfxContext.End();

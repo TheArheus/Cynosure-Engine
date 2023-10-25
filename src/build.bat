@@ -18,7 +18,7 @@ set DepthCascades=-DDEPTH_CASCADES_COUNT=3
 set UseDebugColorBlend=-DDEBUG_COLOR_BLEND=0
 set GBUFFER_COUNT=-DGBUFFER_COUNT=5
 
-glslangValidator ..\shaders\mesh.vert.glsl %DepthCascades% -o ..\build\mesh.vert.spv -e main --target-env vulkan1.3
+glslangValidator ..\shaders\mesh.vert.glsl %DepthCascades% -gVS -g -o ..\build\mesh.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.frag.glsl %DepthCascades% %UseDebugColorBlend% -gVS -g -o ..\build\mesh.frag.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.dbg.vert.glsl %DepthCascades% -o ..\build\mesh.dbg.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.dbg.frag.glsl %DepthCascades% -o ..\build\mesh.dbg.frag.spv -e main --target-env vulkan1.3

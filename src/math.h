@@ -1105,9 +1105,9 @@ Cross(v3<T> A, v3<T> B)
     return Result;
 }
 
-using vec2 = v2<float>;
-using vec3 = v3<float>;
-using vec4 = v4<float>;
+#define vec2 v2<float>
+#define vec3 v3<float>
+#define vec4 v4<float>
 
 using ivec2 = v2<int32_t>;
 using ivec3 = v3<int32_t>;
