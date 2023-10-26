@@ -89,7 +89,7 @@ void main()
 	{
 		Tang = Tang * -1.0;
 	}
-	TBN           = mat3(Tang, Bitang, Normal);
+	TBN           = mat3(Tang, -Bitang, Normal);
 
 	Out.Norm      = vec4(Normal, 0.0);
 	Out.Col		  = MeshDrawCommands[InstanceIndex].Mat.LightEmmit;

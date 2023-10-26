@@ -48,8 +48,7 @@ void main()
 	OutputVertexPosition = In.Coord;
 	OutputVertexNormal   = In.Norm;
 #if 1
-	vec3  ViewDir = normalize(TBN * (WorldUpdate.CameraPos - In.Coord).xyz);
-	ViewDir *= vec3(1, -1, 1); // NOTE: this is just a hack
+	vec3  ViewDir = normalize(transpose(TBN) * (WorldUpdate.CameraPos - In.Coord).xyz);
 	float HeightScale = 0.04;
 
 	const float MinLayers   = 32 ;
@@ -60,18 +59,18 @@ void main()
 
 	vec2  DeltaTextCoord   = ViewDir.xy * HeightScale * LayersDepth;
 	vec2  CurrentTextCoord = In.TextCoord;
-	float CurrentDepth     = 1.0 - texture(HeightSampler, CurrentTextCoord).r;
+	float CurrentDepth     = texture(HeightSampler, CurrentTextCoord).r;
 	while(CurrentLayerDepth < CurrentDepth)
 	{
 		CurrentTextCoord  -= DeltaTextCoord;
-		CurrentDepth       = 1.0 - texture(HeightSampler, CurrentTextCoord).r;
+		CurrentDepth       = texture(HeightSampler, CurrentTextCoord).r;
 		CurrentLayerDepth += LayersDepth;
 	}
 
 	vec2 PrevTextCoord = CurrentTextCoord + DeltaTextCoord;
 
 	float AfterDepth  = CurrentDepth - CurrentLayerDepth;
-	float BeforeDepth = 1.0 - texture(HeightSampler, PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
+	float BeforeDepth = texture(HeightSampler, PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
 	float Weight	  = AfterDepth / (AfterDepth - BeforeDepth);
 	vec2  TextCoord   = mix(PrevTextCoord, CurrentTextCoord, Weight);
 

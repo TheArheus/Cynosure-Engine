@@ -149,10 +149,10 @@ Load(const std::string& Path, u32 BoundingGeneration)
 		vec2 DAB = Vert2.TextureCoord - Vert1.TextureCoord;
 		vec2 DAC = Vert3.TextureCoord - Vert1.TextureCoord;
 
-		r32 Dir = (DAC.x * DAB.y - DAC.y * DAB.x) < 0.0 ? -1.0 : 1.0;
+		r32 Dir = (DAB.x * DAC.y - DAB.y * DAC.x) < 0.0 ? -1.0 : 1.0;
 
-		vec3 Tangent   = ((AC * DAC.x - AB * DAB.x) * Dir);
-		vec3 Bitangent = ((AB * DAB.y - AC * DAC.y) * Dir);
+		vec3 Tangent   = ((AB * DAC.y - AC * DAB.y) * Dir);
+		vec3 Bitangent = ((AC * DAB.x - AB * DAC.x) * Dir);
 
 		if(NormalIndices.size() != 0)
 		{
