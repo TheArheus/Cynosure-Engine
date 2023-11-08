@@ -25,8 +25,10 @@
 // TODO: Use only one staging buffer instead of many (a lot of memory usage here, current solution is totally not optimal)
 // TODO: Posibility to use only outer samplers(do not create a sampler for each texture)
 // TODO: Fix image barriers and current layouts
+// TODO: Implement mesh shading somewhere in the future
+// TODO: Implement ray tracing pipeline in the future
 // 
-// TODO: Implement good while loop architecture
+// TODO: Implement better while loop architecture (currently in work)
 // TODO: Make everything to use memory allocator
 // TODO: Reorganize files for the corresponding files. For ex. win32_window files to platform folders and etc.
 
@@ -34,6 +36,13 @@ struct indirect_draw_indexed_command
 {
 	VkDrawIndexedIndirectCommand DrawArg; // 5
 	u32 CommandIdx;
+};
+
+struct point_shadow_input
+{
+	mat4  LightMat;
+	vec4  LightPos;
+	float FarZ;
 };
 
 // TODO: Make scale to be vec4 and add rotation vector
@@ -56,7 +65,9 @@ struct alignas(16) global_world_data
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
 	float GlobalLightSize;
-	u32   ColorSourceCount;
+	u32   DirectionalLightSourceCount;
+	u32   PointLightSourceCount;
+	u32   SpotLightSourceCount;
 	float ScreenWidth;
 	float ScreenHeight;
 	float NearZ;
@@ -205,15 +216,16 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	buffer PoissonDiskBuffer(VulkanWindow.Gfx, PoissonDisk, sizeof(vec2) * 64, false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
 	const u32 Res = 32;
-	vec2  RandomAngles[Res][Res][Res] = {};
+	vec4  RandomAngles[Res][Res][Res] = {};
 	for(u32 x = 0; x < Res; x++)
 	{
 		for(u32 y = 0; y < Res; y++)
 		{
 			for(u32 z = 0; z < Res; z++)
 			{
-				RandomAngles[x][y][z] = vec2(cosf(float(rand()) / RAND_MAX * 2.0f / Pi), 
-											 sinf(float(rand()) / RAND_MAX * 2.0f / Pi));
+				RandomAngles[x][y][z] = vec4(float(rand()) / RAND_MAX * 2.0f / Pi, 
+											 float(rand()) / RAND_MAX * 2.0f / Pi,
+											 float(rand()) / RAND_MAX * 2.0f / Pi, 1);
 			}
 		}
 	}
@@ -222,7 +234,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	{
 		RandomRotations[RotIdx] = vec2(float(rand()) / RAND_MAX * 2.0 - 1.0, float(rand()) / RAND_MAX * 2.0 - 1.0);
 	}
-	TextureInputData.Format    = VK_FORMAT_R32G32_SFLOAT;
+	TextureInputData.Format    = VK_FORMAT_R32G32B32A32_SFLOAT;
 	TextureInputData.Usage     = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	TextureInputData.ImageType = VK_IMAGE_TYPE_3D;
 	TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_3D;
@@ -286,51 +298,66 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	GfxRootSignature.PushStorageBuffer()->				// Vertex Data
 					 PushUniformBuffer()->				// World Global Data
 					 PushStorageBuffer()->				// MeshDrawCommands
-					 PushImageSampler(1, 0, VK_SHADER_STAGE_FRAGMENT_BIT)->				// Diffuse Texture
-					 PushImageSampler(1, 0, VK_SHADER_STAGE_FRAGMENT_BIT)->				// Normal Map Texture
-					 PushImageSampler(1, 0, VK_SHADER_STAGE_FRAGMENT_BIT)->				// Specular Map Texture
-					 PushImageSampler(1, 0, VK_SHADER_STAGE_FRAGMENT_BIT)->				// Height Map Texture
-					 Build(VulkanWindow.Gfx);
+					 PushImageSampler(1, 0, false, VK_SHADER_STAGE_FRAGMENT_BIT)->		// Diffuse Texture
+					 PushImageSampler(1, 0, false, VK_SHADER_STAGE_FRAGMENT_BIT)->		// Normal Map Texture
+					 PushImageSampler(1, 0, false, VK_SHADER_STAGE_FRAGMENT_BIT)->		// Specular Map Texture
+					 PushImageSampler(1, 0, false, VK_SHADER_STAGE_FRAGMENT_BIT)->		// Height Map Texture
+					 Build(VulkanWindow.Gfx, 0, true)->
+					 BuildAll(VulkanWindow.Gfx);
 
 	shader_input ColorPassRootSignature;
 	ColorPassRootSignature.PushUniformBuffer()->					// World Global Data
 						   PushUniformBuffer()->					// Array of Light Sources
 						   PushStorageBuffer()->					// Poisson Disk
 						   PushImageSampler()->						// Random Rotations
-						   PushImageSampler()->						// G-Buffer DepthStencil Data
-						   PushImageSampler()->						// G-Buffer Vertex Normal Data
-						   PushImageSampler()->						// G-Buffer Fragment Normal Data
-						   PushImageSampler()->						// G-Buffer Diffuse Data
-						   PushImageSampler()->						// G-Buffer Specular Data
+						   PushImageSampler(GBUFFER_COUNT)->		// G-Buffer Vertex Position Data
+																	// G-Buffer Vertex Normal Data
+																	// G-Buffer Fragment Normal Data
+																	// G-Buffer Diffuse Data
+																	// G-Buffer Specular Data
 						   PushImageSampler()->						// Ambient Occlusion Data
+						   PushImageSampler(LIGHT_SOURCES_MAX_COUNT, 1, true)->	// Spot Directional Light Shadow Maps
+						   PushImageSampler(LIGHT_SOURCES_MAX_COUNT, 1, true)->	// Point Light Shadow Maps
 						   PushStorageImage()->						// Color Target Texture
 						   PushImageSampler(DEPTH_CASCADES_COUNT)->	// Shadow Cascades
 						   PushConstant((DEPTH_CASCADES_COUNT + 1) * sizeof(float))-> // Cascade Splits
-						   Build(VulkanWindow.Gfx);
+						   Build(VulkanWindow.Gfx, 0, true)->
+						   Build(VulkanWindow.Gfx, 1)->
+						   BuildAll(VulkanWindow.Gfx);
 
 	shader_input AmbientOcclusionRootSignature;
 	AmbientOcclusionRootSignature.PushUniformBuffer()->					// World Global Data
 								  PushStorageBuffer()->					// Poisson Disk
 								  PushImageSampler()->					// Random Rotations
-								  PushImageSampler()->					// G-Buffer DepthStencil Data
-								  PushImageSampler()->					// G-Buffer Vertex Normal Data
-								  PushImageSampler()->					// G-Buffer Fragment Normal Data
-								  PushImageSampler()->					// G-Buffer Diffuse Data
-								  PushImageSampler()->					// G-Buffer Specular Data
+								  PushImageSampler(GBUFFER_COUNT)->		// G-Buffer Vertex Position Data
+																		// G-Buffer Vertex Normal Data
+																		// G-Buffer Fragment Normal Data
+																		// G-Buffer Diffuse Data
+																		// G-Buffer Specular Data
 								  PushStorageImage()->					// Ambient Occlusion Target Texture
-								  Build(VulkanWindow.Gfx);
+								  Build(VulkanWindow.Gfx, 0, true)->
+								  BuildAll(VulkanWindow.Gfx);
 
 	shader_input DebugRootSignature;
 	DebugRootSignature.PushStorageBuffer()->
 					   PushUniformBuffer()->
 					   PushStorageBuffer()->
-					   Build(VulkanWindow.Gfx);
+					   Build(VulkanWindow.Gfx, 0, true)->
+					   BuildAll(VulkanWindow.Gfx);
 
 	shader_input ShadowSignature;
 	ShadowSignature.PushStorageBuffer(1, 0, VK_SHADER_STAGE_VERTEX_BIT)->
 					PushStorageBuffer(1, 0, VK_SHADER_STAGE_VERTEX_BIT)->
 					PushConstant(sizeof(mat4))->
-					Build(VulkanWindow.Gfx);
+				    Build(VulkanWindow.Gfx, 0, true)->
+					BuildAll(VulkanWindow.Gfx);
+
+	shader_input PointShadowSignature;
+	PointShadowSignature.PushStorageBuffer(1, 0, VK_SHADER_STAGE_VERTEX_BIT)->
+						 PushStorageBuffer(1, 0, VK_SHADER_STAGE_VERTEX_BIT)->
+						 PushConstant(sizeof(point_shadow_input))->
+						 Build(VulkanWindow.Gfx, 0, true)->
+						 BuildAll(VulkanWindow.Gfx);
 
 	shader_input CmpIndirectFrustRootSignature;
 	CmpIndirectFrustRootSignature.
@@ -343,7 +370,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 					 PushStorageBuffer()->				// Mesh Draw Command Data
 					 PushStorageBuffer()->				// Mesh Draw Shadow Command Data
 					 PushStorageBuffer()->				// Common Input
-					 Build(VulkanWindow.Gfx);
+				     Build(VulkanWindow.Gfx, 0, true)->
+					 BuildAll(VulkanWindow.Gfx);
 
 	shader_input CmpIndirectOcclRootSignature;
 	CmpIndirectOcclRootSignature.
@@ -354,41 +382,54 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 					 PushStorageBuffer()->				// Mesh Draw Command Data
 					 PushStorageBuffer()->				// Common Input
 					 PushImageSampler()->				// Hierarchy-Z depth texture
-					 Build(VulkanWindow.Gfx);
+				     Build(VulkanWindow.Gfx, 0, true)->
+					 BuildAll(VulkanWindow.Gfx);
 
 	shader_input CmpReduceRootSignature;
-	CmpReduceRootSignature.PushImageSampler(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Input  Texture
-						   PushStorageImage(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Output Texture
+	CmpReduceRootSignature.PushImageSampler(1, 0, false, VK_SHADER_STAGE_COMPUTE_BIT)->		// Input  Texture
+						   PushStorageImage(1, 0, false, VK_SHADER_STAGE_COMPUTE_BIT)->		// Output Texture
 						   PushConstant(sizeof(vec2), VK_SHADER_STAGE_COMPUTE_BIT)->	// Output Texture Size
-						   Build(VulkanWindow.Gfx);
+						   Build(VulkanWindow.Gfx, 0, true)->
+						   BuildAll(VulkanWindow.Gfx);
 
 	shader_input BlurRootSignature;
-	BlurRootSignature.PushImageSampler(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Input  Texture
-					  PushStorageImage(1, 0, VK_SHADER_STAGE_COMPUTE_BIT)->		// Output Texture
+	BlurRootSignature.PushImageSampler(1, 0, false, VK_SHADER_STAGE_COMPUTE_BIT)->			// Input  Texture
+					  PushStorageImage(1, 0, false, VK_SHADER_STAGE_COMPUTE_BIT)->			// Output Texture
 					  PushConstant(sizeof(vec3), VK_SHADER_STAGE_COMPUTE_BIT)->		// Texture Size, Conv Size 
-					  Build(VulkanWindow.Gfx);
+					  Build(VulkanWindow.Gfx, 0, true)->
+					  BuildAll(VulkanWindow.Gfx);
 
 	// TODO: Maybe create hot load shaders and compile them and runtime inside
 	std::vector<VkFormat> GfxFormats;
 	for(u32 FormatIdx = 0; FormatIdx < GBuffer.size(); ++FormatIdx) GfxFormats.push_back(GBuffer[FormatIdx].Info.Format);
 	global_pipeline_context PipelineContext(VulkanWindow.Gfx);
-	render_context GfxContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxRootSignature, {"..\\build\\mesh.vert.spv", "..\\build\\mesh.frag.spv"}, GfxFormats);
+	render_context GfxContext(VulkanWindow.Gfx, GfxRootSignature, {"..\\build\\mesh.vert.spv", "..\\build\\mesh.frag.spv"}, GfxFormats);
 
 	render_context::input_data RendererInputData = {};
 	RendererInputData.UseColor		= true;
 	RendererInputData.UseDepth		= true;
 	RendererInputData.UseBackFace	= true;
 	RendererInputData.UseOutline	= true;
-	render_context  DebugContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, DebugRootSignature, {"..\\build\\mesh.dbg.vert.spv", "..\\build\\mesh.dbg.frag.spv"}, {GfxColorTarget.Info.Format}, RendererInputData);
+	render_context  DebugContext(VulkanWindow.Gfx, DebugRootSignature, {"..\\build\\mesh.dbg.vert.spv", "..\\build\\mesh.dbg.frag.spv"}, {GfxColorTarget.Info.Format}, RendererInputData);
 
 	RendererInputData = {};
 	RendererInputData.UseDepth = true;
-	render_context  CascadeShadowContext(VulkanWindow.Gfx, GlobalShadow[0].Width, GlobalShadow[0].Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
-	render_context  ShadowContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
+	render_context  CascadeShadowContext(VulkanWindow.Gfx, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
+	render_context  ShadowContext(VulkanWindow.Gfx, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 
-	RendererInputData.UseDepth		= true;
-	RendererInputData.UseBackFace	= true;
-	render_context  DebugCameraViewContext(VulkanWindow.Gfx, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
+	std::vector<render_context> CubeMapShadowContexts;
+	RendererInputData.UseMultiview = true;
+	for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
+	{
+		RendererInputData.ViewMask = 1 << CubeMapFaceIdx;
+		CubeMapShadowContexts.push_back(render_context(VulkanWindow.Gfx, PointShadowSignature, {"..\\build\\mesh.pnt.sdw.vert.spv", "..\\build\\mesh.pnt.sdw.frag.spv"}, {}, RendererInputData));
+	}
+
+	RendererInputData.UseDepth	   = true;
+	RendererInputData.UseBackFace  = true;
+	RendererInputData.UseMultiview = false;
+	RendererInputData.ViewMask	   = 0;
+	render_context  DebugCameraViewContext(VulkanWindow.Gfx, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 
 	compute_context ColorPassContext(VulkanWindow.Gfx, ColorPassRootSignature, "..\\build\\color_pass.comp.spv");
 	compute_context AmbientOcclusionContext(VulkanWindow.Gfx, AmbientOcclusionRootSignature, "..\\build\\screen_space_ambient_occlusion.comp.spv");
@@ -409,6 +450,24 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	}
 	CascadeSplits[DEPTH_CASCADES_COUNT] = FarZ;
 
+	std::vector<vec3> CubeDirections = 
+	{
+		vec3( 1.0,  0.0,  0.0),
+		vec3(-1.0,  0.0,  0.0),
+		vec3( 0.0, -1.0,  0.0),
+		vec3( 0.0,  1.0,  0.0),
+		vec3( 0.0,  0.0,  1.0),
+		vec3( 0.0,  0.0, -1.0),
+	};
+	std::vector<vec3> CubeMapUpVectors = 
+	{
+		vec3(0.0, -1.0,  0.0), // +X
+		vec3(0.0, -1.0,  0.0), // -X
+		vec3(0.0,  0.0, -1.0), // +Y
+		vec3(0.0,  0.0,  1.0), // -Y
+		vec3(0.0, -1.0,  0.0), // +Z
+		vec3(0.0, -1.0,  0.0), // -Z
+	};
 	std::vector<u32> CubeIndices = 
 	{
 		0, 1, 1, 2, 2, 3, 3, 0,
@@ -438,6 +497,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	bool IsDebugColors  = false;
 
 	mesh GlobalGeometries;
+	std::vector<texture> LightShadows;
+	std::vector<texture> PointLightShadows;
 
 	// TODO: create necessary textures on scene load. Maybe think about something better on the architecture here
 	// Every type of the textures(diffuse, specular, normal etc) should be here?
@@ -466,6 +527,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	game_scene_create* CreateCubeGameScene = (game_scene_create*)window::GetProcAddr("..\\build\\cube_scene.dll", "CubeSceneCreate");
 	std::unique_ptr<scene> GameScene(CreateCubeGameScene());
 
+	u32 DirectionalLightSourceCount = 0;
+	u32 PointLightSourceCount = 0;
+	u32 SpotLightSourceCount = 0;
+	float  FOV = 45.0f;
 	double TimeLast = window::GetTimestamp();
 	double TimeElapsed = 0.0;
 	double TimeEnd = 0.0;
@@ -475,7 +540,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		mesh DebugGeometries;
 
 		linear_allocator SystemsAllocator(GlobalMemorySize, MemoryBlock);
-		linear_allocator LightSourcesAlloc(sizeof(light_source) * 1024, SystemsAllocator.Allocate(sizeof(light_source) * 2048));
+		linear_allocator LightSourcesAlloc(sizeof(light_source) * 1024, SystemsAllocator.Allocate(sizeof(light_source) * 1024));
 		linear_allocator GlobalMeshInstancesAlloc(MiB(16), SystemsAllocator.Allocate(MiB(16)));
 		linear_allocator DebugMeshInstancesAlloc(MiB(16), SystemsAllocator.Allocate(MiB(16)));
 
@@ -503,6 +568,51 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		GameScene->Update(GlobalMeshInstances);
 		GlobalLightSources.insert(GlobalLightSources.end(), GameScene->LightSources.begin(), GameScene->LightSources.end());
 
+		assert(GlobalLightSources.size() <= LIGHT_SOURCES_MAX_COUNT);
+		if((LightShadows.size() + PointLightShadows.size()) != GlobalLightSources.size())
+		{
+			DirectionalLightSourceCount = 0;
+			PointLightSourceCount = 0;
+			SpotLightSourceCount = 0;
+
+			LightShadows.clear();
+			PointLightShadows.clear();
+
+			TextureInputData.Format = VK_FORMAT_D32_SFLOAT;
+			TextureInputData.Usage  = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+			for(const light_source& LightSource : GlobalLightSources)
+			{
+				if(LightSource.LightType == light_type_point)
+				{
+					TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_CUBE;
+					TextureInputData.MipLevels = 1;
+					TextureInputData.Layers    = 6;
+					PointLightShadows.push_back(texture(VulkanWindow.Gfx, VulkanWindow.Width, VulkanWindow.Height, 1, TextureInputData));
+					PointLightSourceCount++;
+				}
+				else if(LightSource.LightType == light_type_spot)
+				{
+					TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_2D;
+					TextureInputData.MipLevels = 1;
+					TextureInputData.Layers    = 1;
+					LightShadows.push_back(texture(VulkanWindow.Gfx, VulkanWindow.Width, VulkanWindow.Height, 1, TextureInputData));
+					SpotLightSourceCount++;
+				}
+				else if(LightSource.LightType == light_type_directional)
+				{
+					TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_2D;
+					TextureInputData.MipLevels = 1;
+					TextureInputData.Layers    = 1;
+					LightShadows.push_back(texture(VulkanWindow.Gfx, VulkanWindow.Width, VulkanWindow.Height, 1, TextureInputData));
+					DirectionalLightSourceCount++;
+				}
+			}
+
+			ColorPassContext.SetImageSampler(LightShadows, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, 1);
+			ColorPassContext.SetImageSampler(PointLightShadows, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, 1);
+			ColorPassContext.StaticUpdate();
+		}
+
 		if(VulkanWindow.Buttons[EC_I].IsDown)
 		{
 			IsDebugColors = !IsDebugColors;
@@ -516,13 +626,12 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			ViewDir = ViewData.ViewDir;
 			ViewPos	= ViewData.CameraPos;
 		}
-		//GlobalLightSources.push_back({vec4(ViewPos, 1), ViewDir, vec4(1, 0, 0, 1), light_type_spot});
 
 		float Aspect  = (float)VulkanWindow.Gfx->Width / (float)VulkanWindow.Gfx->Height;
 		vec3 LightPos =  vec3(-4, 4, 2);
 		vec3 LightDir = -Normalize(LightPos);
 
-		mat4 CameraProj = PerspRH(45.0f, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, NearZ, FarZ);
+		mat4 CameraProj = PerspRH(FOV, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, NearZ, FarZ);
 		mat4 CameraView = LookAtRH(ViewData.CameraPos, ViewData.CameraPos + ViewData.ViewDir, UpVector);
 		mat4 DebugCameraView = LookAtRH(ViewPos, ViewPos + ViewDir, UpVector);
 		GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, CameraProj, 1);
@@ -541,6 +650,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		WorldUpdate.FarZ			= FarZ;
 		WorldUpdate.DebugColors		= IsDebugColors;
 
+		WorldUpdate.DirectionalLightSourceCount = DirectionalLightSourceCount;
+		WorldUpdate.PointLightSourceCount		= PointLightSourceCount;
+		WorldUpdate.SpotLightSourceCount		= SpotLightSourceCount;
+
 		// TODO: try to move ortho projection calculation to compute shader???
 		// TODO: move into game_main everything related to cascade splits calculation
 		for(u32 CascadeIdx = 1;
@@ -553,7 +666,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			float LightFarZ  = CascadeSplits[CascadeIdx];
 			float LightDistZ = LightFarZ - LightNearZ;
 
-			mat4 CameraCascadeProj = PerspRH(45.0f, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, LightNearZ, LightFarZ);
+			mat4 CameraCascadeProj = PerspRH(FOV, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, LightNearZ, LightFarZ);
 			mat4 InverseProjectViewMatrix = Inverse(DebugCameraView * CameraCascadeProj);
 
 			std::vector<vec4> CameraViewCorners = 
@@ -614,7 +727,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		MeshCompCullingCommonData.MeshCount = GlobalGeometries.MeshCount;
 		MeshCompCullingCommonData.Proj = CameraProj;
 		MeshCompCullingCommonData.View = WorldUpdate.DebugView;
-		WorldUpdate.ColorSourceCount = GlobalLightSources.size();
 
 		float CameraSpeed = 0.01f;
 		if(GameInput.Buttons[EC_R].IsDown)
@@ -726,6 +838,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				FrustCullingContext.End();
 			}
 
+			// TODO: this should be moved to directional light calculations I guess
+			//		 or make it possible to turn off
 			for(u32 CascadeIdx = 0; CascadeIdx < DEPTH_CASCADES_COUNT; ++CascadeIdx)
 			{
 				mat4 Shadow = WorldUpdate.LightView[CascadeIdx] * WorldUpdate.LightProj[CascadeIdx];
@@ -733,10 +847,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				{
 					CreateImageBarrier(GlobalShadow[CascadeIdx].Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
 				};
-				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, ShadowBarrier);
+				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
 
 				CascadeShadowContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, GlobalShadow[CascadeIdx].Width, GlobalShadow[CascadeIdx].Height, GlobalShadow[CascadeIdx], {1, 0});
-				CascadeShadowContext.Begin(VulkanWindow.Gfx, PipelineContext);
+				CascadeShadowContext.Begin(VulkanWindow.Gfx, PipelineContext, GlobalShadow[CascadeIdx].Width, GlobalShadow[CascadeIdx].Height);
 
 				CascadeShadowContext.SetStorageBufferView(VertexBuffer);
 				CascadeShadowContext.SetStorageBufferView(MeshDrawShadowCommandBuffer);
@@ -746,13 +860,106 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				CascadeShadowContext.End();
 			}
 
+			// TODO: something better or/and efficient here
+			// TODO: render only when the actual light source have been changed
+			u32 DirectionalSourceIdx = 0;
+			u32 PointLightSourceIdx  = 0;
+			u32 SpotLightSourceIdx   = 0;
+			for(const light_source& LightSource : GlobalLightSources)
+			{
+				if(LightSource.LightType == light_type_directional)
+				{
+					const texture& ShadowMapTexture = LightShadows[DirectionalSourceIdx + SpotLightSourceIdx];
+					std::vector<VkImageMemoryBarrier> ShadowBarrier = 
+					{
+						CreateImageBarrier(ShadowMapTexture.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+					};
+					ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
+					mat4 ShadowMapProj = PerspRH(FOV, ShadowMapTexture.Width, ShadowMapTexture.Height, NearZ, FarZ);
+					mat4 ShadowMapView = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + vec3(LightSource.Dir), UpVector);
+					mat4 Shadow = ShadowMapView * ShadowMapProj;
+
+					ShadowContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, ShadowMapTexture.Width, ShadowMapTexture.Height, ShadowMapTexture, {1, 0});
+					ShadowContext.Begin(VulkanWindow.Gfx, PipelineContext, ShadowMapTexture.Width, ShadowMapTexture.Height);
+
+					ShadowContext.SetStorageBufferView(VertexBuffer);
+					ShadowContext.SetStorageBufferView(MeshDrawShadowCommandBuffer);
+					ShadowContext.SetConstant((void*)&Shadow, sizeof(mat4));
+					ShadowContext.DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
+
+					ShadowContext.End();
+					DirectionalSourceIdx++;
+				}
+				else if(LightSource.LightType == light_type_point)
+				{
+					const texture& ShadowMapTexture = PointLightShadows[PointLightSourceIdx];
+					std::vector<VkImageMemoryBarrier> ShadowBarrier = 
+					{
+						CreateImageBarrier(ShadowMapTexture.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+					};
+					ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
+
+					for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
+					{
+						vec3 CubeMapFaceDir = CubeDirections[CubeMapFaceIdx];
+						vec3 CubeMapUpVect  = CubeMapUpVectors[CubeMapFaceIdx];
+						mat4 ShadowMapProj  = PerspRH(90.0f, ShadowMapTexture.Width, ShadowMapTexture.Height, NearZ, FarZ);
+						mat4 ShadowMapView  = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + CubeMapFaceDir, CubeMapUpVect);
+						mat4 Shadow = ShadowMapView * ShadowMapProj;
+						point_shadow_input PointShadowInput = {};
+						PointShadowInput.LightPos = GlobalLightSources[DirectionalSourceIdx + PointLightSourceIdx + SpotLightSourceIdx].Pos;
+						PointShadowInput.LightMat = Shadow;
+						PointShadowInput.FarZ = FarZ;
+
+						CubeMapShadowContexts[CubeMapFaceIdx].SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, ShadowMapTexture.Width, ShadowMapTexture.Height, ShadowMapTexture, {1, 0}, CubeMapFaceIdx, true);
+						CubeMapShadowContexts[CubeMapFaceIdx].Begin(VulkanWindow.Gfx, PipelineContext, ShadowMapTexture.Width, ShadowMapTexture.Height);
+
+						CubeMapShadowContexts[CubeMapFaceIdx].SetStorageBufferView(VertexBuffer);
+						CubeMapShadowContexts[CubeMapFaceIdx].SetStorageBufferView(MeshDrawShadowCommandBuffer);
+						CubeMapShadowContexts[CubeMapFaceIdx].SetConstant((void*)&PointShadowInput, sizeof(point_shadow_input));
+						CubeMapShadowContexts[CubeMapFaceIdx].DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
+
+						CubeMapShadowContexts[CubeMapFaceIdx].End();
+					}
+					PointLightSourceIdx++;
+				}
+				else if(LightSource.LightType == light_type_spot)
+				{
+					const texture& ShadowMapTexture = LightShadows[DirectionalSourceIdx + SpotLightSourceIdx];
+					std::vector<VkImageMemoryBarrier> ShadowBarrier = 
+					{
+						CreateImageBarrier(ShadowMapTexture.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+					};
+					ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
+					mat4 ShadowMapProj = PerspRH(FOV, ShadowMapTexture.Width, ShadowMapTexture.Height, NearZ, FarZ);
+					mat4 ShadowMapView = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + vec3(LightSource.Dir), UpVector);
+					mat4 Shadow = ShadowMapView * ShadowMapProj;
+
+					ShadowContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, ShadowMapTexture.Width, ShadowMapTexture.Height, ShadowMapTexture, {1, 0});
+					ShadowContext.Begin(VulkanWindow.Gfx, PipelineContext, ShadowMapTexture.Width, ShadowMapTexture.Height);
+
+					ShadowContext.SetStorageBufferView(VertexBuffer);
+					ShadowContext.SetStorageBufferView(MeshDrawShadowCommandBuffer);
+					ShadowContext.SetConstant((void*)&Shadow, sizeof(mat4));
+					ShadowContext.DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
+
+					ShadowContext.End();
+					SpotLightSourceIdx++;
+				}
+			}
+
 			// TODO: Don't forget to remove this one
 			// NOTE: This is only for debug. Maybe not compile on release mode???
 			{
 				mat4 Shadow = DebugCameraView * CameraProj;
+				std::vector<VkImageMemoryBarrier> ShadowBarrier = 
+				{
+					CreateImageBarrier(DebugCameraViewDepthTarget.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+				};
+				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
 
-				DebugCameraViewContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, DebugCameraViewContext.Width, DebugCameraViewContext.Height, DebugCameraViewDepthTarget, {1, 0});
-				DebugCameraViewContext.Begin(VulkanWindow.Gfx, PipelineContext);
+				DebugCameraViewContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, DebugCameraViewDepthTarget.Width, DebugCameraViewDepthTarget.Height, DebugCameraViewDepthTarget, {1, 0});
+				DebugCameraViewContext.Begin(VulkanWindow.Gfx, PipelineContext, DebugCameraViewDepthTarget.Width, DebugCameraViewDepthTarget.Height);
 
 				DebugCameraViewContext.SetStorageBufferView(VertexBuffer);
 				DebugCameraViewContext.SetStorageBufferView(MeshDrawCommandBuffer);
@@ -763,24 +970,21 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			}
 
 			{
-				std::vector<VkImageMemoryBarrier> ShadowBarrier;
-				for(u32 CascadeIdx = 0;
-					CascadeIdx < DEPTH_CASCADES_COUNT;
-					++CascadeIdx)
-				{
-					ShadowBarrier.push_back(CreateImageBarrier(GlobalShadow[CascadeIdx].Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
-				}
+				std::vector<VkImageMemoryBarrier> ImageBeginRenderBarriers;
 				for(u32 Idx = 0;
 					Idx < Textures.size();
 					++Idx)
 				{
-					ShadowBarrier.push_back(CreateImageBarrier(Textures[Idx].Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+					ImageBeginRenderBarriers.push_back(CreateImageBarrier(Textures[Idx].Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
 				}
-				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, ShadowBarrier);
+				for(texture& ColorTarget : GBuffer)
+					ImageBeginRenderBarriers.push_back(CreateImageBarrier(ColorTarget.Handle, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+				ImageBeginRenderBarriers.push_back(CreateImageBarrier(GfxDepthTarget.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
+				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ImageBeginRenderBarriers);
 
 				GfxContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GBuffer, {0, 0, 0, 0});
 				GfxContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxDepthTarget, {1, 0});
-				GfxContext.Begin(VulkanWindow.Gfx, PipelineContext);
+				GfxContext.Begin(VulkanWindow.Gfx, PipelineContext, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height);
 
 				GfxContext.SetStorageBufferView(VertexBuffer);
 				GfxContext.SetUniformBufferView(WorldUpdateBuffer);
@@ -828,7 +1032,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				};
 				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, BlurPassBarrier);
 
-				vec3 BlurInput(VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 9);
+				vec3 BlurInput(VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, 27);
 				BlurContext.SetImageSampler({AmbientOcclusionData}, VK_IMAGE_LAYOUT_GENERAL);
 				BlurContext.SetStorageImage({AmbientOcclusionData}, VK_IMAGE_LAYOUT_GENERAL);
 				BlurContext.SetConstant((void*)BlurInput.E, sizeof(vec3));
@@ -843,9 +1047,23 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				std::vector<VkImageMemoryBarrier> ColorPassBarrier = 
 				{
 					CreateImageBarrier(GfxColorTarget.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
-					CreateImageBarrier(AmbientOcclusionData.Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+					CreateImageBarrier(AmbientOcclusionData.Handle, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
 				};
-				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, ColorPassBarrier);
+				for(u32 CascadeIdx = 0;
+					CascadeIdx < DEPTH_CASCADES_COUNT;
+					++CascadeIdx)
+				{
+					ColorPassBarrier.push_back(CreateImageBarrier(GlobalShadow[CascadeIdx].Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
+				}
+				for(u32 ShadowMapIdx = 0; ShadowMapIdx < PointLightShadows.size(); ShadowMapIdx++)
+				{
+					ColorPassBarrier.push_back(CreateImageBarrier(PointLightShadows[ShadowMapIdx].Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
+				}
+				for(u32 ShadowMapIdx = 0; ShadowMapIdx < LightShadows.size(); ShadowMapIdx++)
+				{
+					ColorPassBarrier.push_back(CreateImageBarrier(LightShadows[ShadowMapIdx].Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
+				}
+				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, ColorPassBarrier);
 
 				ColorPassContext.SetUniformBufferView(WorldUpdateBuffer);
 				ColorPassContext.SetUniformBufferView(LightSourcesBuffer);
@@ -896,9 +1114,25 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 			for(u32 DrawIdx = 0; DrawIdx < DebugGeometries.Offsets.size(); ++DrawIdx)
 			{
+				VkAccessFlags ColorSrcAccessMask = DrawIdx == 0 ? VK_ACCESS_SHADER_WRITE_BIT : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				VkAccessFlags DepthSrcAccessMask = DrawIdx == 0 ? VK_ACCESS_SHADER_READ_BIT : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+				VkImageLayout ColorOldLayout = DrawIdx == 0 ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				VkImageLayout DepthOldLayout = DrawIdx == 0 ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+				VkPipelineStageFlags SrcStageMask = DrawIdx == 0 ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+				VkPipelineStageFlags DstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+
+				std::vector<VkImageMemoryBarrier> ImageBeginRenderBarriers = 
+				{
+					CreateImageBarrier(GfxColorTarget.Handle, ColorSrcAccessMask, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, ColorOldLayout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+					CreateImageBarrier(GfxDepthTarget.Handle, DepthSrcAccessMask, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, DepthOldLayout, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
+				};
+				ImageBarrier(*PipelineContext.CommandList, SrcStageMask, DstStageMask, ImageBeginRenderBarriers);
+
 				DebugContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, {GfxColorTarget}, {0, 0, 0, 1});
 				DebugContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, GfxDepthTarget, {1, 0});
-				DebugContext.Begin(VulkanWindow.Gfx, PipelineContext);
+				DebugContext.Begin(VulkanWindow.Gfx, PipelineContext, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height);
 
 				DebugContext.SetStorageBufferView(DebugVertexBuffer);
 				DebugContext.SetUniformBufferView(WorldUpdateBuffer);
@@ -922,14 +1156,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 				OcclCullingContext.End();
 			}
-
-#if 0
-			std::vector<VkImageMemoryBarrier> ColorPassBarrier = 
-			{
-				CreateImageBarrier(GfxColorTarget.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
-			};
-			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, ColorPassBarrier);
-#endif
 
 			PipelineContext.EmplaceColorTarget(VulkanWindow.Gfx, GfxColorTarget);
 			PipelineContext.Present(VulkanWindow.Gfx);

@@ -328,6 +328,11 @@ struct texture
 	template<class T, class heap>
 	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
 	{
+		if(InputData.Layers == 6)
+		{
+			Width = max(NewWidth, NewHeight);
+			Height = max(NewWidth, NewHeight);
+		}
 		Info = InputData;
 		Device = App->Device;
 		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
@@ -348,6 +353,11 @@ struct texture
 	template<class T, class heap>
 	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
 	{
+		if(InputData.Layers == 6)
+		{
+			Width = max(NewWidth, NewHeight);
+			Height = max(NewWidth, NewHeight);
+		}
 		Info = InputData;
 		Device = App->Device;
 		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
@@ -367,6 +377,11 @@ struct texture
 	template<class T>
 	texture(std::unique_ptr<T>& App, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
 	{
+		if(InputData.Layers == 6)
+		{
+			Width = max(NewWidth, NewHeight);
+			Height = max(NewWidth, NewHeight);
+		}
 		Info = InputData;
 		Device = App->Device;
 		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
@@ -387,6 +402,11 @@ struct texture
 	template<class T>
 	texture(std::unique_ptr<T>& App, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
 	{
+		if(InputData.Layers == 6)
+		{
+			Width = max(NewWidth, NewHeight);
+			Height = max(NewWidth, NewHeight);
+		}
 		Info = InputData;
 		Device = App->Device;
 		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
@@ -421,7 +441,7 @@ struct texture
 		Region.imageSubresource.aspectMask = (Info.Format == VK_FORMAT_D32_SFLOAT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 		Region.imageSubresource.mipLevel = 0;
 		Region.imageSubresource.baseArrayLayer = 0;
-		Region.imageSubresource.layerCount = 1;
+		Region.imageSubresource.layerCount = Info.Layers;
 		Region.imageExtent = {u32(Width), u32(Height), u32(Depth)};
 		vkCmdCopyBufferToImage(*CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
 
@@ -451,7 +471,7 @@ struct texture
 		Region.imageSubresource.aspectMask = (Info.Format == VK_FORMAT_D32_SFLOAT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 		Region.imageSubresource.mipLevel = 0;
 		Region.imageSubresource.baseArrayLayer = 0;
-		Region.imageSubresource.layerCount = 1;
+		Region.imageSubresource.layerCount = Info.Layers;
 		Region.imageOffset = {0, 0, 0};
 		Region.imageExtent = {u32(Width), u32(Height), u32(Depth)};
 		vkCmdCopyBufferToImage(*PipelineContext.CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
@@ -477,9 +497,12 @@ struct texture
 
 		VkImageCreateInfo CreateInfo = {};
 		CreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		CreateInfo.flags = Layers == 6 ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
 		CreateInfo.imageType = ImageType;
 		CreateInfo.format = _Format;
-		CreateInfo.extent = {(u32)NewWidth, (u32)NewHeight, (u32)DepthOrArraySize};
+		CreateInfo.extent.width  = Layers == 6 ? max((u32)NewWidth, (u32)NewHeight) : (u32)NewWidth;
+		CreateInfo.extent.height = Layers == 6 ? max((u32)NewWidth, (u32)NewHeight) : (u32)NewHeight;
+		CreateInfo.extent.depth  = (u32)DepthOrArraySize;
 		CreateInfo.mipLevels = _MipLevels;
 		CreateInfo.arrayLayers = Layers;
 		CreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;//App->MsaaQuality;
@@ -529,7 +552,7 @@ struct texture
 		ViewCreateInfo.image = Handle;
 		ViewCreateInfo.subresourceRange.aspectMask = Aspect;
 		ViewCreateInfo.subresourceRange.baseMipLevel = MipLevel;
-		ViewCreateInfo.subresourceRange.layerCount = 1;
+		ViewCreateInfo.subresourceRange.layerCount = Info.Layers;
 		ViewCreateInfo.subresourceRange.levelCount = LevelCount;
 
 		VkImageView Result = 0;

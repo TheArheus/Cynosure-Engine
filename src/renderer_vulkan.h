@@ -28,7 +28,7 @@ public:
 
 	void RecreateSwapchain(u32 NewWidth, u32 NewHeight);
 
-	VkPipeline CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipelineShaderStageCreateInfo>& Stages, const std::vector<VkFormat>& ColorAttachmentFormats, bool UseColor, bool UseDepth, bool BackFaceCull, bool UseOutline);
+	VkPipeline CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipelineShaderStageCreateInfo>& Stages, const std::vector<VkFormat>& ColorAttachmentFormats, bool UseColor, bool UseDepth, bool BackFaceCull, bool UseOutline, u8 ViewMask, bool UseMultiview);
 	VkPipeline CreateComputePipeline(VkPipelineLayout RootSignature, const VkPipelineShaderStageCreateInfo& ComputeShader);
 
 	void Present();

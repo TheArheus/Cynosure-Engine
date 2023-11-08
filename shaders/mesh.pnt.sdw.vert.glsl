@@ -7,6 +7,15 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int16:require
 #extension GL_EXT_shader_explicit_arithmetic_types_int8:require
 
+struct material
+{
+	vec4  LightEmmit;
+	float Specular;
+	uint  TextureIdx;
+	uint  NormalMapIdx;
+	uint  LightType;
+};
+
 struct vert_in
 {
 	vec4 Pos;
@@ -37,44 +46,39 @@ struct global_world_data
 	bool  DebugColors;
 };
 
-struct material
-{
-	vec4  LightEmmit;
-	float Specular;
-	uint  TextureIdx;
-	uint  NormalMapIdx;
-	uint  LightType;
-};
-
-struct mesh_draw_command_data
+struct mesh_draw_command
 {
 	material Mat;
 	vec4 Translate;
 	vec4 Scale;
-	uint MeshIndex;
-	bool IsVisible;
+	vec4 Rotate;
 };
+
+vec4 QuatMul(vec4 lhs, vec4 rhs)
+{
+	return vec4(lhs.xyz * rhs.w + rhs.xyz * lhs.w + cross(lhs.xyz, rhs.xyz), dot(-lhs.xyz, rhs.xyz) + lhs.w * rhs.w);
+}
 
 layout(binding = 0) readonly buffer block0
 {
 	vert_in In[];
 };
 
-layout(binding = 1) readonly uniform block1
+layout(binding = 1) readonly buffer block1
 {
-	global_world_data WorldUpdate;
+	mesh_draw_command MeshDrawCommands[];
 };
-
-layout(binding = 2) readonly buffer block2
-{
-	mesh_draw_command_data MeshData[];
+layout(push_constant) uniform pushConstant 
+{ 
+	mat4  ShadowMatrix; 
+	vec4  LightPos; 
+	float FarZ;
 };
-
-layout(location = 0) out vec4 OutCol;
+layout(location = 0) out vec4 OutPos;
 
 void main()
 {
-	gl_Position = WorldUpdate.Proj * WorldUpdate.View * In[gl_VertexIndex].Pos;
-	OutCol = MeshData[gl_InstanceIndex].Mat.LightEmmit;
+	OutPos = In[gl_VertexIndex].Pos * MeshDrawCommands[gl_InstanceIndex].Scale + MeshDrawCommands[gl_InstanceIndex].Translate;
+	gl_Position = ShadowMatrix * OutPos;
 }
 

@@ -1770,7 +1770,7 @@ inline mat4
 PerspLH(float Fov, float Width, float Height, float NearZ, float FarZ)
 {
     float a = Height / Width;
-    float f = 1.0f / tanf(Fov * 0.5f);
+    float f = 1.0f / tanf(Radians(Fov * 0.5f));
     float l = FarZ / (FarZ - NearZ);
     mat4 Result =
     {
@@ -1787,7 +1787,7 @@ inline mat4
 PerspRH(float Fov, float Width, float Height, float NearZ, float FarZ)
 {
     float a = Height / Width;
-    float f = 1.0f / tanf(Fov * 0.5f);
+    float f = 1.0f / tanf(Radians(Fov * 0.5f));
     float l = FarZ / (NearZ - FarZ);
     mat4 Result =
     {
@@ -1804,7 +1804,7 @@ inline mat4
 PerspInfFarZ(float Fov, float Width, float Height, float NearZ)
 {
     float a = Height / Width;
-    float f = 1.0f / tanf(Fov * 0.5f);
+    float f = 1.0f / tanf(Radians(Fov * 0.5f));
     mat4 Result =
     {
         f*a, 0,    0  ,  0,

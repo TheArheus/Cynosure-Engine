@@ -11,7 +11,9 @@ struct global_world_data
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
 	float GlobalLightSize;
-	uint  ColorSourceCount;
+	uint  DirectionalLightSourceCount;
+	uint  PointLightSourceCount;
+	uint  SpotLightSourceCount;
 	float ScreenWidth;
 	float ScreenHeight;
 	float NearZ;
@@ -43,41 +45,44 @@ layout(location = 3) out vec4  OutputDiffuse;
 layout(location = 4) out float OutputSpecular;
 
 
+// TODO: Parallax Mapping only for a close objects
 void main()
 {
 	OutputVertexPosition = In.Coord;
 	OutputVertexNormal   = In.Norm;
-#if 1
-	vec3  ViewDir = normalize(transpose(TBN) * (WorldUpdate.CameraPos - In.Coord).xyz);
-	float HeightScale = 0.04;
 
-	const float MinLayers   = 32 ;
-	const float MaxLayers   = 128;
-	float LayersCount       = mix(MaxLayers, MinLayers, max(dot(vec3(0, 0, 1), ViewDir), 0.0));
-	float LayersDepth       = 1.0 / LayersCount;
-	float CurrentLayerDepth = 0.0;
-
-	vec2  DeltaTextCoord   = ViewDir.xy * HeightScale * LayersDepth;
-	vec2  CurrentTextCoord = In.TextCoord;
-	float CurrentDepth     = texture(HeightSampler, CurrentTextCoord).r;
-	while(CurrentLayerDepth < CurrentDepth)
-	{
-		CurrentTextCoord  -= DeltaTextCoord;
-		CurrentDepth       = texture(HeightSampler, CurrentTextCoord).r;
-		CurrentLayerDepth += LayersDepth;
-	}
-
-	vec2 PrevTextCoord = CurrentTextCoord + DeltaTextCoord;
-
-	float AfterDepth  = CurrentDepth - CurrentLayerDepth;
-	float BeforeDepth = texture(HeightSampler, PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
-	float Weight	  = AfterDepth / (AfterDepth - BeforeDepth);
-	vec2  TextCoord   = mix(PrevTextCoord, CurrentTextCoord, Weight);
-
-	if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard;
-#else
 	vec2 TextCoord = In.TextCoord;
-#endif
+	vec3  ViewDir = (WorldUpdate.CameraPos - In.Coord).xyz;
+	if(length(ViewDir) < 6)
+	{
+		ViewDir = normalize(transpose(TBN) * ViewDir);
+		float HeightScale = 0.04;
+
+		const float MinLayers   = 32 ;
+		const float MaxLayers   = 128;
+		float LayersCount       = mix(MaxLayers, MinLayers, max(dot(vec3(0, 0, 1), ViewDir), 0.0));
+		float LayersDepth       = 1.0 / LayersCount;
+		float CurrentLayerDepth = 0.0;
+
+		vec2  DeltaTextCoord   = ViewDir.xy * HeightScale * LayersDepth;
+		vec2  CurrentTextCoord = In.TextCoord;
+		float CurrentDepth     = 1.0 - texture(HeightSampler, CurrentTextCoord).r;
+		while(CurrentLayerDepth < CurrentDepth)
+		{
+			CurrentTextCoord  -= DeltaTextCoord;
+			CurrentDepth       = 1.0 - texture(HeightSampler, CurrentTextCoord).r;
+			CurrentLayerDepth += LayersDepth;
+		}
+
+		vec2 PrevTextCoord = CurrentTextCoord + DeltaTextCoord;
+
+		float AfterDepth  = CurrentDepth - CurrentLayerDepth;
+		float BeforeDepth = 1.0 - texture(HeightSampler, PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
+		float Weight	  = AfterDepth / (AfterDepth - BeforeDepth);
+		vec2  TextCoord   = mix(PrevTextCoord, CurrentTextCoord, Weight);
+
+		if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard;
+	}
 
 	OutputFragmentNormal = vec4(TBN * (texture(NormalSampler, TextCoord).rgb * 2.0 - 1.0), 0);
 #if DEBUG_COLOR_BLEND

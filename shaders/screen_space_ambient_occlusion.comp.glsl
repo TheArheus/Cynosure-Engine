@@ -15,7 +15,9 @@ struct global_world_data
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
 	float GlobalLightSize;
-	uint  ColorSourceCount;
+	uint  DirectionalLightSourceCount;
+	uint  PointLightSourceCount;
+	uint  SpotLightSourceCount;
 	float ScreenWidth;
 	float ScreenHeight;
 	float NearZ;
@@ -26,25 +28,21 @@ struct global_world_data
 layout(binding = 0) readonly uniform block0 { global_world_data WorldUpdate; };
 layout(binding = 1) buffer   block1 { vec3 HemisphereSamples[SAMPLES_COUNT]; };
 layout(binding = 2) uniform  sampler2D NoiseTexture;
-layout(binding = 3) uniform  sampler2D VertexPosBuffer;
-layout(binding = 4) uniform  sampler2D VertexNormalBuffer;
-layout(binding = 5) uniform  sampler2D FragmentNormalBuffer;
-layout(binding = 6) uniform  sampler2D DiffuseBuffer;
-layout(binding = 7) uniform  sampler2D SpecularBuffer;
-layout(binding = 8) uniform  writeonly image2D OcclusionTarget;
+layout(binding = 3) uniform  sampler2D GBuffer[GBUFFER_COUNT];
+layout(binding = 4) uniform  writeonly image2D OcclusionTarget;
 
 
 void main()
 {
-	vec2 TextureDims = textureSize(VertexPosBuffer, 0).xy;
+	vec2 TextureDims = textureSize(GBuffer[0], 0).xy;
 	vec2 TextCoord   = gl_GlobalInvocationID.xy;
     if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y) {
         return;
     }
 
-	vec4 CoordWS = texelFetch(VertexPosBuffer, ivec2(TextCoord), 0);
+	vec4 CoordWS = texelFetch(GBuffer[0], ivec2(TextCoord), 0);
 	vec3 CoordVS = (WorldUpdate.DebugView * CoordWS).xyz;
-	vec3 FragmentNormalWS = normalize(texelFetch(FragmentNormalBuffer, ivec2(TextCoord), 0).xyz);
+	vec3 FragmentNormalWS = normalize(texelFetch(GBuffer[2], ivec2(TextCoord), 0).xyz);
 	vec3 FragmentNormalVS = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(FragmentNormalWS, 1)).xyz);
 	vec2 Rotation = texture(NoiseTexture, TextCoord).xy;
 
@@ -63,7 +61,7 @@ void main()
 		Offset = WorldUpdate.Proj * Offset;
 		Offset.xyz /= Offset.w;
 
-		vec4 SampledPosVS = texture(VertexPosBuffer, Offset.xy * vec2(0.5, -0.5) + 0.5, 0);
+		vec4 SampledPosVS = texture(GBuffer[0], Offset.xy * vec2(0.5, -0.5) + 0.5);
 		SampledPosVS = WorldUpdate.View * SampledPosVS;
 
 		float Range = smoothstep(0.0, 1.0, Radius / abs(CoordVS.z - SampledPosVS.z));

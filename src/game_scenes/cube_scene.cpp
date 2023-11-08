@@ -23,7 +23,7 @@ struct cube_scene : scene
 	{
 		u32 MeshIdx = 1;
 		LightSources.push_back({vec4(-4, 4,  2, 10), vec4(), vec4(1, 0, 1, 0.2), light_type_point});
-		LightSources.push_back({vec4(4, -4, -3, 10), vec4(), vec4(0, 1, 1, 0.2), light_type_point});
+		//LightSources.push_back({vec4(4, -4, -3, 10), vec4(), vec4(0, 1, 1, 0.2), light_type_point});
 
 		for(std::unique_ptr<object_behavior>& Object : Objects)
 		{

@@ -110,10 +110,10 @@ struct global_pipeline_context
 	{
 		std::vector<VkImageMemoryBarrier> ImageCopyBarriers = 
 		{
-			CreateImageBarrier(Texture.Handle, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
+			CreateImageBarrier(Texture.Handle, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
 			CreateImageBarrier(Context->SwapchainImages[BackBufferIndex], 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL),
 		};
-		ImageBarrier(*CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, ImageCopyBarriers);
+		ImageBarrier(*CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, ImageCopyBarriers);
 
 		VkImageCopy ImageCopyRegion = {};
 		ImageCopyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -130,9 +130,9 @@ struct global_pipeline_context
 	{
 		std::vector<VkImageMemoryBarrier> ImageEndRenderBarriers = 
 		{
-			CreateImageBarrier(Context->SwapchainImages[BackBufferIndex], 0, 0, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+			CreateImageBarrier(Context->SwapchainImages[BackBufferIndex], VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
 		};
-		ImageBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, ImageEndRenderBarriers);
+		ImageBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, ImageEndRenderBarriers);
 
 		Context->CommandQueue.Execute(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 
@@ -320,12 +320,14 @@ public:
 		bool UseDepth;
 		bool UseBackFace;
 		bool UseOutline;
+		bool UseMultiview;
+		uint8_t ViewMask;
 	};
 
 	template<typename T>
-	render_context(std::unique_ptr<T>& Context, u32 NewWidth, u32 NewHeight,
+	render_context(std::unique_ptr<T>& Context,
 				   const shader_input& Signature,
-				   std::initializer_list<const std::string> ShaderList, const std::vector<VkFormat>& ColorTargetFormats, const input_data& InputData = {true, true, true, false}) : InputSignature(Signature), Width(NewWidth), Height(NewHeight), UseColorTarget(InputData.UseColor), UseDepthTarget(InputData.UseDepth)
+				   std::initializer_list<const std::string> ShaderList, const std::vector<VkFormat>& ColorTargetFormats, const input_data& InputData = {true, true, true, false, false, 0}) : InputSignature(&Signature), UseColorTarget(InputData.UseColor), UseDepthTarget(InputData.UseDepth)
 	{		
 		RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
 		Device = Context->Device;
@@ -371,8 +373,61 @@ public:
 			}
 		}
 
-		Pipeline = Context->CreateGraphicsPipeline(Signature.Handle, ShaderStages, ColorTargetFormats, InputData.UseColor, InputData.UseDepth, InputData.UseBackFace, InputData.UseOutline);
+		Pipeline = Context->CreateGraphicsPipeline(Signature.Handle, ShaderStages, ColorTargetFormats, InputData.UseColor, InputData.UseDepth, InputData.UseBackFace, InputData.UseOutline, InputData.ViewMask, InputData.UseMultiview);
 	}
+
+	render_context(const render_context&) = delete;
+	render_context& operator=(const render_context&) = delete;
+
+    render_context(render_context&& other) noexcept : 
+		ColorTargets(std::move(other.ColorTargets)),
+		DepthTarget(std::move(other.DepthTarget)),
+		UseColorTarget(std::move(other.UseColorTarget)),
+		UseDepthTarget(std::move(other.UseDepthTarget)),
+		GlobalOffset(std::move(other.GlobalOffset)),
+		PushConstantIdx(std::move(other.PushConstantIdx)),
+		RenderingInfo(std::move(other.RenderingInfo)),
+		SetIndices(std::move(other.SetIndices)),
+		ShaderStages(std::move(other.ShaderStages)),
+		PushDescriptorBindings(std::move(other.PushDescriptorBindings)),
+		StaticDescriptorBindings(std::move(other.StaticDescriptorBindings)),
+		BufferInfos(std::move(other.BufferInfos)),
+		BufferArrayInfos(std::move(other.BufferArrayInfos)),
+		RenderingAttachmentInfos(std::move(other.RenderingAttachmentInfos)),
+		RenderingAttachmentInfoArrays(std::move(other.RenderingAttachmentInfoArrays)),
+		InputSignature(other.InputSignature),
+		PipelineContext(std::move(other.PipelineContext)),
+		Device(std::move(other.Device)),
+		Pipeline(std::move(other.Pipeline))
+	{}
+
+    // Move assignment operator
+    render_context& operator=(render_context&& other) noexcept 
+	{
+        if (this != &other) 
+		{
+			ColorTargets = std::move(other.ColorTargets);
+			DepthTarget = std::move(other.DepthTarget);
+			UseColorTarget = std::move(other.UseColorTarget);
+			UseDepthTarget = std::move(other.UseDepthTarget);
+			GlobalOffset = std::move(other.GlobalOffset);
+			PushConstantIdx = std::move(other.PushConstantIdx);
+			RenderingInfo = std::move(other.RenderingInfo);
+			SetIndices = std::move(other.SetIndices);
+			ShaderStages = std::move(other.ShaderStages);
+			PushDescriptorBindings = std::move(other.PushDescriptorBindings);
+			StaticDescriptorBindings = std::move(other.StaticDescriptorBindings);
+			BufferInfos = std::move(other.BufferInfos);
+			BufferArrayInfos = std::move(other.BufferArrayInfos);
+			RenderingAttachmentInfos = std::move(other.RenderingAttachmentInfos);
+			RenderingAttachmentInfoArrays = std::move(other.RenderingAttachmentInfoArrays);
+			InputSignature = other.InputSignature;
+			PipelineContext = std::move(other.PipelineContext);
+			Device = std::move(other.Device);
+			Pipeline = std::move(other.Pipeline);
+        }
+        return *this;
+    }
 
 	void DestroyObject()
 	{
@@ -385,25 +440,24 @@ public:
 	}
 
 	template<typename T>
-	void Begin(std::unique_ptr<T>& Context, const global_pipeline_context& GlobalPipelineContext)
+	void Begin(std::unique_ptr<T>& Context, const global_pipeline_context& GlobalPipelineContext, u32 RenderWidth, u32 RenderHeight)
 	{
 		PipelineContext = GlobalPipelineContext;
 
-		std::vector<VkImageMemoryBarrier> ImageBeginRenderBarriers = {};
-		if(UseColorTarget) 
+		std::vector<VkDescriptorSet> SetsToBind;
+		for(const VkDescriptorSet& DescriptorSet : InputSignature->Sets)
 		{
-			for(texture& ColorTarget : ColorTargets)
-				ImageBeginRenderBarriers.push_back(CreateImageBarrier(ColorTarget.Handle, 0, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+			if(DescriptorSet) SetsToBind.push_back(DescriptorSet);
 		}
-		if(UseDepthTarget) ImageBeginRenderBarriers.push_back(CreateImageBarrier(DepthTarget.Handle, 0, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
-		ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ImageBeginRenderBarriers);
 
 		vkCmdBeginRenderingKHR(*PipelineContext.CommandList, &RenderingInfo);
 
 		vkCmdBindPipeline(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
+		if(SetsToBind.size())
+			vkCmdBindDescriptorSets(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
 
-		VkViewport Viewport = {0, (float)Height, (float)Width, -(float)Height, 0, 1};
-		VkRect2D Scissor = {{0, 0}, {Width, Height}};
+		VkViewport Viewport = {0, (float)RenderHeight, (float)RenderWidth, -(float)RenderHeight, 0, 1};
+		VkRect2D Scissor = {{0, 0}, {RenderWidth, RenderHeight}};
 		vkCmdSetViewport(*PipelineContext.CommandList, 0, 1, &Viewport);
 		vkCmdSetScissor(*PipelineContext.CommandList, 0, 1, &Scissor);
 	}
@@ -417,7 +471,8 @@ public:
 		PushConstantIdx = 0;
 
 		SetIndices.clear();
-		DescriptorBindings.clear();
+		PushDescriptorBindings.clear();
+		StaticDescriptorBindings.clear();
 		std::vector<std::unique_ptr<descriptor_info>>().swap(BufferInfos);
 		std::vector<std::unique_ptr<descriptor_info[]>>().swap(BufferArrayInfos);
 		std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>().swap(RenderingAttachmentInfos);
@@ -426,12 +481,13 @@ public:
 		vkCmdEndRenderingKHR(*PipelineContext.CommandList);
 	}
 
-	void SetColorTarget(VkAttachmentLoadOp LoadOp, VkAttachmentStoreOp StoreOp, u32 RenderWidth, u32 RenderHeight, const std::vector<texture>& ColorAttachments, VkClearValue Clear)
+	void SetColorTarget(VkAttachmentLoadOp LoadOp, VkAttachmentStoreOp StoreOp, u32 RenderWidth, u32 RenderHeight, const std::vector<texture>& ColorAttachments, VkClearValue Clear, u32 Face = 0, bool EnableMultiview = false)
 	{
 		ColorTargets = ColorAttachments;
 
 		RenderingInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
-		RenderingInfo.layerCount = 1;
+		RenderingInfo.layerCount = 1; // TODO: Set up layers count form images???
+		RenderingInfo.viewMask   = EnableMultiview * (1 << Face);
 
 		std::unique_ptr<VkRenderingAttachmentInfoKHR[]> ColorInfo((VkRenderingAttachmentInfoKHR*)calloc(sizeof(VkRenderingAttachmentInfoKHR), ColorAttachments.size()));
 		for(u32 AttachmentIdx = 0; AttachmentIdx < ColorAttachments.size(); ++AttachmentIdx)
@@ -449,12 +505,13 @@ public:
 		RenderingAttachmentInfoArrays.push_back(std::move(ColorInfo));
 	}
 
-	void SetDepthTarget(VkAttachmentLoadOp LoadOp, VkAttachmentStoreOp StoreOp, u32 RenderWidth, u32 RenderHeight, const texture& DepthAttachment, VkClearValue Clear)
+	void SetDepthTarget(VkAttachmentLoadOp LoadOp, VkAttachmentStoreOp StoreOp, u32 RenderWidth, u32 RenderHeight, const texture& DepthAttachment, VkClearValue Clear, u32 Face = 0, bool EnableMultiview = false)
 	{
 		DepthTarget = DepthAttachment;
 
 		RenderingInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
-		RenderingInfo.layerCount = 1;
+		RenderingInfo.layerCount = 1; // TODO: Set up layers count form images???
+		RenderingInfo.viewMask   = EnableMultiview * (1 << Face);
 
 		std::unique_ptr<VkRenderingAttachmentInfoKHR> DepthInfo = std::make_unique<VkRenderingAttachmentInfoKHR>();
 		DepthInfo->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
@@ -468,10 +525,11 @@ public:
 		RenderingAttachmentInfos.push_back(std::move(DepthInfo));
 	}
 
-	void SetStencilTarget(VkAttachmentLoadOp LoadOp, VkAttachmentStoreOp StoreOp, u32 RenderWidth, u32 RenderHeight, const texture& StencilAttachment, VkClearValue Clear)
+	void SetStencilTarget(VkAttachmentLoadOp LoadOp, VkAttachmentStoreOp StoreOp, u32 RenderWidth, u32 RenderHeight, const texture& StencilAttachment, VkClearValue Clear, u32 Face = 0, bool EnableMultiview = false)
 	{
-		RenderingInfo.renderArea = {{}, {Width, Height}};
+		RenderingInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
 		RenderingInfo.layerCount = 1; // TODO: Set up layers count form images???
+		RenderingInfo.viewMask   = EnableMultiview * (1 << Face);
 
 		std::unique_ptr<VkRenderingAttachmentInfoKHR> StencilInfo = std::make_unique<VkRenderingAttachmentInfoKHR>();
 		StencilInfo->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
@@ -485,9 +543,14 @@ public:
 		RenderingAttachmentInfos.push_back(std::move(StencilInfo));
 	}
 
+	void StaticUpdate()
+	{
+		vkUpdateDescriptorSets(Device, StaticDescriptorBindings.size(), StaticDescriptorBindings.data(), 0, nullptr);
+	}
+
 	void Draw(const buffer& VertexBuffer, u32 FirstVertex, u32 VertexCount)
 	{
-		vkCmdPushDescriptorSetKHR(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature.Handle, 0, DescriptorBindings.size(), DescriptorBindings.data());
+		vkCmdPushDescriptorSetKHR(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 		vkCmdDraw(*PipelineContext.CommandList, VertexCount, 1, FirstVertex, 0);
 		SetIndices.clear();
 		GlobalOffset = 0;
@@ -496,7 +559,7 @@ public:
 
 	void DrawIndexed(const buffer& IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance = 0, u32 InstanceCount = 1)
 	{
-		vkCmdPushDescriptorSetKHR(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature.Handle, 0, DescriptorBindings.size(), DescriptorBindings.data());
+		vkCmdPushDescriptorSetKHR(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 		vkCmdBindIndexBuffer(*PipelineContext.CommandList, IndexBuffer.Handle, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(*PipelineContext.CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 		SetIndices.clear();
@@ -507,7 +570,7 @@ public:
 	template<typename command_structure>
 	void DrawIndirect(u32 ObjectDrawCount, const buffer& IndexBuffer, const buffer& IndirectCommands)
 	{
-		vkCmdPushDescriptorSetKHR(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature.Handle, 0, DescriptorBindings.size(), DescriptorBindings.data());
+		vkCmdPushDescriptorSetKHR(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 		vkCmdBindIndexBuffer(*PipelineContext.CommandList, IndexBuffer.Handle, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexedIndirectCount(*PipelineContext.CommandList, IndirectCommands.Handle, 0, IndirectCommands.Handle, IndirectCommands.CounterOffset, ObjectDrawCount, sizeof(command_structure));
 		SetIndices.clear();
@@ -517,27 +580,33 @@ public:
 
 	void SetConstant(void* Data, size_t Size)
 	{
-		vkCmdPushConstants(*PipelineContext.CommandList, InputSignature.Handle, InputSignature.PushConstants[PushConstantIdx++].stageFlags, GlobalOffset, Size, Data);
+		vkCmdPushConstants(*PipelineContext.CommandList, InputSignature->Handle, InputSignature->PushConstants[PushConstantIdx++].stageFlags, GlobalOffset, Size, Data);
 		GlobalOffset += Size;
 	}
 
 	// NOTE: If with counter, then it is using 2 bindings instead of 1
 	void SetStorageBufferView(const buffer& Buffer, b32 UseCounter = true, u32 Set = 0)
 	{
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 		std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 		BufferInfo->buffer = Buffer.Handle;
 		BufferInfo->offset = Buffer.Offset;
-		BufferInfo->range = Buffer.WithCounter ? Buffer.CounterOffset : Buffer.Size;
+		BufferInfo->range  = Buffer.WithCounter ? Buffer.CounterOffset : Buffer.Size;
 
 		VkWriteDescriptorSet CounterDescriptorSet = {};
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
 		DescriptorSet.descriptorCount = 1;
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
 		SetIndices[Set] += 1;
 
 		BufferInfos.push_back(std::move(BufferInfo));
@@ -549,11 +618,16 @@ public:
 			CounterBufferInfo->range = sizeof(u32);
 
 			CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			if(!IsPush)
+				CounterDescriptorSet.dstSet = InputSignature->Sets[Set];
 			CounterDescriptorSet.dstBinding = SetIndices[Set];
 			CounterDescriptorSet.descriptorCount = 1;
 			CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
-			DescriptorBindings.push_back(CounterDescriptorSet);
+			if(IsPush)
+				PushDescriptorBindings.push_back(CounterDescriptorSet);
+			else
+				StaticDescriptorBindings.push_back(CounterDescriptorSet);
 			SetIndices[Set] += 1;
 
 			BufferInfos.push_back(std::move(CounterBufferInfo));
@@ -562,6 +636,7 @@ public:
 
 	void SetUniformBufferView(const buffer& Buffer, bool UseCounter = true, u32 Set = 0)
 	{
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 		std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 		BufferInfo->buffer = Buffer.Handle;
@@ -571,11 +646,16 @@ public:
 		VkWriteDescriptorSet CounterDescriptorSet = {};
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
 		DescriptorSet.descriptorCount = 1;
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
 		SetIndices[Set] += 1;
 
 		BufferInfos.push_back(std::move(BufferInfo));
@@ -587,11 +667,16 @@ public:
 			CounterBufferInfo->range = sizeof(u32);
 
 			CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			if(!IsPush)
+				CounterDescriptorSet.dstSet = InputSignature->Sets[Set];
 			CounterDescriptorSet.dstBinding = SetIndices[Set];
 			CounterDescriptorSet.descriptorCount = 1;
 			CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
-			DescriptorBindings.push_back(CounterDescriptorSet);
+			if(IsPush)
+				PushDescriptorBindings.push_back(CounterDescriptorSet);
+			else
+				StaticDescriptorBindings.push_back(CounterDescriptorSet);
 			SetIndices[Set] += 1;
 
 			BufferInfos.push_back(std::move(CounterBufferInfo));
@@ -601,6 +686,12 @@ public:
 	// TODO: Remove image layouts and move them inside texture structure
 	void SetSampledImage(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
+		if(Textures.size() == 0)
+		{
+			SetIndices[Set] += 1;
+			return;
+		}
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
@@ -611,18 +702,30 @@ public:
 
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
+		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 		DescriptorSet.descriptorCount = Textures.size();
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 		DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
-		SetIndices[Set] += Textures.size();
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
+		SetIndices[Set] += 1;
 
 		BufferArrayInfos.push_back(std::move(ImageInfo));
 	}
 
 	void SetStorageImage(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
+		if(Textures.size() == 0)
+		{
+			SetIndices[Set] += 1;
+			return;
+		}
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
@@ -633,18 +736,29 @@ public:
 
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
 		DescriptorSet.descriptorCount = Textures.size();
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
-		SetIndices[Set] += Textures.size();
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
+		SetIndices[Set] += 1;
 
 		BufferArrayInfos.push_back(std::move(ImageInfo));
 	}
 
 	void SetImageSampler(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
+		if(Textures.size() == 0)
+		{
+			SetIndices[Set] += 1;
+			return;
+		}
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
@@ -655,18 +769,20 @@ public:
 
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
 		DescriptorSet.descriptorCount = Textures.size();
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
-		SetIndices[Set] += Textures.size();
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
+		SetIndices[Set] += 1;
 
 		BufferArrayInfos.push_back(std::move(ImageInfo));
 	}
-
-	u32 Width;
-	u32 Height;
 	
 private:
 	
@@ -683,22 +799,18 @@ private:
 	std::map<u32, u32> SetIndices;
 
 	std::vector<VkPipelineShaderStageCreateInfo> ShaderStages;
-	std::vector<VkWriteDescriptorSet> DescriptorBindings;
+	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;
+	std::vector<VkWriteDescriptorSet> StaticDescriptorBindings;
 	std::vector<std::unique_ptr<descriptor_info>>   BufferInfos;
 	std::vector<std::unique_ptr<descriptor_info[]>> BufferArrayInfos;
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>   RenderingAttachmentInfos;
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>> RenderingAttachmentInfoArrays;
 
-	VkFramebuffer Framebuffer;
-	VkFramebuffer GlobalShadowFramebuffer;
-
-	const shader_input& InputSignature;
+	const shader_input* InputSignature;
 	global_pipeline_context PipelineContext;
 
 	VkDevice Device;
 	VkPipeline Pipeline;
-	VkRenderPass RenderPass;
-	VkRenderPass ShadowRenderPass;
 };
 
 class compute_context
@@ -706,7 +818,7 @@ class compute_context
 public:
 	template<class T>
 	compute_context(std::unique_ptr<T>& Context, const shader_input& Signature, const std::string& Shader) :
-		InputSignature(Signature)
+		InputSignature(&Signature)
 	{
 		Device = Context->Device;
 
@@ -718,6 +830,52 @@ public:
 		Pipeline = Context->CreateComputePipeline(Signature.Handle, ComputeStage);
 	}
 
+	compute_context(const compute_context&) = delete;
+	compute_context& operator=(const compute_context&) = delete;
+
+    compute_context(compute_context&& other) noexcept : 
+		ComputeStage(std::move(other.ComputeStage)),
+		GlobalOffset(std::move(other.GlobalOffset)),
+		PushConstantIdx(std::move(other.PushConstantIdx)),
+		PushDescriptorBindings(std::move(other.PushDescriptorBindings)),
+		StaticDescriptorBindings(std::move(other.StaticDescriptorBindings)),
+		BufferInfos(std::move(other.BufferInfos)),
+		BufferArrayInfos(std::move(other.BufferArrayInfos)),
+		SetIndices(std::move(other.SetIndices)),
+		InputSignature(other.InputSignature),
+		PipelineContext(std::move(other.PipelineContext)),
+		Device(std::move(other.Device)),
+		Pipeline(other.Pipeline)
+    {
+    }
+
+    // Move assignment operator
+    compute_context& operator=(compute_context&& other) noexcept 
+	{
+        if (this != &other) 
+		{
+			ComputeStage = std::move(other.ComputeStage);
+
+			GlobalOffset = std::move(other.GlobalOffset);
+			PushConstantIdx = std::move(other.PushConstantIdx);
+
+			PushDescriptorBindings = std::move(other.PushDescriptorBindings);
+			StaticDescriptorBindings = std::move(other.StaticDescriptorBindings);
+			BufferInfos = std::move(other.BufferInfos);
+			BufferArrayInfos = std::move(other.BufferArrayInfos);
+
+			SetIndices = std::move(other.SetIndices);
+
+			InputSignature = other.InputSignature;
+			other.InputSignature = nullptr;
+			PipelineContext = std::move(other.PipelineContext);
+
+			Device = std::move(other.Device);
+			Pipeline = std::move(other.Pipeline);
+        }
+        return *this;
+    }
+
 	void DestroyObject()
 	{
 		PipelineContext = {};
@@ -728,7 +886,16 @@ public:
 	void Begin(const global_pipeline_context& GlobalPipelineContext)
 	{
 		PipelineContext = GlobalPipelineContext;
+
+		std::vector<VkDescriptorSet> SetsToBind;
+		for(const VkDescriptorSet& DescriptorSet : InputSignature->Sets)
+		{
+			if(DescriptorSet) SetsToBind.push_back(DescriptorSet);
+		}
+
 		vkCmdBindPipeline(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline);
+		if(SetsToBind.size())
+			vkCmdBindDescriptorSets(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, InputSignature->Handle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
 	}
 
 	void End()
@@ -737,14 +904,20 @@ public:
 		PushConstantIdx = 0;
 
 		SetIndices.clear();
-		DescriptorBindings.clear();
+		PushDescriptorBindings.clear();
+		StaticDescriptorBindings.clear();
 		std::vector<std::unique_ptr<descriptor_info>>().swap(BufferInfos);
 		std::vector<std::unique_ptr<descriptor_info[]>>().swap(BufferArrayInfos);
 	}
 
+	void StaticUpdate()
+	{
+		vkUpdateDescriptorSets(Device, StaticDescriptorBindings.size(), StaticDescriptorBindings.data(), 0, nullptr);
+	}
+
 	void Execute(u32 X = 1, u32 Y = 1, u32 Z = 1)
 	{
-		vkCmdPushDescriptorSetKHR(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, InputSignature.Handle, 0, DescriptorBindings.size(), DescriptorBindings.data());
+		vkCmdPushDescriptorSetKHR(*PipelineContext.CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 		vkCmdDispatch(*PipelineContext.CommandList, (X + 31) / 32, (Y + 31) / 32, (Z + 31) / 32);
 		SetIndices.clear();
 		GlobalOffset = 0;
@@ -753,12 +926,13 @@ public:
 
 	void SetConstant(void* Data, size_t Size)
 	{
-		vkCmdPushConstants(*PipelineContext.CommandList, InputSignature.Handle, InputSignature.PushConstants[PushConstantIdx++].stageFlags, GlobalOffset, Size, Data);
+		vkCmdPushConstants(*PipelineContext.CommandList, InputSignature->Handle, InputSignature->PushConstants[PushConstantIdx++].stageFlags, GlobalOffset, Size, Data);
 		GlobalOffset += Size;
 	}
 
 	void SetStorageBufferView(const buffer& Buffer, bool UseCounter = true, u32 Set = 0)
 	{
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 		std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 		BufferInfo->buffer = Buffer.Handle;
@@ -768,11 +942,16 @@ public:
 		VkWriteDescriptorSet CounterDescriptorSet = {};
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
 		DescriptorSet.descriptorCount = 1;
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
 		SetIndices[Set] += 1;
 
 		BufferInfos.push_back(std::move(BufferInfo));
@@ -784,11 +963,16 @@ public:
 			CounterBufferInfo->range = sizeof(u32);
 
 			CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			if(!IsPush)
+				CounterDescriptorSet.dstSet = InputSignature->Sets[Set];
 			CounterDescriptorSet.dstBinding = SetIndices[Set];
 			CounterDescriptorSet.descriptorCount = 1;
 			CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
-			DescriptorBindings.push_back(CounterDescriptorSet);
+			if(IsPush)
+				PushDescriptorBindings.push_back(CounterDescriptorSet);
+			else
+				StaticDescriptorBindings.push_back(CounterDescriptorSet);
 			SetIndices[Set] += 1;
 
 			BufferInfos.push_back(std::move(CounterBufferInfo));
@@ -797,6 +981,7 @@ public:
 
 	void SetUniformBufferView(const buffer& Buffer, u32 UseCounter = true, u32 Set = 0)
 	{
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 		std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 		BufferInfo->buffer = Buffer.Handle;
@@ -806,11 +991,16 @@ public:
 		VkWriteDescriptorSet CounterDescriptorSet = {};
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
 		DescriptorSet.descriptorCount = 1;
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
 		SetIndices[Set] += 1;
 
 		BufferInfos.push_back(std::move(BufferInfo));
@@ -822,11 +1012,16 @@ public:
 			CounterBufferInfo->range = sizeof(u32);
 
 			CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			if(!IsPush)
+				CounterDescriptorSet.dstSet = InputSignature->Sets[Set];
 			CounterDescriptorSet.dstBinding = SetIndices[Set];
 			CounterDescriptorSet.descriptorCount = 1;
 			CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 			CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
-			DescriptorBindings.push_back(CounterDescriptorSet);
+			if(IsPush)
+				PushDescriptorBindings.push_back(CounterDescriptorSet);
+			else
+				StaticDescriptorBindings.push_back(CounterDescriptorSet);
 			SetIndices[Set] += 1;
 
 			BufferInfos.push_back(std::move(CounterBufferInfo));
@@ -836,6 +1031,12 @@ public:
 	// TODO: Remove image layouts and move them inside texture structure
 	void SetSampledImage(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
+		if(Textures.size() == 0)
+		{
+			SetIndices[Set] += 1;
+			return;
+		}
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
@@ -846,18 +1047,29 @@ public:
 
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
 		DescriptorSet.descriptorCount = Textures.size();
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 		DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
-		SetIndices[Set] += Textures.size();
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
+		SetIndices[Set] += 1;
 
 		BufferArrayInfos.push_back(std::move(ImageInfo));
 	}
 
 	void SetStorageImage(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
+		if(Textures.size() == 0)
+		{
+			SetIndices[Set] += 1;
+			return;
+		}
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
@@ -868,18 +1080,29 @@ public:
 
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
 		DescriptorSet.descriptorCount = Textures.size();
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
-		SetIndices[Set] += Textures.size();
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
+		SetIndices[Set] += 1;
 
 		BufferArrayInfos.push_back(std::move(ImageInfo));
 	}
 
 	void SetImageSampler(const std::vector<texture>& Textures, VkImageLayout Layout, u32 ViewIdx = 0, u32 Set = 0)
 	{
+		if(Textures.size() == 0)
+		{
+			SetIndices[Set] += 1;
+			return;
+		}
+		bool IsPush = InputSignature->IsSetPush.at(Set);
 		std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 		for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 		{
@@ -890,12 +1113,17 @@ public:
 
 		VkWriteDescriptorSet DescriptorSet = {};
 		DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		if(!IsPush)
+			DescriptorSet.dstSet = InputSignature->Sets[Set];
 		DescriptorSet.dstBinding = SetIndices[Set];
 		DescriptorSet.descriptorCount = Textures.size();
 		DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-		DescriptorBindings.push_back(DescriptorSet);
-		SetIndices[Set] += Textures.size();
+		if(IsPush)
+			PushDescriptorBindings.push_back(DescriptorSet);
+		else
+			StaticDescriptorBindings.push_back(DescriptorSet);
+		SetIndices[Set] += 1;
 
 		BufferArrayInfos.push_back(std::move(ImageInfo));
 	}
@@ -907,13 +1135,14 @@ private:
 	u32 GlobalOffset = 0;
 	u32 PushConstantIdx = 0;
 
-	std::vector<VkWriteDescriptorSet> DescriptorBindings;
+	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;
+	std::vector<VkWriteDescriptorSet> StaticDescriptorBindings;
 	std::vector<std::unique_ptr<descriptor_info>> BufferInfos;
 	std::vector<std::unique_ptr<descriptor_info[]>> BufferArrayInfos;
 
 	std::map<u32, u32> SetIndices;
 
-	const shader_input& InputSignature;
+	const shader_input* InputSignature;
 	global_pipeline_context PipelineContext;
 
 	VkDevice Device;

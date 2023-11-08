@@ -16,7 +16,8 @@ set GameCppFiles="..\src\game_main.cpp"
 
 set DepthCascades=-DDEPTH_CASCADES_COUNT=3
 set UseDebugColorBlend=-DDEBUG_COLOR_BLEND=0
-set GBUFFER_COUNT=-DGBUFFER_COUNT=5
+set GBufferCount=-DGBUFFER_COUNT=5
+set LightSourcesMax=-DLIGHT_SOURCES_MAX_COUNT=4
 
 glslangValidator ..\shaders\mesh.vert.glsl %DepthCascades% -gVS -g -o ..\build\mesh.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.frag.glsl %DepthCascades% %UseDebugColorBlend% -gVS -g -o ..\build\mesh.frag.spv -e main --target-env vulkan1.3
@@ -24,8 +25,10 @@ glslangValidator ..\shaders\mesh.dbg.vert.glsl %DepthCascades% -o ..\build\mesh.
 glslangValidator ..\shaders\mesh.dbg.frag.glsl %DepthCascades% -o ..\build\mesh.dbg.frag.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.sdw.vert.glsl %DepthCascades% -o ..\build\mesh.sdw.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.sdw.frag.glsl -o ..\build\mesh.sdw.frag.spv -e main --target-env vulkan1.3
-glslangValidator ..\shaders\color_pass.comp.glsl %UseDebugColorBlend% %DepthCascades% -gVS -g -o ..\build\color_pass.comp.spv -e main --target-env vulkan1.3
-glslangValidator ..\shaders\screen_space_ambient_occlusion.comp.glsl %DepthCascades% -gVS -g -o ..\build\screen_space_ambient_occlusion.comp.spv -e main --target-env vulkan1.3
+glslangValidator ..\shaders\mesh.pnt.sdw.vert.glsl %DepthCascades% -gVS -g -o ..\build\mesh.pnt.sdw.vert.spv -e main --target-env vulkan1.3
+glslangValidator ..\shaders\mesh.pnt.sdw.frag.glsl -gVS -g -o ..\build\mesh.pnt.sdw.frag.spv -e main --target-env vulkan1.3
+glslangValidator ..\shaders\color_pass.comp.glsl %GBufferCount% %LightSourcesMax% %UseDebugColorBlend% %DepthCascades% -gVS -g -o ..\build\color_pass.comp.spv -e main --target-env vulkan1.3
+glslangValidator ..\shaders\screen_space_ambient_occlusion.comp.glsl %GBufferCount% %DepthCascades% -gVS -g -o ..\build\screen_space_ambient_occlusion.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\indirect_cull_frust.comp.glsl -o ..\build\indirect_cull_frust.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\indirect_cull_occl.comp.glsl -o ..\build\indirect_cull_occl.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\depth_reduce.comp.glsl -o ..\build\depth_reduce.comp.spv -e main --target-env vulkan1.3
@@ -56,7 +59,7 @@ for %%f in ("..\src\game_scenes\*.cpp") do (
     set ExportName=!ExportName!Create
 	cl %CommonCompFlags% "!FileName!" /LD /Fe"!BaseName!" /Fd"!BaseName!" -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName%
 )
-cl %CommonCompFlags% /I%VulkanInc% user32.lib kernel32.lib vulkan-1.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBUFFER_COUNT% /Fe"Cynosure Engine" /Fd"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib%
+cl %CommonCompFlags% /I%VulkanInc% user32.lib kernel32.lib vulkan-1.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /Fd"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib%
 
 popd
 

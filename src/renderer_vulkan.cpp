@@ -127,7 +127,9 @@ renderer_backend(HWND Window, HINSTANCE CurrInst)
 		VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
 		VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME,
 		VK_EXT_SAMPLER_FILTER_MINMAX_EXTENSION_NAME,
+		VK_KHR_MULTIVIEW_EXTENSION_NAME,
 		"VK_KHR_dynamic_rendering",
+		"VK_EXT_descriptor_indexing",
 	};
 
 	float QueuePriorities[] = {1.0f};
@@ -138,6 +140,7 @@ renderer_backend(HWND Window, HINSTANCE CurrInst)
 	DeviceQueueCreateInfo.pQueuePriorities = QueuePriorities;
 
 	VkPhysicalDeviceFeatures2 Features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+	Features2.features.imageCubeArray = true;
 	Features2.features.multiDrawIndirect = true;
 	Features2.features.pipelineStatisticsQuery = true;
 	Features2.features.shaderInt16 = true;
@@ -145,12 +148,15 @@ renderer_backend(HWND Window, HINSTANCE CurrInst)
 
 	VkPhysicalDeviceVulkan11Features Features11 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 	Features11.storageBuffer16BitAccess = true;
+	Features11.multiview = true;
 
 	VkPhysicalDeviceVulkan12Features Features12 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
 	Features12.drawIndirectCount = true;
 	Features12.shaderFloat16 = true;
 	Features12.shaderInt8 = true;
 	Features12.samplerFilterMinmax = true;
+	Features12.descriptorIndexing = true;
+	Features12.descriptorBindingPartiallyBound = true;
 
 	VkPhysicalDeviceVulkan13Features Features13 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 	Features13.maintenance4 = true;
@@ -227,7 +233,7 @@ DestroyObject()
 }
 
 VkPipeline renderer_backend::
-CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipelineShaderStageCreateInfo>& Stages, const std::vector<VkFormat>& ColorAttachmentFormats, bool UseColor, bool UseDepth, bool BackFaceCull, bool UseOutline)
+CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipelineShaderStageCreateInfo>& Stages, const std::vector<VkFormat>& ColorAttachmentFormats, bool UseColor, bool UseDepth, bool BackFaceCull, bool UseOutline, u8 ViewMask, bool UseMultiview)
 {
 	VkGraphicsPipelineCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
 
@@ -239,6 +245,7 @@ CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipel
 	PipelineRenderingCreateInfo.colorAttachmentCount    = ColorAttachmentFormats.size();
 	PipelineRenderingCreateInfo.pColorAttachmentFormats = UseColor ? ColorAttachmentFormats.data() : nullptr;
 	PipelineRenderingCreateInfo.depthAttachmentFormat   = UseDepth ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED;
+	PipelineRenderingCreateInfo.viewMask = UseMultiview * ViewMask;
 
 	VkPipelineVertexInputStateCreateInfo VertexInputState = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 

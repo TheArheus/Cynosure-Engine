@@ -132,7 +132,7 @@ u32 SelectMemoryType(const VkPhysicalDeviceMemoryProperties& MemoryProperties, u
 
 VkImageMemoryBarrier
 CreateImageBarrier(VkImage Image, VkAccessFlags SrcAccess, VkAccessFlags DstAccess, 
-				   VkImageLayout SrcImageLayout, VkImageLayout DstImageLayout, VkImageAspectFlags AspectMask = VK_IMAGE_ASPECT_COLOR_BIT)
+				   VkImageLayout SrcImageLayout, VkImageLayout DstImageLayout, VkImageAspectFlags AspectMask = VK_IMAGE_ASPECT_COLOR_BIT, u32 BaseArrayLayer = 0, u32 ArrayLayersCount = VK_REMAINING_ARRAY_LAYERS, u32 BaseMip = 0, u32 MipLevelsCount = VK_REMAINING_MIP_LEVELS)
 {
 	VkImageMemoryBarrier ImageMemoryBarrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
 	ImageMemoryBarrier.srcAccessMask = SrcAccess;
@@ -143,8 +143,10 @@ CreateImageBarrier(VkImage Image, VkAccessFlags SrcAccess, VkAccessFlags DstAcce
 	ImageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	ImageMemoryBarrier.image = Image;
 	ImageMemoryBarrier.subresourceRange.aspectMask = AspectMask;
-	ImageMemoryBarrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-	ImageMemoryBarrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+	ImageMemoryBarrier.subresourceRange.baseMipLevel   = BaseMip;
+	ImageMemoryBarrier.subresourceRange.levelCount = MipLevelsCount;
+	ImageMemoryBarrier.subresourceRange.baseArrayLayer = BaseArrayLayer;
+	ImageMemoryBarrier.subresourceRange.layerCount = ArrayLayersCount;
 	return ImageMemoryBarrier;
 }
 

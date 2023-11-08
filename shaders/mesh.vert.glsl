@@ -18,7 +18,9 @@ struct global_world_data
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
 	float GlobalLightSize;
-	uint  ColorSourceCount;
+	uint  DirectionalLightSourceCount;
+	uint  PointLightSourceCount;
+	uint  SpotLightSourceCount;
 	float ScreenWidth;
 	float ScreenHeight;
 	float NearZ;
@@ -85,11 +87,7 @@ void main()
 	vec3 Normal  = normalize(vec3(NormalX, NormalY, NormalZ) / 127.0 - 1.0);
 	vec3 Tang    = normalize(vec3(In[VertexIndex].Tangent  ));
 	vec3 Bitang  = normalize(vec3(In[VertexIndex].Bitangent));
-    if (dot(cross(Normal, Tang), Bitang) < 0.0)
-	{
-		Tang = Tang * -1.0;
-	}
-	TBN           = mat3(Tang, -Bitang, Normal);
+	TBN          = mat3(Tang, Bitang, Normal);
 
 	Out.Norm      = vec4(Normal, 0.0);
 	Out.Col		  = MeshDrawCommands[InstanceIndex].Mat.LightEmmit;

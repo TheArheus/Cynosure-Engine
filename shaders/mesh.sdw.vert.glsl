@@ -36,7 +36,9 @@ struct global_world_data
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
 	float GlobalLightSize;
-	uint  ColorSourceCount;
+	uint  DirectionalLightSourceCount;
+	uint  PointLightSourceCount;
+	uint  SpotLightSourceCount;
 	float ScreenWidth;
 	float ScreenHeight;
 	float NearZ;
