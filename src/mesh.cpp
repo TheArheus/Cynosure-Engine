@@ -32,6 +32,33 @@ Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices)
 	return MeshIndex++;
 }
 
+u32 mesh::
+Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices, const std::vector<offset>& NewDataOffsets)
+{
+	offset NewOffset = {};
+	NewOffset.VertexOffset = Vertices.size();
+	NewOffset.IndexOffset  = VertexIndices.size();
+	for(const offset& DataOffset : NewDataOffsets)
+	{
+		NewOffset.AABB = DataOffset.AABB;
+		NewOffset.BoundingSphere = DataOffset.BoundingSphere;
+
+		NewOffset.VertexCount   = DataOffset.VertexCount;
+		NewOffset.IndexCount    = DataOffset.IndexCount;
+		Offsets.push_back(NewOffset);
+		NewOffset.VertexOffset += DataOffset.VertexCount;
+		NewOffset.IndexOffset  += DataOffset.IndexCount;
+	}
+
+	Vertices.insert(Vertices.end(), NewVertices.begin(), NewVertices.end());
+	VertexIndices.insert(VertexIndices.end(), NewIndices.begin(), NewIndices.end());
+
+	u32 Result = MeshIndex;
+	MeshIndex+=NewDataOffsets.size();
+	MeshCount+=NewDataOffsets.size();
+	return Result; // ???
+}
+
 void mesh::
 Load(mesh& NewMesh)
 {
@@ -39,18 +66,63 @@ Load(mesh& NewMesh)
 	NewOffset.VertexOffset = Vertices.size();
 	NewOffset.IndexOffset  = VertexIndices.size();
 
+	for(const offset& DataOffset : NewMesh.Offsets)
+	{
+		NewOffset.AABB = DataOffset.AABB;
+		NewOffset.BoundingSphere = DataOffset.BoundingSphere;
+
+		NewOffset.VertexCount   = DataOffset.VertexCount;
+		NewOffset.IndexCount    = DataOffset.IndexCount;
+		Offsets.push_back(NewOffset);
+		NewOffset.VertexOffset += DataOffset.VertexCount;
+		NewOffset.IndexOffset  += DataOffset.IndexCount;
+	}
 	Vertices.insert(Vertices.end(), NewMesh.Vertices.begin(), NewMesh.Vertices.end());
 	VertexIndices.insert(VertexIndices.end(), NewMesh.VertexIndices.begin(), NewMesh.VertexIndices.end());
 
-	NewOffset.AABB = NewMesh.Offsets[0].AABB;
-	NewOffset.BoundingSphere = NewMesh.Offsets[0].BoundingSphere;
+	NewOffset = {};
+	NewOffset.VertexOffset = NTBVertices.size();
+	NewOffset.IndexOffset  = NTBIndices.size();
+	for(const offset& DataOffset : NewMesh.NTBOffsets)
+	{
+		NewOffset.VertexCount   = DataOffset.VertexCount;
+		NewOffset.IndexCount    = DataOffset.IndexCount;
+		NTBOffsets.push_back(NewOffset);
+		NewOffset.VertexOffset += DataOffset.VertexCount;
+		NewOffset.IndexOffset  += DataOffset.IndexCount;
+	}
 
-	NewOffset.VertexCount = NewMesh.Vertices.size();
-	NewOffset.IndexCount  = NewMesh.VertexIndices.size();
-	Offsets.push_back(NewOffset);
+	NTBVertices.insert(NTBVertices.end(), NewMesh.NTBVertices.begin(), NewMesh.NTBVertices.end());
+	NTBIndices.insert(NTBIndices.end(), NewMesh.NTBIndices.begin(), NewMesh.NTBIndices.end());
 
-	MeshCount++;
-	MeshIndex++;
+	MeshIndex+=NewMesh.Offsets.size();
+	MeshCount+=NewMesh.Offsets.size();
+}
+
+void mesh::
+LoadDebug(mesh& NewMesh)
+{
+	offset NewOffset = {};
+
+	NewOffset.VertexOffset = NTBVertices.size();
+	NewOffset.IndexOffset  = NTBIndices.size();
+	for(const offset& DataOffset : NewMesh.NTBOffsets)
+	{
+		NewOffset.AABB = DataOffset.AABB;
+		NewOffset.BoundingSphere = DataOffset.BoundingSphere;
+
+		NewOffset.VertexCount   = DataOffset.VertexCount;
+		NewOffset.IndexCount    = DataOffset.IndexCount;
+		Offsets.push_back(NewOffset);
+		NewOffset.VertexOffset += DataOffset.VertexCount;
+		NewOffset.IndexOffset  += DataOffset.IndexCount;
+	}
+
+	Vertices.insert(Vertices.end(), NewMesh.NTBVertices.begin(), NewMesh.NTBVertices.end());
+	VertexIndices.insert(VertexIndices.end(), NewMesh.NTBIndices.begin(), NewMesh.NTBIndices.end());
+
+	MeshCount+=NewMesh.NTBOffsets.size();
+	MeshIndex+=NewMesh.NTBOffsets.size();
 }
 
 u32 mesh::
@@ -59,6 +131,10 @@ Load(const std::string& Path, u32 BoundingGeneration)
 	offset NewOffset = {};
 	NewOffset.VertexOffset = Vertices.size();
 	NewOffset.IndexOffset  = VertexIndices.size();
+
+	offset NewNTBOffset = {};
+	NewNTBOffset.VertexOffset = NTBVertices.size();
+	NewNTBOffset.IndexOffset  = NTBIndices.size();
 
 	std::vector<vec3> Coords;
 	std::vector<vec2> TextCoords;
@@ -95,10 +171,24 @@ Load(const std::string& Path, u32 BoundingGeneration)
 			}
 			if (Content[0] == 'f')
 			{
+				// NOTE: to handle models without normals and without texture coordinates
 				u32 Indices[3][3] = {};
-				sscanf(Content.c_str(), "f %u/%u/%u %u/%u/%u %u/%u/%u", &Indices[0][0], &Indices[1][0], &Indices[2][0], 
-																		&Indices[0][1], &Indices[1][1], &Indices[2][1], 
-																		&Indices[0][2], &Indices[1][2], &Indices[2][2]);
+				if(Normals.size() && TextCoords.size())
+				{
+					sscanf(Content.c_str(), "f %u/%u/%u %u/%u/%u %u/%u/%u", &Indices[0][0], &Indices[1][0], &Indices[2][0], 
+																			&Indices[0][1], &Indices[1][1], &Indices[2][1], 
+																			&Indices[0][2], &Indices[1][2], &Indices[2][2]);
+				}
+				else if(Normals.size())
+				{
+					sscanf(Content.c_str(), "f %u//%u %u//%u %u//%u", &Indices[0][0], &Indices[2][0], 
+																	  &Indices[0][1], &Indices[2][1], 
+																	  &Indices[0][2], &Indices[2][2]);
+				}
+				else
+				{
+					sscanf(Content.c_str(), "f %u %u %u", &Indices[0][0], &Indices[0][1], &Indices[0][2]);
+				}
 
 				CoordIndices.push_back(Indices[0][0]-1);
 				CoordIndices.push_back(Indices[0][1]-1);
@@ -124,7 +214,17 @@ Load(const std::string& Path, u32 BoundingGeneration)
 	u32 IndexCount = CoordIndices.size();
 	std::vector<u32> Indices(IndexCount);
 
+	std::vector<vertex> NTBVerticesResult1;
+	std::vector<u32> NTBIndicesResult1;
+	std::vector<vertex> NTBVerticesResult2;
+	std::vector<u32> NTBIndicesResult2;
+	std::vector<vertex> NTBVerticesResult3;
+	std::vector<u32> NTBIndicesResult3;
+
 	u32 VertexCount = 0;
+	u32 NTBVertexCount1 = 0;
+	u32 NTBVertexCount2 = 0;
+	u32 NTBVertexCount3 = 0;
 	for(u32 VertexIndex = 0;
 		VertexIndex < IndexCount;
 		VertexIndex += 3)
@@ -149,28 +249,61 @@ Load(const std::string& Path, u32 BoundingGeneration)
 		vec2 DAB = Vert2.TextureCoord - Vert1.TextureCoord;
 		vec2 DAC = Vert3.TextureCoord - Vert1.TextureCoord;
 
-		r32  Dir = (DAB.x * DAC.y - DAB.y * DAC.x) < 0.0 ? -1.0 : 1.0;
+		r32  Dir = 1.0 / (DAB.x * DAC.y - DAB.y * DAC.x);
 
 		vec3 Tangent   = ((AB * DAC.y - AC * DAB.y) * Dir);
 		vec3 Bitangent = ((AC * DAB.x - AB * DAC.x) * Dir);
 
+		vec3 Norm1 = {};
+		vec3 Norm2 = {};
+		vec3 Norm3 = {};
 		if(NormalIndices.size() != 0)
 		{
-			vec3 Norm1 = Normals[NormalIndices[VertexIndex + 0]];
-			vec3 Norm2 = Normals[NormalIndices[VertexIndex + 1]];
-			vec3 Norm3 = Normals[NormalIndices[VertexIndex + 2]];
-
-			Vert1.Tangent   = vec4(Tangent - Norm1 * Dot(Tangent, Norm1), 0);
-			Vert2.Tangent   = vec4(Tangent - Norm2 * Dot(Tangent, Norm2), 0);
-			Vert3.Tangent   = vec4(Tangent - Norm3 * Dot(Tangent, Norm3), 0);
-			Vert1.Bitangent = vec4(Bitangent - Norm1 * Dot(Bitangent, Norm1) - vec3(Vert1.Tangent) * Dot(Bitangent, vec3(Vert1.Tangent)), 0);
-			Vert2.Bitangent = vec4(Bitangent - Norm2 * Dot(Bitangent, Norm2) - vec3(Vert2.Tangent) * Dot(Bitangent, vec3(Vert2.Tangent)), 0);
-			Vert3.Bitangent = vec4(Bitangent - Norm3 * Dot(Bitangent, Norm3) - vec3(Vert3.Tangent) * Dot(Bitangent, vec3(Vert3.Tangent)), 0);
-
-			Vert1.Normal = ((u8(Norm1.x*127 + 127) << 24) | (u8(Norm1.y*127 + 127) << 16) | (u8(Norm1.z*127 + 127) << 8) | 0);
-			Vert2.Normal = ((u8(Norm2.x*127 + 127) << 24) | (u8(Norm2.y*127 + 127) << 16) | (u8(Norm2.z*127 + 127) << 8) | 0);
-			Vert3.Normal = ((u8(Norm3.x*127 + 127) << 24) | (u8(Norm3.y*127 + 127) << 16) | (u8(Norm3.z*127 + 127) << 8) | 0);
+			Norm1 = Normals[NormalIndices[VertexIndex + 0]];
+			Norm2 = Normals[NormalIndices[VertexIndex + 1]];
+			Norm3 = Normals[NormalIndices[VertexIndex + 2]];
 		} 
+		else
+		{
+			vec3 NewNormal = Cross(vec3(AC), vec3(AB)).Normalize();
+			Norm1 = NewNormal;
+			Norm2 = NewNormal;
+			Norm3 = NewNormal;
+		}
+		Vert1.Tangent   = Normalize(vec4(Tangent - Norm1 * Dot(Tangent, Norm1), 0));
+		Vert2.Tangent   = Normalize(vec4(Tangent - Norm2 * Dot(Tangent, Norm2), 0));
+		Vert3.Tangent   = Normalize(vec4(Tangent - Norm3 * Dot(Tangent, Norm3), 0));
+		Vert1.Bitangent = Normalize(vec4(Bitangent - Norm1 * Dot(Bitangent, Norm1) - vec3(Vert1.Tangent) * Dot(Bitangent, vec3(Vert1.Tangent)), 0));
+		Vert2.Bitangent = Normalize(vec4(Bitangent - Norm2 * Dot(Bitangent, Norm2) - vec3(Vert2.Tangent) * Dot(Bitangent, vec3(Vert2.Tangent)), 0));
+		Vert3.Bitangent = Normalize(vec4(Bitangent - Norm3 * Dot(Bitangent, Norm3) - vec3(Vert3.Tangent) * Dot(Bitangent, vec3(Vert3.Tangent)), 0));
+		Vert1.Normal = ((u8(Norm1.x*127 + 127) << 24) | (u8(Norm1.y*127 + 127) << 16) | (u8(Norm1.z*127 + 127) << 8) | 0);
+		Vert2.Normal = ((u8(Norm2.x*127 + 127) << 24) | (u8(Norm2.y*127 + 127) << 16) | (u8(Norm2.z*127 + 127) << 8) | 0);
+		Vert3.Normal = ((u8(Norm3.x*127 + 127) << 24) | (u8(Norm3.y*127 + 127) << 16) | (u8(Norm3.z*127 + 127) << 8) | 0);
+
+		vec4 CenterPos = (Vert1.Position + Vert2.Position + Vert3.Position) / 3.0;
+		CenterPos += Norm1 * 0.001;
+
+		vertex NTBVert = {};
+		NTBVert.Position = CenterPos;
+		NTBVerticesResult1.push_back(NTBVert);
+		NTBIndicesResult1.push_back(NTBVertexCount1++);
+		NTBVert.Position = CenterPos + Norm2 * 0.1;
+		NTBVerticesResult1.push_back(NTBVert);
+		NTBIndicesResult1.push_back(NTBVertexCount1++);
+
+		NTBVert.Position = CenterPos;
+		NTBVerticesResult2.push_back(NTBVert);
+		NTBIndicesResult2.push_back(NTBVertexCount2++);
+		NTBVert.Position = CenterPos + Vert2.Tangent * 0.1;
+		NTBVerticesResult2.push_back(NTBVert);
+		NTBIndicesResult2.push_back(NTBVertexCount2++);
+
+		NTBVert.Position = CenterPos;
+		NTBVerticesResult3.push_back(NTBVert);
+		NTBIndicesResult3.push_back(NTBVertexCount3++);
+		NTBVert.Position = CenterPos + Vert2.Bitangent * 0.1;
+		NTBVerticesResult3.push_back(NTBVert);
+		NTBIndicesResult3.push_back(NTBVertexCount3++);
 
 		if(UniqueVertices.count(Vert1) == 0)
 		{
@@ -208,6 +341,28 @@ Load(const std::string& Path, u32 BoundingGeneration)
 	NewOffset.VertexCount = Vertices.size();
 	NewOffset.IndexCount  = Indices.size();
 	Offsets.push_back(NewOffset);
+
+	NewNTBOffset.VertexCount = NTBVerticesResult1.size();
+	NewNTBOffset.IndexCount  = NTBIndicesResult1.size();
+	NTBOffsets.push_back(NewNTBOffset);
+	NTBVertices.insert(NTBVertices.end(), NTBVerticesResult1.begin(), NTBVerticesResult1.end());
+	NTBIndices.insert(NTBIndices.end(), NTBIndicesResult1.begin(), NTBIndicesResult1.end());
+
+	NewNTBOffset.VertexOffset = NTBVertices.size();
+	NewNTBOffset.IndexOffset  = NTBIndices.size();
+	NewNTBOffset.VertexCount = NTBVerticesResult2.size();
+	NewNTBOffset.IndexCount  = NTBIndicesResult2.size();
+	NTBOffsets.push_back(NewNTBOffset);
+	NTBVertices.insert(NTBVertices.end(), NTBVerticesResult2.begin(), NTBVerticesResult2.end());
+	NTBIndices.insert(NTBIndices.end(), NTBIndicesResult2.begin(), NTBIndicesResult2.end());
+
+	NewNTBOffset.VertexOffset = NTBVertices.size();
+	NewNTBOffset.IndexOffset  = NTBIndices.size();
+	NewNTBOffset.VertexCount = NTBVerticesResult3.size();
+	NewNTBOffset.IndexCount  = NTBIndicesResult3.size();
+	NTBOffsets.push_back(NewNTBOffset);
+	NTBVertices.insert(NTBVertices.end(), NTBVerticesResult3.begin(), NTBVerticesResult3.end());
+	NTBIndices.insert(NTBIndices.end(), NTBIndicesResult3.begin(), NTBIndicesResult3.end());
 
 	MeshCount++;
 	return MeshIndex++;

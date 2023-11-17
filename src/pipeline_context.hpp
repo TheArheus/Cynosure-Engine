@@ -88,7 +88,7 @@ struct global_pipeline_context
 	{
 		Context->CommandQueue.Execute(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 
-		vkDeviceWaitIdle(Context->Device);
+		//vkDeviceWaitIdle(Context->Device);
 	}
 
 	template<typename T>
@@ -102,7 +102,7 @@ struct global_pipeline_context
 	{
 		Context->CommandQueue.ExecuteAndRemove(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 
-		vkDeviceWaitIdle(Context->Device);
+		//vkDeviceWaitIdle(Context->Device);
 	}
 
 	template<typename T>
@@ -145,7 +145,7 @@ struct global_pipeline_context
 		PresentInfo.pImageIndices = &BackBufferIndex;
 		vkQueuePresentKHR(Context->CommandQueue.Handle, &PresentInfo);
 
-		vkDeviceWaitIdle(Context->Device);
+		//vkDeviceWaitIdle(Context->Device);
 	}
 
 	void FillBuffer(buffer& Buffer, u32 Value)
@@ -172,6 +172,16 @@ struct global_pipeline_context
 		vkCmdCopyImage(*CommandList, Src.Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Dst.Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &ImageCopyRegion);
 	}
 
+	void SetMemoryBarrier(const std::tuple<VkAccessFlags, VkAccessFlags>& BarrierData, 
+						  VkPipelineStageFlags SrcStageMask, VkPipelineStageFlags DstStageMask)
+	{
+		VkMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+		Barrier.srcAccessMask = std::get<0>(BarrierData);
+		Barrier.dstAccessMask = std::get<1>(BarrierData);
+
+		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, VK_DEPENDENCY_BY_REGION_BIT, 1, &Barrier, 0, 0, 0, 0);
+	}
+
 	void SetBufferBarrier(const std::tuple<buffer&, VkAccessFlags, VkAccessFlags>& BarrierData, 
 						  VkPipelineStageFlags SrcStageMask, VkPipelineStageFlags DstStageMask)
 	{
@@ -184,7 +194,7 @@ struct global_pipeline_context
 		Barrier.offset = std::get<0>(BarrierData).Offset;
 		Barrier.size = std::get<0>(BarrierData).Size;
 
-		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, 0, 0, 0, 1, &Barrier, 0, 0);
+		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &Barrier, 0, 0);
 	}
 
 	void SetBufferBarriers(const std::vector<std::tuple<buffer&, VkAccessFlags, VkAccessFlags>>& BarrierData, 
@@ -207,7 +217,7 @@ struct global_pipeline_context
 			Barriers.push_back(Barrier);
 		}
 
-		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, 0, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
+		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
 	}
 
 	void SetImageBarrier(const std::tuple<texture&, VkAccessFlags, VkAccessFlags, VkImageLayout, VkImageLayout, VkImageAspectFlags>& BarrierData, 

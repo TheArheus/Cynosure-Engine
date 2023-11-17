@@ -41,7 +41,6 @@ struct mesh_draw_command_input
 	vec4 Translate;
 	vec4 Scale;
 	uint MeshIndex;
-	bool IsVisible;
 };
 
 struct mesh_draw_command
@@ -83,11 +82,10 @@ struct indirect_draw_indexed_command
 
 layout(binding = 0) buffer readonly b0 { offset MeshOffsets[]; };
 layout(binding = 1) buffer b1 { mesh_draw_command_input MeshDrawCommandData[]; };
-layout(binding = 2) buffer b2 { indirect_draw_indexed_command IndirectDrawIndexedCommands[]; };
-layout(binding = 3) buffer c0 { uint IndirectDrawIndexedCommandsCounter; };
-layout(binding = 4) buffer b3 { mesh_draw_command MeshDrawCommands[]; };
-layout(binding = 5) buffer readonly b4 { mesh_comp_culling_common_input MeshCullingCommonInput; };
-layout(binding = 6) uniform sampler2D DepthPyramid;
+layout(binding = 2) buffer b2 { uint MeshDrawVisibilityData[]; };
+layout(binding = 3) buffer b3 { mesh_draw_command MeshDrawCommands[]; };
+layout(binding = 4) buffer readonly b4 { mesh_comp_culling_common_input MeshCullingCommonInput; };
+layout(binding = 5) uniform sampler2D DepthPyramid;
 
 
 void main()
@@ -157,6 +155,6 @@ void main()
 		IsVisible = IsVisible && (NewMin.z < (PyramidDepth + 0.025));
 	}
 
-	MeshDrawCommandData[DrawIndex].IsVisible = IsVisible;
+	MeshDrawVisibilityData[DrawIndex] = IsVisible ? 1 : 0;
 }
 

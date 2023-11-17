@@ -23,6 +23,7 @@ struct global_world_data
 	float NearZ;
 	float FarZ;
 	bool  DebugColors;
+	bool  LightSourceShadowsEnabled;
 };
 
 layout(binding = 0) readonly uniform block0 { global_world_data WorldUpdate; };

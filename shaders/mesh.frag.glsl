@@ -18,7 +18,8 @@ struct global_world_data
 	float ScreenHeight;
 	float NearZ;
 	float FarZ;
-	bool  DebugColors;
+	uint  DebugColors;
+	uint  LightSourceShadowsEnabled;
 };
 
 struct vert_in
@@ -49,17 +50,17 @@ layout(location = 4) out float OutputSpecular;
 void main()
 {
 	OutputVertexPosition = In.Coord;
-	OutputVertexNormal   = In.Norm;
+	OutputVertexNormal   = In.Norm * 0.5 + 0.5;
 
 	vec2 TextCoord = In.TextCoord;
-	vec3  ViewDir = (WorldUpdate.CameraPos - In.Coord).xyz;
+	vec3 ViewDir = (WorldUpdate.CameraPos - In.Coord).xyz;
 	if(length(ViewDir) < 6)
 	{
 		ViewDir = normalize(transpose(TBN) * ViewDir);
 		float HeightScale = 0.04;
 
-		const float MinLayers   = 32 ;
-		const float MaxLayers   = 128;
+		const float MinLayers   = 64 ;
+		const float MaxLayers   = 256;
 		float LayersCount       = mix(MaxLayers, MinLayers, max(dot(vec3(0, 0, 1), ViewDir), 0.0));
 		float LayersDepth       = 1.0 / LayersCount;
 		float CurrentLayerDepth = 0.0;
@@ -79,12 +80,12 @@ void main()
 		float AfterDepth  = CurrentDepth - CurrentLayerDepth;
 		float BeforeDepth = 1.0 - texture(HeightSampler, PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
 		float Weight	  = AfterDepth / (AfterDepth - BeforeDepth);
-		vec2  TextCoord   = mix(PrevTextCoord, CurrentTextCoord, Weight);
+		TextCoord   = mix(PrevTextCoord, CurrentTextCoord, Weight);
 
 		if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard;
 	}
 
-	OutputFragmentNormal = vec4(TBN * (texture(NormalSampler, TextCoord).rgb * 2.0 - 1.0), 0);
+	OutputFragmentNormal = vec4((TBN * texture(NormalSampler, TextCoord).rgb) * 0.5 + 0.5, 0);
 #if DEBUG_COLOR_BLEND
 	OutputDiffuse		 = vec4(vec3(0.1), 1.0);
 #else

@@ -4,16 +4,14 @@ struct cube_object : object_behavior
 {
 	~cube_object() override {}
 
+	std::vector<mesh_draw_command_input> OneDrawInstance;
+
 	void Start() override
 	{
 		Mesh.Load("..\\assets\\cube.obj", generate_aabb | generate_sphere);
-	}
 
-	void Update() override
-	{
 		vec4 Scale = vec4(vec3(1.0f / 2.0), 1.0);
-#if 1
-		u32 SceneRadius = 10;
+		u32  SceneRadius = 10;
 		for(u32 DataIdx = 0;
 			DataIdx < 512;
 			DataIdx++)
@@ -22,12 +20,13 @@ struct cube_object : object_behavior
 								  (float(rand()) / RAND_MAX) * 2 * SceneRadius - SceneRadius, 
 								  (float(rand()) / RAND_MAX) * 2 * SceneRadius - SceneRadius, 0.0f);
 
-			AddInstance({vec4(1, 1, 1, 1), 0, 0, 0, 0}, Translate, Scale, true);
+			AddInstance(OneDrawInstance, {vec4(1, 1, 1, 1), 0, 0, 0, 0}, Translate, Scale, true);
 		}
-#else
-		vec4 Translate(-4, 3, 2, 0);
-		AddInstance({vec4(1, 1, 1, 1), 0, 0, 0, 0}, Translate, Scale, true);
-#endif
+	}
+
+	void Update() override
+	{
+		UpdateInstances(OneDrawInstance);
 	}
 };
 

@@ -41,7 +41,6 @@ struct mesh_draw_command_input
 	vec4 Translate;
 	vec4 Scale;
 	uint MeshIndex;
-	bool IsVisible;
 };
 
 struct mesh_draw_command
@@ -82,13 +81,14 @@ struct indirect_draw_indexed_command
 
 layout(binding = 0) buffer readonly b0 { offset MeshOffsets[]; };
 layout(binding = 1) buffer readonly b1 { mesh_draw_command_input MeshDrawCommandData[]; };
-layout(binding = 2) buffer b2 { indirect_draw_indexed_command IndirectDrawIndexedCommands[]; };
-layout(binding = 3) buffer c0 { uint IndirectDrawIndexedCommandsCounter; };
-layout(binding = 4) buffer b3 { indirect_draw_indexed_command ShadowIndirectDrawIndexedCommands[]; };
-layout(binding = 5) buffer c1 { uint ShadowIndirectDrawIndexedCommandsCounter; };
-layout(binding = 6) buffer b4 { mesh_draw_command MeshDrawCommands[]; };
-layout(binding = 7) buffer b5 { mesh_draw_command MeshDrawShadowCommands[]; };
-layout(binding = 8) buffer readonly b6 { mesh_comp_culling_common_input MeshCullingCommonInput; };
+layout(binding = 2) buffer readonly b2 { uint MeshDrawVisibilityData[]; };
+layout(binding = 3) buffer b3 { indirect_draw_indexed_command IndirectDrawIndexedCommands[]; };
+layout(binding = 4) buffer c0 { uint IndirectDrawIndexedCommandsCounter; };
+layout(binding = 5) buffer b4 { indirect_draw_indexed_command ShadowIndirectDrawIndexedCommands[]; };
+layout(binding = 6) buffer c1 { uint ShadowIndirectDrawIndexedCommandsCounter; };
+layout(binding = 7) buffer b5 { mesh_draw_command MeshDrawCommands[]; };
+layout(binding = 8) buffer b6 { mesh_draw_command MeshDrawShadowCommands[]; };
+layout(binding = 9) buffer readonly b7 { mesh_comp_culling_common_input MeshCullingCommonInput; };
 
 void main()
 {
@@ -122,7 +122,7 @@ void main()
 		MeshDrawShadowCommands[InstanceIdx].Scale     = MeshDrawCommandData[DrawIndex].Scale;
 	}
 
-	if(!MeshDrawCommandData[DrawIndex].IsVisible)
+	if(MeshDrawVisibilityData[DrawIndex] == 0)
 	{
 		return;
 	}
@@ -148,7 +148,7 @@ void main()
 
 	if(IsVisible)
 	{
-		uint CommandIdx = MeshIndex;
+		uint CommandIdx  = MeshIndex;
 		uint InstanceIdx = atomicAdd(IndirectDrawIndexedCommands[MeshIndex].InstanceCount, 1);
 
 		IndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[MeshIndex].IndexCount;

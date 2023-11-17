@@ -60,7 +60,7 @@ struct buffer
 
 		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		CopyBarrier.buffer = Handle;
-		CopyBarrier.srcAccessMask = 0;
+		CopyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 		CopyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		CopyBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		CopyBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -93,7 +93,7 @@ struct buffer
 
 		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		CopyBarrier.buffer = Handle;
-		CopyBarrier.srcAccessMask = 0;
+		CopyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 		CopyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		CopyBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		CopyBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -316,6 +316,7 @@ struct texture
 		VkFormat Format;
 		VkImageUsageFlags Usage;
 		VkImageType ImageType;
+		VkImageLayout StartLayout;
 		VkImageViewType ViewType;
 		u32 MipLevels;
 		u32 Layers;
@@ -326,7 +327,7 @@ struct texture
 	texture() = default;
 
 	template<class T, class heap>
-	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
+	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
 	{
 		if(InputData.Layers == 6)
 		{
@@ -351,7 +352,7 @@ struct texture
 	}
 
 	template<class T, class heap>
-	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
+	texture(std::unique_ptr<T>& App, heap* Heap, u64 Offset, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
 	{
 		if(InputData.Layers == 6)
 		{
@@ -375,7 +376,7 @@ struct texture
 	}
 
 	template<class T>
-	texture(std::unique_ptr<T>& App, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
+	texture(std::unique_ptr<T>& App, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
 	{
 		if(InputData.Layers == 6)
 		{
@@ -400,7 +401,7 @@ struct texture
 	}
 
 	template<class T>
-	texture(std::unique_ptr<T>& App, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
+	texture(std::unique_ptr<T>& App, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_LAYOUT_UNDEFINED, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
 	{
 		if(InputData.Layers == 6)
 		{
@@ -492,7 +493,7 @@ struct texture
 
 	void CreateResource(const VkPhysicalDeviceMemoryProperties& _MemoryProperties, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, VkImageType ImageType = VK_IMAGE_TYPE_2D, VkFormat _Format = VK_FORMAT_R8G8B8A8_UINT, VkImageUsageFlags _Usage = VK_IMAGE_USAGE_STORAGE_BIT, u32 _MipLevels = 1, u32 Layers = 1, u64 _Alignment = 0)
 	{
-		Layout.ImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		Layout.ImageLayout = Info.StartLayout;
 		MemoryProperties = _MemoryProperties;
 
 		VkImageCreateInfo CreateInfo = {};
@@ -509,7 +510,7 @@ struct texture
 		CreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 		CreateInfo.usage = _Usage;
 		CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		CreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		CreateInfo.initialLayout = Info.StartLayout;
 
 		VK_CHECK(vkCreateImage(Device, &CreateInfo, 0, &Handle));
 

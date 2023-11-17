@@ -43,7 +43,8 @@ struct global_world_data
 	float ScreenHeight;
 	float NearZ;
 	float FarZ;
-	bool  DebugColors;
+	uint  DebugColors;
+	uint  LightSourceShadowsEnabled;
 };
 
 struct mesh_draw_command

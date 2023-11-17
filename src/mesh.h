@@ -64,7 +64,7 @@ struct mesh
 {
 	struct alignas(16) sphere
 	{
-		vec4 Center;
+		vec4  Center;
 		float Radius;
 	};
 
@@ -85,7 +85,7 @@ struct mesh
 
 	struct alignas(16) offset
 	{
-		aabb AABB;
+		aabb   AABB;
 		sphere BoundingSphere;
 
 		u32 VertexOffset;
@@ -99,10 +99,13 @@ struct mesh
 	mesh(const std::string& Path, u32 BoundingGeneration = 0);
 	mesh(std::initializer_list<std::string> Paths, u32 BoundingGeneration = 0);
 	void Reset() {MeshCount = 0; MeshIndex = 1;}
+	void Clear() {Vertices.clear(); VertexIndices.clear(); Meshlets.clear(); Offsets.clear(); NTBVertices.clear(); NTBIndices.clear(); NTBOffsets.clear(); Reset();}
 
 	u32  Load(const std::string& Path, u32 BoundingGeneration = 0);
 	u32  Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices);
+	u32  Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices, const std::vector<offset>& NewDataOffsets);
 	void Load(mesh& NewMesh);
+	void LoadDebug(mesh& NewMesh);
 	u32  Load() { MeshCount++; return MeshIndex++; };
 
 	void GenerateMeshlets();
@@ -113,10 +116,15 @@ struct mesh
 	u32 MeshCount = 0;
 	u32 MeshIndex = 1;
 
-	std::vector<vertex> Vertices;
-	std::vector<u32> VertexIndices;
+	std::vector<vertex>  Vertices;
+	std::vector<u32>     VertexIndices;
 	std::vector<meshlet> Meshlets;
-	std::vector<offset> Offsets;
+	std::vector<offset>  Offsets;
+
+	// NOTE: Data for rendering normals, tangents and bitangents
+	std::vector<vertex> NTBVertices;
+	std::vector<u32>    NTBIndices;
+	std::vector<offset> NTBOffsets;
 };
 
 #endif

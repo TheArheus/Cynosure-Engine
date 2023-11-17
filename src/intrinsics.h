@@ -233,13 +233,21 @@ struct game_input
 	r32 DeltaTime;
 };
 
+// TODO: Make scale to be vec4 and add rotation vector
+struct alignas(16) mesh_draw_command
+{
+	mesh::material Mat;
+	vec4 Translate;
+	vec4 Scale;
+	vec4 Rotate;
+};
+
 struct alignas(16) mesh_draw_command_input
 {
 	mesh::material Mat;
 	vec4 Translate;
 	vec4 Scale;
 	u32  MeshIndex;
-	bool IsVisible;
 };
 
 // NOTE: When light is point(w is a radius), then pos. Otherwise it is dir(w is cutoff angle for spot light).
@@ -430,8 +438,27 @@ public:
 	alloc_type& Allocator;
 };
 
-#define GameSceneStartFunc()  void Start(mesh& GlobalMeshes)
-#define GameSceneUpdateFunc() void Update(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalInstances)
+#define GameSceneStartFunc()  void Start(mesh& GlobalMeshes, mesh& GlobalDebugMeshes)
+#define GameSceneUpdateFunc() void Update(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalInstances, std::vector<u32, allocator_adapter<u32, linear_allocator>>& GlobalMeshVisibility, std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalDebugInstances, std::vector<u32, allocator_adapter<u32, linear_allocator>>& DebugMeshVisibility)
+
+// NOTE: Adding debug normals, tangents and bitangents
+#define ENABLE_DEBUG_GEOMETRIES GlobalDebugMeshes.LoadDebug(GlobalMeshes)
+#define ADD_DEBUG_INSTANCES \
+for(const mesh_draw_command_input& ObjectInstanceCommand : GlobalInstances) \
+{\
+	GlobalDebugInstances.push_back({{vec4(vec3(1, 0, 0), 1), 0, 0, 0, 0}, ObjectInstanceCommand.Translate, ObjectInstanceCommand.Scale, ObjectInstanceCommand.MeshIndex + 0}); \
+	DebugMeshVisibility.push_back(true);\
+}\
+for(const mesh_draw_command_input& ObjectInstanceCommand : GlobalInstances) \
+{\
+	GlobalDebugInstances.push_back({{vec4(vec3(0, 1, 0), 1), 0, 0, 0, 0}, ObjectInstanceCommand.Translate, ObjectInstanceCommand.Scale, ObjectInstanceCommand.MeshIndex + 1}); \
+	DebugMeshVisibility.push_back(true);\
+}\
+for(const mesh_draw_command_input& ObjectInstanceCommand : GlobalInstances) \
+{\
+	GlobalDebugInstances.push_back({{vec4(vec3(0, 0, 1), 1), 0, 0, 0, 0}, ObjectInstanceCommand.Translate, ObjectInstanceCommand.Scale, ObjectInstanceCommand.MeshIndex + 2}); \
+	DebugMeshVisibility.push_back(true);\
+}
 
 // TODO: Make a proper material code for each object
 struct object_behavior
@@ -442,6 +469,7 @@ struct object_behavior
 	texture_data SpecularMap;
 	texture_data DisplaceMap;
 	std::vector<mesh_draw_command_input> Instances;
+	std::vector<u32> InstancesVisibility;
 	u32  MeshIdx;
 	bool IsInitialized = false;
 
@@ -450,14 +478,35 @@ struct object_behavior
 	virtual void Start()  = 0;
 	virtual void Update() = 0;
 
+	void AddInstance(std::vector<mesh_draw_command_input>& _Instances, vec4 Translate, vec4 Scale, bool IsVisible)
+	{
+		mesh_draw_command_input Command = {};
+		Command.Translate = Translate;
+		Command.Scale = Scale;
+		Command.MeshIndex = MeshIdx;
+		_Instances.push_back(Command);
+		InstancesVisibility.push_back(IsVisible);
+	}
+
+	void AddInstance(std::vector<mesh_draw_command_input>& _Instances, mesh::material Mat, vec4 Translate, vec4 Scale, bool IsVisible)
+	{
+		mesh_draw_command_input Command = {};
+		Command.Mat = Mat;
+		Command.Translate = Translate;
+		Command.Scale = Scale;
+		Command.MeshIndex = MeshIdx;
+		_Instances.push_back(Command);
+		InstancesVisibility.push_back(IsVisible);
+	}
+
 	void AddInstance(vec4 Translate, vec4 Scale, bool IsVisible)
 	{
 		mesh_draw_command_input Command = {};
 		Command.Translate = Translate;
 		Command.Scale = Scale;
 		Command.MeshIndex = MeshIdx;
-		Command.IsVisible = IsVisible;
 		Instances.push_back(Command);
+		InstancesVisibility.push_back(IsVisible);
 	}
 
 	void AddInstance(mesh::material Mat, vec4 Translate, vec4 Scale, bool IsVisible)
@@ -467,14 +516,28 @@ struct object_behavior
 		Command.Translate = Translate;
 		Command.Scale = Scale;
 		Command.MeshIndex = MeshIdx;
-		Command.IsVisible = IsVisible;
 		Instances.push_back(Command);
+		InstancesVisibility.push_back(IsVisible);
+	}
+
+	void UpdateInstances(std::vector<mesh_draw_command_input>& _Instances)
+	{
+		for(mesh_draw_command_input& Instance : _Instances)
+		{
+			AddInstance(Instance.Mat, Instance.Translate, Instance.Scale, true);
+		}
 	}
 
 	void Reset()
 	{
 		Instances.clear();
+		InstancesVisibility.clear();
 	}
+};
+
+// TODO: implement particles
+struct particle_behavior
+{
 };
 
 struct scene
@@ -500,34 +563,47 @@ struct scene
 	}
 };
 
-#if 0
 class scene_manager
 {
 	std::vector<std::unique_ptr<scene>> Scenes;
 	u32 CurrentScene = 0;
 
+	mesh GlobalMeshes;
+	mesh DebugMeshes;
+
+	std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>> GlobalMeshInstances;
+	std::vector<u32, allocator_adapter<u32, linear_allocator>> GlobalMeshVisibility;
+	std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>> DebugMeshInstances;
+	std::vector<u32, allocator_adapter<u32, linear_allocator>> DebugMeshVisibility;
+	std::vector<light_source, allocator_adapter<light_source, linear_allocator>> GlobalLightSources;
+
 	// TODO: Load a scenes by their file names. Load and unload if scene was recompiled(many if needed, but for this I need to check this every times in the loop I guess but that is a lot of work and think about something better)
 	void LoadScene();
 	void StartScene();
 	void UpdateScene();
+
+	void SaveSceneToFile();
+	void LoadSceneFromFile();
 };
 
 void scene_manager::StartScene()
 {
-	if(!Scenes[CurrentScene]->IsInitialized) Scenes[CurrentScene]->Start();
+	if(!Scenes[CurrentScene]->IsInitialized)
+	{
+		GlobalMeshes.Clear();
+		DebugMeshes.Clear();
+		Scenes[CurrentScene]->Start(GlobalMeshes, DebugMeshes);
+	}
 }
 
-void scene_manager::UpdateScene(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& MeshDrawCommands)
+void scene_manager::UpdateScene()
 {
 	if(Scenes[CurrentScene]->IsInitialized)
 	{
-		Scenes[CurrentScene]->Update();
-
-		for(std::unique_ptr<object_behavior>& Object : Scenes[CurrentScene]->Objects)
-			
+		Scenes[CurrentScene]->Update(GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility);
+		GlobalLightSources.insert(GlobalLightSources.end(), Scenes[CurrentScene]->LightSources.begin(), Scenes[CurrentScene]->LightSources.end());
 	}
 }
-#endif
 
 #define GameSceneCreateFunc(name) scene* name()
 typedef GameSceneCreateFunc(game_scene_create);

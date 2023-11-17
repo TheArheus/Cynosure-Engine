@@ -97,6 +97,7 @@ public:
 		SubmitInfo.commandBufferCount = SubmitCommandLists.size();
 		SubmitInfo.pCommandBuffers = SubmitCommandLists.data();
 		VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
+		vkQueueWaitIdle(Handle);
 	}
 
 	void Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
@@ -119,6 +120,7 @@ public:
 		SubmitInfo.signalSemaphoreCount = 1;
 		SubmitInfo.pSignalSemaphores = ReleaseSemaphore;
 		VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
+		vkQueueWaitIdle(Handle);
 	}
 
 	void Execute(VkCommandBuffer* CommandList)
@@ -129,6 +131,7 @@ public:
 		SubmitInfo.commandBufferCount = 1;
 		SubmitInfo.pCommandBuffers = CommandList;
 		VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
+		vkQueueWaitIdle(Handle);
 	}
 
 	void Execute(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
@@ -145,6 +148,7 @@ public:
 		SubmitInfo.signalSemaphoreCount = 1;
 		SubmitInfo.pSignalSemaphores = ReleaseSemaphore;
 		VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
+		vkQueueWaitIdle(Handle);
 	}
 
 	void ExecuteAndRemove(VkCommandBuffer* CommandList)

@@ -874,88 +874,88 @@ operator*=(v4<T> lhs, const float& rhs)
 
 template<typename T>
 inline float 
-Dot(const v2<T>& lhs, const v2<T>& rhs)
+Dot(v2<T>&& lhs, v2<T>&& rhs)
 {
 	return lhs.x * rhs.x + lhs.y * rhs.y;
 }
 
 template<typename T>
 inline float 
-LengthSq(const v2<T>& v)
+LengthSq(v2<T>&& v)
 {
 	return Dot(v, v);
 }
 
 template<typename T> 
 inline float 
-Length(const v2<T>& v)
+Length(v2<T>&& v)
 {
 	return sqrtf(LengthSq(v));
 }
 
 template<typename T>
 inline v2<T>
-Normalize(v2<T>& v)
+Normalize(v2<T>&& v)
 {
-	v2<T> Result = v / v.Length();
+	v2<T> Result = v / Length(v);
 	return Result;
 }
 
 template<typename T>
 inline float 
-Dot(const v3<T>& lhs, const v3<T>& rhs)
+Dot(v3<T>&& lhs, v3<T>&& rhs)
 {
 	return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
 }
 
 template<typename T>
 inline float 
-LengthSq(const v3<T>& v)
+LengthSq(v3<T>&& v)
 {
 	return Dot(v, v);
 }
 
 template<typename T> 
 inline float 
-Length(const v3<T>& v)
+Length(v3<T>&& v)
 {
 	return sqrtf(LengthSq(v));
 }
 
 template<typename T>
 inline v3<T>
-Normalize(v3<T>& v)
+Normalize(v3<T>&& v)
 {
-	v3<T> Result = v / v.Length();
+	v3<T> Result = v / Length(v);
 	return Result;
 }
 
 template<typename T>
 inline float 
-Dot(const v4<T>& lhs, const v4<T>& rhs)
+Dot(v4<T>&& lhs, v4<T>&& rhs)
 {
 	return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
 }
 
 template<typename T>
 inline float 
-LengthSq(const v4<T>& v)
+LengthSq(v4<T>&& v)
 {
 	return Dot(v, v);
 }
 
 template<typename T> 
 inline float 
-Length(const v4<T>& v)
+Length(v4<T>&& v)
 {
 	return sqrtf(LengthSq(v));
 }
 
 template<typename T>
 inline v4<T>
-Normalize(v4<T>& v)
+Normalize(v4<T>&& v)
 {
-	v4<T> Result = v / v.Length();
+	v4<T> Result = v / Length(v);
 	return Result;
 }
 
@@ -968,7 +968,7 @@ Min(A a, B b)
 
 template<typename T>
 inline v2<T>
-Min(const v2<T>& a, const v2<T>& b)
+Min(v2<T>& a, v2<T>& b)
 {
 	v2<T> Result = {};
 	Result.x = Min(a.x, b.x);
@@ -978,7 +978,7 @@ Min(const v2<T>& a, const v2<T>& b)
 
 template<typename T>
 inline v3<T>
-Min(const v3<T>& a, const v3<T>& b)
+Min(v3<T>& a, v3<T>& b)
 {
 	v3<T> Result = {};
 	Result.x = Min(a.x, b.x);
@@ -989,7 +989,7 @@ Min(const v3<T>& a, const v3<T>& b)
 
 template<typename T>
 inline v4<T>
-Min(const v4<T>& a, const v4<T>& b)
+Min(v4<T>& a, v4<T>& b)
 {
 	v4<T> Result = {};
 	Result.x = Min(a.x, b.x);
@@ -1008,7 +1008,7 @@ Max(A a, B b)
 
 template<typename T>
 inline v2<T>
-Max(const v2<T>& a, const v2<T>& b)
+Max(v2<T>& a, v2<T>& b)
 {
 	v2<T> Result = {};
 	Result.x = Max(a.x, b.x);
@@ -1018,7 +1018,7 @@ Max(const v2<T>& a, const v2<T>& b)
 
 template<typename T>
 inline v3<T>
-Max(const v3<T>& a, const v3<T>& b)
+Max(v3<T>& a, v3<T>& b)
 {
 	v3<T> Result = {};
 	Result.x = Max(a.x, b.x);
@@ -1029,7 +1029,7 @@ Max(const v3<T>& a, const v3<T>& b)
 
 template<typename T>
 inline v4<T>
-Max(const v4<T>& a, const v4<T>& b)
+Max(v4<T>& a, v4<T>& b)
 {
 	v4<T> Result = {};
 	Result.x = Max(a.x, b.x);
@@ -1109,13 +1109,13 @@ Cross(v3<T> A, v3<T> B)
 #define vec3 v3<float>
 #define vec4 v4<float>
 
-using ivec2 = v2<int32_t>;
-using ivec3 = v3<int32_t>;
-using ivec4 = v4<int32_t>;
+#define ivec2 v2<int32_t>
+#define ivec3 v3<int32_t>
+#define ivec4 v4<int32_t>
 
-using uvec2 = v2<uint32_t>;
-using uvec3 = v3<uint32_t>;
-using uvec4 = v4<uint32_t>;
+#define uvec2 v2<uint32_t>
+#define uvec3 v3<uint32_t>
+#define uvec4 v4<uint32_t>
 
 inline float 
 Dot(const vec2& lhs, const vec2& rhs)

@@ -34,7 +34,8 @@ struct global_world_data
 	float ScreenHeight;
 	float NearZ;
 	float FarZ;
-	bool  DebugColors;
+	uint  DebugColors;
+	uint  LightSourceShadowsEnabled;
 };
 
 struct material
@@ -52,7 +53,6 @@ struct mesh_draw_command_data
 	vec4 Translate;
 	vec4 Scale;
 	uint MeshIndex;
-	bool IsVisible;
 };
 
 layout(binding = 0) readonly buffer block0
@@ -74,7 +74,8 @@ layout(location = 0) out vec4 OutCol;
 
 void main()
 {
-	gl_Position = WorldUpdate.Proj * WorldUpdate.View * In[gl_VertexIndex].Pos;
+	vec4 Position = In[gl_VertexIndex].Pos * MeshData[gl_InstanceIndex].Scale + MeshData[gl_InstanceIndex].Translate;
+	gl_Position = WorldUpdate.Proj * WorldUpdate.View * Position;
 	OutCol = MeshData[gl_InstanceIndex].Mat.LightEmmit;
 }
 

@@ -27,7 +27,8 @@ struct global_world_data
 	float ScreenHeight;
 	float NearZ;
 	float FarZ;
-	bool  DebugColors;
+	uint  DebugColors;
+	uint  LightSourceShadowsEnabled;
 };
 
 struct light_source
@@ -79,22 +80,6 @@ vec3 ViewPosFromDepth(vec2 TextCoord, float Depth) {
     return ViewSpacePosition.xyz;
 }
 
-vec4 GetQuat(vec3 V)
-{
-	return vec4(V, 0);
-}
-vec4 GetQuat(vec4 V)
-{
-	return vec4(V);
-}
-vec4 QuatInv(vec3 V)
-{
-	return vec4(V, 0);
-}
-vec4 QuatInv(vec4 V)
-{
-	return vec4(V);
-}
 vec4 QuatMul(vec4 lhs, vec4 rhs)
 {
 	return vec4(lhs.xyz * rhs.w + rhs.xyz * lhs.w + cross(lhs.xyz, rhs.xyz), dot(-lhs.xyz, rhs.xyz) + lhs.w * rhs.w);
@@ -176,7 +161,7 @@ float GetPointLightShadow(samplerCube ShadowSampler, vec3 Position, vec3 LightPo
     float ShadowDepth = texture(ShadowSampler, Direction).r;
     float ObjectDepth = length(Position - LightPos) / WorldUpdate.FarZ;
     
-	float  Bias = -0.05;
+	float  Bias = -0.01;
     return (ObjectDepth + Bias) > ShadowDepth ? 1.0 : 0.0;
 }
 
@@ -188,9 +173,14 @@ vec3 DoDiffuse(vec3 LightCol, vec3 ToLightDir, vec3 Normal)
 
 vec3 DoSpecular(vec3 LightCol, vec3 ToLightDir, vec3 CameraDir, vec3 Normal, float Specular)
 {
-	vec3  Refl = normalize(reflect(-ToLightDir, Normal));
+#if 0
+	vec3  Refl  = normalize(reflect(-ToLightDir, Normal));
 	float BlinnTerm = max(dot(Refl, CameraDir), 0);
-	return LightCol * pow(BlinnTerm, Specular);
+	return LightCol * pow(BlinnTerm, Specular) * float(dot(ToLightDir, Normal) > 0);
+#else
+	vec3 Half = normalize(ToLightDir + CameraDir);
+	return LightCol * pow(max(dot(Half, Normal), 0), Specular) * float(dot(ToLightDir, Normal) > 0);
+#endif
 }
 
 float DoAttenuation(float Radius, float Distance)
@@ -262,10 +252,10 @@ void main()
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
 		return;
 	}
-	vec3  VertexNormalWS   = normalize(texelFetch(GBuffer[1], ivec2(TextCoord), 0).xyz);
-	vec3  VertexNormalVS   = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(VertexNormalWS, 1)).xyz);
-	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[2], ivec2(TextCoord), 0).xyz);
-	vec3  FragmentNormalVS = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(FragmentNormalWS, 1)).xyz);
+	vec3  VertexNormalWS   = normalize(texelFetch(GBuffer[1], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
+	vec3  VertexNormalVS   = normalize(inverse(transpose(mat3(WorldUpdate.DebugView))) * VertexNormalWS).xyz;
+	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[2], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
+	vec3  FragmentNormalVS = normalize(inverse(transpose(mat3(WorldUpdate.DebugView))) * FragmentNormalWS).xyz;
 	vec4  Diffuse  = texelFetch(GBuffer[3], ivec2(TextCoord), 0);
 	float Specular = texelFetch(GBuffer[4], ivec2(TextCoord), 0).x;
 	float AmbientOcclusion = texelFetch(AmbientOcclusionBuffer, ivec2(TextCoord), 0).r;
@@ -326,8 +316,11 @@ void main()
 		}
 		else if(LightSources[LightIdx].Type == light_type_point)
 		{
-			PointLight(LightDiffuse, LightSpecular, CoordVS.xyz, FragmentNormalVS, ViewDirVS, LightSourcePosVS, Radius, LightSourceCol, Intensity, Diffuse.xyz, Specular);
-			LightShadow += GetPointLightShadow(PointShadowMaps[PointLightShadowMapIdx], vec3(CoordWS), LightSourcePosWS, FragmentNormalWS, TextCoord/TextureDims);
+			PointLight(LightDiffuse, LightSpecular, CoordVS.xyz, VertexNormalVS, ViewDirVS, LightSourcePosVS, Radius, LightSourceCol, Intensity, Diffuse.xyz, Specular);
+			if(WorldUpdate.LightSourceShadowsEnabled != 0)
+			{
+				LightShadow += GetPointLightShadow(PointShadowMaps[PointLightShadowMapIdx], vec3(CoordWS), LightSourcePosWS, FragmentNormalWS, TextCoord/TextureDims);
+			}
 			PointLightShadowMapIdx++;
 		}
 		else if(LightSources[LightIdx].Type == light_type_spot)
@@ -364,23 +357,21 @@ void main()
 		}
 	}
 
-	vec3 ShadowCol = vec3(0.0001);
-
+	vec3  ShadowCol = vec3(0.00001);
 	float Shadow = (GlobalShadow + LightShadow) / 2.0;
 #if DEBUG_COLOR_BLEND
 	imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(vec4(Diffuse.xyz, 1), vec4(1.0 / 2.0)));
 #else
-	if(WorldUpdate.DebugColors)
+	if(WorldUpdate.DebugColors != 0)
 	{
-		vec4 FinalLight = vec4(Diffuse.xyz*0.02 + (1.0 - Shadow), 1.0) * vec4(CascadeCol, 1.0);
-		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(FinalLight, vec4(1.0 / 2.0)));
+		vec3 FinalLight = (Diffuse.xyz*0.02 + (1.0 - Shadow)) * CascadeCol;
+		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(pow(FinalLight, vec3(1.0 / 2.0)), 1.0));
 	}
 	else
 	{
 		vec3 FinalLight = (Diffuse.xyz*0.2 + LightDiffuse + LightSpecular) * AmbientOcclusion;
 		FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
-		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(vec4(FinalLight, 1), vec4(1.0 / 2.0)));
-		//imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(LightShadow), 1));
+		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(pow(FinalLight, vec3(1.0 / 2.0)), 1));
 	}
 #endif
 }

@@ -7,9 +7,14 @@ layout(binding = 1) uniform writeonly image2D OutTexture;
 layout(push_constant) uniform pushConstant 
 {  
 	vec2  TextureDims;
-	float ConvSize;
+	float IsHorizontal;
 };
 
+const float ConvSize = 9.0;
+
+float Gaussian(float x, float sigma) {
+    return (1.0 / sqrt(2.0 * 3.14159 * sigma * sigma)) * exp(-(x * x) / (2.0 * sigma * sigma));
+}
 
 void main()
 {
@@ -20,15 +25,24 @@ void main()
 	float SampleCount = 0.0;
 	float ConvX = floor((ConvSize / 3.0) + 0.5);
 	float ConvY = floor((ConvSize / 3.0) + 0.5);
-	for(float x = -ConvX; x <= ConvX; x++)
+	float Weights[5];
+    for (int i = 0; i < ConvSize; ++i) {
+        float x = float(i) - float(ConvSize - 1) / 2.0;
+        Weights[i] = Gaussian(x, 1.0);
+    }
+	if(IsHorizontal == 0)
+	{
+		for(float x = -ConvX; x <= ConvX; x++)
+		{
+			Result += texelFetch(InTexture, ivec2(TextCoord + vec2(x, 0)), 0) * Weights[int(x + ConvX)];
+		}
+	}
+	else
 	{
 		for(float y = -ConvY; y <= ConvY; y++)
 		{
-			if(x < 0 || x > TextureDims.x || y < 0 || y > TextureDims.y) continue;
-			Result += texelFetch(InTexture, ivec2(TextCoord + vec2(x, y)), 0);
-			SampleCount++;
+			Result += texelFetch(InTexture, ivec2(TextCoord + vec2(0, y)), 0) * Weights[int(y + ConvY)];
 		}
 	}
-	Result /= SampleCount;
 	imageStore(OutTexture, ivec2(TextCoord), Result);
 }
