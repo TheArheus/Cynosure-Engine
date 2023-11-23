@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <initializer_list>
 #include <type_traits>
+#include <filesystem>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -438,38 +439,18 @@ public:
 	alloc_type& Allocator;
 };
 
-#define GameSceneStartFunc()  void Start(mesh& GlobalMeshes, mesh& GlobalDebugMeshes)
-#define GameSceneUpdateFunc() void Update(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalInstances, std::vector<u32, allocator_adapter<u32, linear_allocator>>& GlobalMeshVisibility, std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalDebugInstances, std::vector<u32, allocator_adapter<u32, linear_allocator>>& DebugMeshVisibility)
+#define GameSceneStartFunc()  void Start()
+#define GameSceneUpdateFunc() void Update()
 
-// NOTE: Adding debug normals, tangents and bitangents
-#define ENABLE_DEBUG_GEOMETRIES GlobalDebugMeshes.LoadDebug(GlobalMeshes)
-#define ADD_DEBUG_INSTANCES \
-for(const mesh_draw_command_input& ObjectInstanceCommand : GlobalInstances) \
-{\
-	GlobalDebugInstances.push_back({{vec4(vec3(1, 0, 0), 1), 0, 0, 0, 0}, ObjectInstanceCommand.Translate, ObjectInstanceCommand.Scale, ObjectInstanceCommand.MeshIndex + 0}); \
-	DebugMeshVisibility.push_back(true);\
-}\
-for(const mesh_draw_command_input& ObjectInstanceCommand : GlobalInstances) \
-{\
-	GlobalDebugInstances.push_back({{vec4(vec3(0, 1, 0), 1), 0, 0, 0, 0}, ObjectInstanceCommand.Translate, ObjectInstanceCommand.Scale, ObjectInstanceCommand.MeshIndex + 1}); \
-	DebugMeshVisibility.push_back(true);\
-}\
-for(const mesh_draw_command_input& ObjectInstanceCommand : GlobalInstances) \
-{\
-	GlobalDebugInstances.push_back({{vec4(vec3(0, 0, 1), 1), 0, 0, 0, 0}, ObjectInstanceCommand.Translate, ObjectInstanceCommand.Scale, ObjectInstanceCommand.MeshIndex + 2}); \
-	DebugMeshVisibility.push_back(true);\
-}
-
-// TODO: Make a proper material code for each object
 struct object_behavior
 {
 	mesh Mesh;
-	texture_data Texture;
-	texture_data NormalMap;
-	texture_data SpecularMap;
-	texture_data DisplaceMap;
+
+	std::bitset<32> Components;
+
 	std::vector<mesh_draw_command_input> Instances;
 	std::vector<u32> InstancesVisibility;
+
 	u32  MeshIdx;
 	bool IsInitialized = false;
 
@@ -538,11 +519,17 @@ struct object_behavior
 // TODO: implement particles
 struct particle_behavior
 {
+	vec3  Position;
+	vec3  Velocity;
+	vec3  Acceleration;
+	float Time;
+	float TimeMax;
 };
 
 struct scene
 {
 	bool IsInitialized = false;
+
 	std::vector<std::unique_ptr<object_behavior>> Objects;
 	std::vector<light_source> LightSources;
 
@@ -551,6 +538,35 @@ struct scene
 
 	virtual GameSceneStartFunc()  = 0;
 	virtual GameSceneUpdateFunc() = 0;
+
+	void AddPointLight(vec3 Position, float Radius, vec3 Color, float Intensity)
+	{
+		light_source NewLightSource = {};
+		NewLightSource.Pos = vec4(Position, Radius);
+		NewLightSource.Col = vec4(Color, Intensity);
+		NewLightSource.LightType = light_type_point;
+		LightSources.push_back(NewLightSource);
+	}
+
+	void AddSpotLight(vec3 Position, float Angle, vec3 Direction, vec3 Color, float Intensity)
+	{
+		light_source NewLightSource = {};
+		NewLightSource.Pos = vec4(Position, Angle);
+		NewLightSource.Dir = vec4(Direction);
+		NewLightSource.Col = vec4(Color, Intensity);
+		NewLightSource.LightType = light_type_spot;
+		LightSources.push_back(NewLightSource);
+	}
+
+	void AddDirectionalLight(vec3 Position, vec3 Direction, vec3 Color, float Intensity)
+	{
+		light_source NewLightSource = {};
+		NewLightSource.Pos = vec4(Position);
+		NewLightSource.Dir = vec4(Direction);
+		NewLightSource.Col = vec4(Color, Intensity);
+		NewLightSource.LightType = light_type_directional;
+		LightSources.push_back(NewLightSource);
+	}
 
 	// TODO: something better here
 	void Reset()
@@ -562,48 +578,6 @@ struct scene
 		LightSources.clear();
 	}
 };
-
-class scene_manager
-{
-	std::vector<std::unique_ptr<scene>> Scenes;
-	u32 CurrentScene = 0;
-
-	mesh GlobalMeshes;
-	mesh DebugMeshes;
-
-	std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>> GlobalMeshInstances;
-	std::vector<u32, allocator_adapter<u32, linear_allocator>> GlobalMeshVisibility;
-	std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>> DebugMeshInstances;
-	std::vector<u32, allocator_adapter<u32, linear_allocator>> DebugMeshVisibility;
-	std::vector<light_source, allocator_adapter<light_source, linear_allocator>> GlobalLightSources;
-
-	// TODO: Load a scenes by their file names. Load and unload if scene was recompiled(many if needed, but for this I need to check this every times in the loop I guess but that is a lot of work and think about something better)
-	void LoadScene();
-	void StartScene();
-	void UpdateScene();
-
-	void SaveSceneToFile();
-	void LoadSceneFromFile();
-};
-
-void scene_manager::StartScene()
-{
-	if(!Scenes[CurrentScene]->IsInitialized)
-	{
-		GlobalMeshes.Clear();
-		DebugMeshes.Clear();
-		Scenes[CurrentScene]->Start(GlobalMeshes, DebugMeshes);
-	}
-}
-
-void scene_manager::UpdateScene()
-{
-	if(Scenes[CurrentScene]->IsInitialized)
-	{
-		Scenes[CurrentScene]->Update(GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility);
-		GlobalLightSources.insert(GlobalLightSources.end(), Scenes[CurrentScene]->LightSources.begin(), Scenes[CurrentScene]->LightSources.end());
-	}
-}
 
 #define GameSceneCreateFunc(name) scene* name()
 typedef GameSceneCreateFunc(game_scene_create);

@@ -47,12 +47,12 @@ struct material
 	uint  LightType;
 };
 
-struct mesh_draw_command_data
+struct mesh_draw_command
 {
 	material Mat;
 	vec4 Translate;
 	vec4 Scale;
-	uint MeshIndex;
+	vec4 Rotate;
 };
 
 layout(binding = 0) readonly buffer block0
@@ -67,7 +67,7 @@ layout(binding = 1) readonly uniform block1
 
 layout(binding = 2) readonly buffer block2
 {
-	mesh_draw_command_data MeshData[];
+	mesh_draw_command MeshData[];
 };
 
 layout(location = 0) out vec4 OutCol;

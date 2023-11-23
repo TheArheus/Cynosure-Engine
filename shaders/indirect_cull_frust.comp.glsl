@@ -95,7 +95,7 @@ void main()
 	uint DrawIndex = gl_GlobalInvocationID.x;
 	if(DrawIndex >= MeshCullingCommonInput.DrawCount) return;
 
-	uint MeshIndex = MeshDrawCommandData[DrawIndex].MeshIndex - 1;
+	uint CommandIdx = MeshDrawCommandData[DrawIndex].MeshIndex - 1;
 	if(DrawIndex == 0)
 	{
 		for(uint MI = 0; MI < MeshCullingCommonInput.MeshCount; ++MI)
@@ -108,13 +108,12 @@ void main()
 	}
 
 	{
-		uint CommandIdx = MeshIndex;
-		uint InstanceIdx = atomicAdd(ShadowIndirectDrawIndexedCommands[MeshIndex].InstanceCount, 1);
+		uint InstanceIdx = atomicAdd(ShadowIndirectDrawIndexedCommands[CommandIdx].InstanceCount, 1);
 
-		ShadowIndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[MeshIndex].IndexCount;
-		ShadowIndirectDrawIndexedCommands[CommandIdx].FirstIndex    = MeshOffsets[MeshIndex].IndexOffset;
-		ShadowIndirectDrawIndexedCommands[CommandIdx].VertexOffset  = int(MeshOffsets[MeshIndex].VertexOffset);
-		ShadowIndirectDrawIndexedCommands[CommandIdx].FirstInstance = ShadowIndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + ((CommandIdx - 1) < 0 ? 0 : ShadowIndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount);
+		ShadowIndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[CommandIdx].IndexCount;
+		ShadowIndirectDrawIndexedCommands[CommandIdx].FirstIndex    = MeshOffsets[CommandIdx].IndexOffset;
+		ShadowIndirectDrawIndexedCommands[CommandIdx].VertexOffset  = int(MeshOffsets[CommandIdx].VertexOffset);
+		ShadowIndirectDrawIndexedCommands[CommandIdx].FirstInstance = CommandIdx == 0 ? 0 : ShadowIndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + ShadowIndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
 
 		InstanceIdx += ShadowIndirectDrawIndexedCommands[CommandIdx].FirstInstance;
 		MeshDrawShadowCommands[InstanceIdx].Mat       = MeshDrawCommandData[DrawIndex].Mat;
@@ -130,8 +129,8 @@ void main()
 	mat4 Proj = MeshCullingCommonInput.Proj;
 	mat4 View = MeshCullingCommonInput.View;
 
-	vec3 _SphereCenter = MeshOffsets[MeshIndex].BoundingSphere.Center.xyz * MeshDrawCommandData[DrawIndex].Scale.xyz + MeshDrawCommandData[DrawIndex].Translate.xyz;
-	float SphereRadius = MeshOffsets[MeshIndex].BoundingSphere.Radius * MeshDrawCommandData[DrawIndex].Scale.x;
+	vec3 _SphereCenter = MeshOffsets[CommandIdx].BoundingSphere.Center.xyz * MeshDrawCommandData[DrawIndex].Scale.xyz + MeshDrawCommandData[DrawIndex].Translate.xyz;
+	float SphereRadius = MeshOffsets[CommandIdx].BoundingSphere.Radius * MeshDrawCommandData[DrawIndex].Scale.x;
 	vec4  SphereCenter = View * vec4(_SphereCenter, 1);
 
 	// Frustum Culling
@@ -148,18 +147,17 @@ void main()
 
 	if(IsVisible)
 	{
-		uint CommandIdx  = MeshIndex;
-		uint InstanceIdx = atomicAdd(IndirectDrawIndexedCommands[MeshIndex].InstanceCount, 1);
+		uint InstanceIdx = atomicAdd(IndirectDrawIndexedCommands[CommandIdx].InstanceCount, 1);
 
-		IndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[MeshIndex].IndexCount;
-		IndirectDrawIndexedCommands[CommandIdx].FirstIndex    = MeshOffsets[MeshIndex].IndexOffset;
-		IndirectDrawIndexedCommands[CommandIdx].VertexOffset  = int(MeshOffsets[MeshIndex].VertexOffset);
-		IndirectDrawIndexedCommands[CommandIdx].FirstInstance = IndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + ((CommandIdx - 1) < 0 ? 0 : IndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount);
+		IndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[CommandIdx].IndexCount;
+		IndirectDrawIndexedCommands[CommandIdx].FirstIndex    = MeshOffsets[CommandIdx].IndexOffset;
+		IndirectDrawIndexedCommands[CommandIdx].VertexOffset  = int(MeshOffsets[CommandIdx].VertexOffset);
+		IndirectDrawIndexedCommands[CommandIdx].FirstInstance = CommandIdx == 0 ? 0 : IndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + IndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
 
 		InstanceIdx += IndirectDrawIndexedCommands[CommandIdx].FirstInstance;
-		MeshDrawCommands[InstanceIdx].Mat = MeshDrawCommandData[DrawIndex].Mat;
+		MeshDrawCommands[InstanceIdx].Mat       = MeshDrawCommandData[DrawIndex].Mat;
 		MeshDrawCommands[InstanceIdx].Translate = MeshDrawCommandData[DrawIndex].Translate;
-		MeshDrawCommands[InstanceIdx].Scale = MeshDrawCommandData[DrawIndex].Scale;
+		MeshDrawCommands[InstanceIdx].Scale     = MeshDrawCommandData[DrawIndex].Scale;
 	}
 }
 
