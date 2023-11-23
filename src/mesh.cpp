@@ -56,7 +56,7 @@ Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices,
 	u32 Result = MeshIndex;
 	MeshIndex+=NewDataOffsets.size();
 	MeshCount+=NewDataOffsets.size();
-	return Result; // ???
+	return Result;
 }
 
 void mesh::
@@ -104,8 +104,8 @@ LoadDebug(mesh& NewMesh)
 {
 	offset NewOffset = {};
 
-	NewOffset.VertexOffset = NTBVertices.size();
-	NewOffset.IndexOffset  = NTBIndices.size();
+	NewOffset.VertexOffset = Vertices.size();
+	NewOffset.IndexOffset  = VertexIndices.size();
 	for(const offset& DataOffset : NewMesh.NTBOffsets)
 	{
 		NewOffset.AABB = DataOffset.AABB;

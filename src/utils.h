@@ -31,10 +31,10 @@ u32 PreviousPowerOfTwo(u32 x)
     return x - (x >> 1);
 }
 
-#include "vulkan_utilities.hpp"
-#include "command_queue.hpp"
-#include "resources.hpp"
-#include "shader_input_signature.hpp"
-#include "pipeline_context.hpp"
-#include "renderer_vulkan.h"
-#include "win32_window.h"
+#include "gfx/vulkan/vulkan_utilities.hpp"
+#include "gfx/vulkan/command_queue.hpp"
+#include "gfx/vulkan/resources.hpp"
+#include "gfx/vulkan/shader_input_signature.hpp"
+#include "gfx/vulkan/pipeline_context.hpp"
+#include "gfx/vulkan/renderer_vulkan.h"
+#include "platform/win32/win32_window.h"

@@ -43,7 +43,7 @@ void main()
 
 	vec4 CoordWS = texelFetch(GBuffer[0], ivec2(TextCoord), 0);
 	vec3 CoordVS = (WorldUpdate.DebugView * CoordWS).xyz;
-	vec3 FragmentNormalWS = normalize(texelFetch(GBuffer[2], ivec2(TextCoord), 0).xyz);
+	vec3 FragmentNormalWS = normalize(texelFetch(GBuffer[2], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
 	vec3 FragmentNormalVS = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(FragmentNormalWS, 1)).xyz);
 	vec2 Rotation = texture(NoiseTexture, TextCoord).xy;
 

@@ -25,7 +25,7 @@ void main()
 	float SampleCount = 0.0;
 	float ConvX = floor((ConvSize / 3.0) + 0.5);
 	float ConvY = floor((ConvSize / 3.0) + 0.5);
-	float Weights[5];
+	float Weights[9];
     for (int i = 0; i < ConvSize; ++i) {
         float x = float(i) - float(ConvSize - 1) / 2.0;
         Weights[i] = Gaussian(x, 1.0);

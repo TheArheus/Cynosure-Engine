@@ -1,18 +1,23 @@
 #include "intrinsics.h"
 #include "utils.h"
+#include "scene_manager.hpp"
 #include "mesh.cpp"
-#include "renderer_vulkan.cpp"
-#include "win32_window.cpp"
+#include "gfx/vulkan/renderer_vulkan.cpp"
+#include "platform/win32/win32_window.cpp"
 
 #include <random>
 
 
+// TODO: Implement better engine architecture
+//			Move all related vulkan code api out of main function entirely
+//			Do another function as an entry to the program and made main function callable?
+//
 // TODO: Implement correct materials per object instance
 //			Implement objects that could emmit light
 //			Also implement visualization of light source
 //
-// TODO: choosing which scene to render 
-//			immediate gui
+// TODO: Distinction between static and dynamic meshes and their instances
+//			Do I need to have 2 sets of every buffer which depends on vertices?
 //
 // TODO: Implement new instancing api for a mesh
 //
@@ -37,6 +42,8 @@
 // TODO: Minecraft like world rendering?
 //			Voxels?
 
+
+
 struct indirect_draw_indexed_command
 {
 	VkDrawIndexedIndirectCommand DrawArg; // 5
@@ -54,7 +61,6 @@ struct mesh_debug_input
 {
 	u32 DrawCount;
 	u32 MeshCount;
-	u32 InstanceCountCalculation;
 };
 
 struct alignas(16) global_world_data 
@@ -95,6 +101,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {
 	window VulkanWindow("3D Renderer");
 	VulkanWindow.InitGraphics();
+	scene_manager SceneManager;
 
 	double TargetFrameRate = 1.0 / 60 * 1000.0; // Frames Per Milliseconds
 
@@ -109,6 +116,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	float NearZ = 0.01f;
 	float FarZ = 100.0f;
 
+	//memory_heap GlobalHeap(VulkanWindow.Gfx, MiB(256));
 	buffer GeometryOffsets(VulkanWindow.Gfx, KiB(16), false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	buffer GeometryDebugOffsets(VulkanWindow.Gfx, KiB(16), false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
@@ -121,23 +129,15 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	buffer DebugIndirectDrawIndexedCommands(VulkanWindow.Gfx, MiB(16), true, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	buffer ShadowIndirectDrawIndexedCommands(VulkanWindow.Gfx, MiB(16), true, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-#if 0
-	memory_heap VertexHeap(VulkanWindow.Gfx, MiB(16), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-	memory_heap IndexHeap(VulkanWindow.Gfx, MiB(16), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-	buffer VertexBuffer = VertexHeap.PushBuffer(VulkanWindow.Gfx, Geometries.Vertices.data(), Geometries.Vertices.size() * sizeof(vertex));
-	buffer IndexBuffer = IndexHeap.PushBuffer(VulkanWindow.Gfx, Geometries.VertexIndices.data(), Geometries.VertexIndices.size() * sizeof(u32));
-#else
 	buffer VertexBuffer(VulkanWindow.Gfx, MiB(16), false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	buffer IndexBuffer(VulkanWindow.Gfx, MiB(16), false, 0, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
 	buffer DebugVertexBuffer(VulkanWindow.Gfx, MiB(16), false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	buffer DebugIndexBuffer(VulkanWindow.Gfx, MiB(16), false, 0, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-#endif
 
 	global_world_data WorldUpdate = {};
-	buffer WorldUpdateBuffer(VulkanWindow.Gfx, sizeof(global_world_data), false, 256, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-	buffer LightSourcesBuffer(VulkanWindow.Gfx, sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT, false, 256, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	buffer WorldUpdateBuffer(VulkanWindow.Gfx, sizeof(global_world_data), false, 0, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	buffer LightSourcesBuffer(VulkanWindow.Gfx, sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT, false, 0, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
 	texture::input_data TextureInputData = {};
 	TextureInputData.Format    = VK_FORMAT_D32_SFLOAT;
@@ -260,7 +260,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		vec3 Sample = vec3(float(rand()) / RAND_MAX * 2.0f - 1.0,
 						   float(rand()) / RAND_MAX * 2.0f - 1.0,
 						   float(rand()) / RAND_MAX).Normalize();
-		Sample = Sample * float(rand()) / RAND_MAX * 2.0f - 1.0;
+		Sample = Sample *  float(rand());
 		float Scale = RotIdx / 64.0;
 		Scale = Lerp(0.1, Scale, 1.0);
 		RandomSamples[RotIdx] = Sample * Scale;
@@ -302,6 +302,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 	buffer MeshDrawCommandBuffer(VulkanWindow.Gfx, MiB(16), false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	buffer MeshDrawShadowCommandBuffer(VulkanWindow.Gfx, MiB(16), false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	buffer MeshDrawDebugCommandBuffer(VulkanWindow.Gfx, MiB(16), false, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
 	// TODO: Check and fix this new implementation. In theory, this should be correct
 	shader_input GfxRootSignature;
@@ -361,6 +362,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 							  PushStorageBuffer()->		// Draw Command Visibility
 							  PushStorageBuffer()->		// Indirect Draw Indexed Command
 							  PushStorageBuffer()->		// Indirect Draw Indexed Command Counter
+							  PushStorageBuffer()->		// Draw Commands
 							  PushConstant(sizeof(mesh_debug_input), VK_SHADER_STAGE_COMPUTE_BIT)->
 							  Build(VulkanWindow.Gfx, 0, true)->
 							  BuildAll(VulkanWindow.Gfx);
@@ -423,41 +425,41 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	std::vector<VkFormat> GfxFormats;
 	for(u32 FormatIdx = 0; FormatIdx < GBuffer.size(); ++FormatIdx) GfxFormats.push_back(GBuffer[FormatIdx].Info.Format);
 	global_pipeline_context PipelineContext(VulkanWindow.Gfx);
-	render_context GfxContext(VulkanWindow.Gfx, GfxRootSignature, {"..\\build\\mesh.vert.spv", "..\\build\\mesh.frag.spv"}, GfxFormats);
+	render_context GfxContext(VulkanWindow.Gfx, GfxRootSignature, {"..\\build\\shaders\\mesh.vert.spv", "..\\build\\shaders\\mesh.frag.spv"}, GfxFormats);
 
 	render_context::input_data RendererInputData = {};
 	RendererInputData.UseColor	  = true;
 	RendererInputData.UseDepth	  = true;
 	RendererInputData.UseBackFace = true;
 	RendererInputData.UseOutline  = true;
-	render_context  DebugContext(VulkanWindow.Gfx, DebugRootSignature, {"..\\build\\mesh.dbg.vert.spv", "..\\build\\mesh.dbg.frag.spv"}, {GfxColorTarget.Info.Format}, RendererInputData);
+	render_context  DebugContext(VulkanWindow.Gfx, DebugRootSignature, {"..\\build\\shaders\\mesh.dbg.vert.spv", "..\\build\\shaders\\mesh.dbg.frag.spv"}, {GfxColorTarget.Info.Format}, RendererInputData);
 
 	RendererInputData = {};
 	RendererInputData.UseDepth = true;
 	RendererInputData.UseBackFace  = true;
-	render_context  CascadeShadowContext(VulkanWindow.Gfx, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
-	render_context  ShadowContext(VulkanWindow.Gfx, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
+	render_context  CascadeShadowContext(VulkanWindow.Gfx, ShadowSignature, {"..\\build\\shaders\\mesh.sdw.vert.spv", "..\\build\\shaders\\mesh.sdw.frag.spv"}, {}, RendererInputData);
+	render_context  ShadowContext(VulkanWindow.Gfx, ShadowSignature, {"..\\build\\shaders\\mesh.sdw.vert.spv", "..\\build\\shaders\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 
 	std::vector<render_context> CubeMapShadowContexts;
 	RendererInputData.UseMultiview = true;
 	for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
 	{
 		RendererInputData.ViewMask = 1 << CubeMapFaceIdx;
-		CubeMapShadowContexts.push_back(render_context(VulkanWindow.Gfx, PointShadowSignature, {"..\\build\\mesh.pnt.sdw.vert.spv", "..\\build\\mesh.pnt.sdw.frag.spv"}, {}, RendererInputData));
+		CubeMapShadowContexts.push_back(render_context(VulkanWindow.Gfx, PointShadowSignature, {"..\\build\\shaders\\mesh.pnt.sdw.vert.spv", "..\\build\\shaders\\mesh.pnt.sdw.frag.spv"}, {}, RendererInputData));
 	}
 
 	RendererInputData.UseDepth	   = true;
 	RendererInputData.UseMultiview = false;
 	RendererInputData.ViewMask	   = 0;
-	render_context  DebugCameraViewContext(VulkanWindow.Gfx, ShadowSignature, {"..\\build\\mesh.sdw.vert.spv", "..\\build\\mesh.sdw.frag.spv"}, {}, RendererInputData);
+	render_context  DebugCameraViewContext(VulkanWindow.Gfx, ShadowSignature, {"..\\build\\shaders\\mesh.sdw.vert.spv", "..\\build\\shaders\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 
-	compute_context ColorPassContext(VulkanWindow.Gfx, ColorPassRootSignature, "..\\build\\color_pass.comp.spv");
-	compute_context DebugComputeContext(VulkanWindow.Gfx, DebugComputeRootSignature, "..\\build\\mesh.dbg.comp.spv");
-	compute_context AmbientOcclusionContext(VulkanWindow.Gfx, AmbientOcclusionRootSignature, "..\\build\\screen_space_ambient_occlusion.comp.spv");
-	compute_context FrustCullingContext(VulkanWindow.Gfx, CmpIndirectFrustRootSignature, "..\\build\\indirect_cull_frust.comp.spv");
-	compute_context OcclCullingContext(VulkanWindow.Gfx, CmpIndirectOcclRootSignature, "..\\build\\indirect_cull_occl.comp.spv");
-	compute_context DepthReduceContext(VulkanWindow.Gfx, CmpReduceRootSignature, "..\\build\\depth_reduce.comp.spv");
-	compute_context BlurContext(VulkanWindow.Gfx, BlurRootSignature, "..\\build\\blur.comp.spv");
+	compute_context ColorPassContext(VulkanWindow.Gfx, ColorPassRootSignature, "..\\build\\shaders\\color_pass.comp.spv");
+	compute_context DebugComputeContext(VulkanWindow.Gfx, DebugComputeRootSignature, "..\\build\\shaders\\mesh.dbg.comp.spv"); // 108
+	compute_context AmbientOcclusionContext(VulkanWindow.Gfx, AmbientOcclusionRootSignature, "..\\build\\shaders\\screen_space_ambient_occlusion.comp.spv"); // 10a
+	compute_context FrustCullingContext(VulkanWindow.Gfx, CmpIndirectFrustRootSignature, "..\\build\\shaders\\indirect_cull_frust.comp.spv");
+	compute_context OcclCullingContext(VulkanWindow.Gfx, CmpIndirectOcclRootSignature, "..\\build\\shaders\\indirect_cull_occl.comp.spv");
+	compute_context DepthReduceContext(VulkanWindow.Gfx, CmpReduceRootSignature, "..\\build\\shaders\\depth_reduce.comp.spv");
+	compute_context BlurContext(VulkanWindow.Gfx, BlurRootSignature, "..\\build\\shaders\\blur.comp.spv");
 
 	float CascadeSplits[DEPTH_CASCADES_COUNT + 1] = {};
 	CascadeSplits[0] = NearZ;
@@ -517,8 +519,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	bool IsCameraLocked = false;
 	bool IsDebugColors  = false;
 
-	mesh GlobalGeometries;
-	mesh GlobalDebugGeometries;
 	std::vector<texture> LightShadows;
 	std::vector<texture> PointLightShadows;
 
@@ -547,9 +547,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	Specular1.Delete();
 	Height1.Delete();
 
-	game_scene_create* CreateCubeGameScene = (game_scene_create*)window::GetProcAddr("..\\build\\cube_scene.dll", "CubeSceneCreate");
-	std::unique_ptr<scene> GameScene(CreateCubeGameScene());
-
 	u32 DirectionalLightSourceCount = 0;
 	u32 PointLightSourceCount = 0;
 	u32 SpotLightSourceCount = 0;
@@ -558,7 +555,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	double TimeElapsed = 0.0;
 	double TimeEnd = 0.0;
 	double AvgCpuTime = 0.0;
-	WorldUpdate.LightSourceShadowsEnabled = true;
+	WorldUpdate.LightSourceShadowsEnabled = false;
 	while(VulkanWindow.IsRunning())
 	{
 		mesh DebugGeometries;
@@ -580,22 +577,14 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		auto Result = VulkanWindow.ProcessMessages();
 		if(Result) return *Result;
 
-		if(VulkanWindow.Buttons[EC_LCONTROL].IsDown && VulkanWindow.Buttons[EC_R].IsDown)
-		{
-			// TODO: Load and unload game scenes (will be inside of the scene manager)
-		}
+		SceneManager.UpdateScenes();
+		if(!SceneManager.IsCurrentSceneInitialized()) continue;
 
 		GameInput.DeltaTime = TimeElapsed;
 
-		if(!GameScene->IsInitialized)
-		{
-			GameScene->Start(GlobalGeometries, GlobalDebugGeometries);
-		}
-		DebugGeometries.Load(GlobalDebugGeometries);
-
-		GameScene->Reset();
-		GameScene->Update(GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility);
-		GlobalLightSources.insert(GlobalLightSources.end(), GameScene->LightSources.begin(), GameScene->LightSources.end());
+		SceneManager.StartScene();
+		DebugGeometries.Load(SceneManager.GlobalDebugGeometries);
+		SceneManager.UpdateScene(GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
 		assert(GlobalLightSources.size() <= LIGHT_SOURCES_MAX_COUNT);
 		if((LightShadows.size() + PointLightShadows.size()) != GlobalLightSources.size())
@@ -682,7 +671,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		WorldUpdate.FarZ			= FarZ;
 		WorldUpdate.DebugColors		= IsDebugColors;
 
-		WorldUpdate.LightSourceShadowsEnabled   = true;
+		WorldUpdate.LightSourceShadowsEnabled   = false;
 		WorldUpdate.DirectionalLightSourceCount = DirectionalLightSourceCount;
 		WorldUpdate.PointLightSourceCount		= PointLightSourceCount;
 		WorldUpdate.SpotLightSourceCount		= SpotLightSourceCount;
@@ -758,7 +747,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		}
 
 		MeshCompCullingCommonData.DrawCount = GlobalMeshInstances.size();
-		MeshCompCullingCommonData.MeshCount = GlobalGeometries.MeshCount;
+		MeshCompCullingCommonData.MeshCount = SceneManager.GlobalGeometries.MeshCount;
 		MeshCompCullingCommonData.Proj = CameraProj;
 		MeshCompCullingCommonData.View = WorldUpdate.DebugView;
 
@@ -852,9 +841,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 													  
 				}
 
-				GeometryOffsets.UpdateSize(VulkanWindow.Gfx, GlobalGeometries.Offsets.data(), GlobalGeometries.Offsets.size() * sizeof(mesh::offset), PipelineContext);
-				VertexBuffer.UpdateSize(VulkanWindow.Gfx, GlobalGeometries.Vertices.data(), GlobalGeometries.Vertices.size() * sizeof(vertex), PipelineContext);
-				IndexBuffer.UpdateSize(VulkanWindow.Gfx, GlobalGeometries.VertexIndices.data(), GlobalGeometries.VertexIndices.size() * sizeof(u32), PipelineContext);
+				GeometryOffsets.UpdateSize(VulkanWindow.Gfx, SceneManager.GlobalGeometries.Offsets.data(), SceneManager.GlobalGeometries.Offsets.size() * sizeof(mesh::offset), PipelineContext);
+				VertexBuffer.UpdateSize(VulkanWindow.Gfx, SceneManager.GlobalGeometries.Vertices.data(), SceneManager.GlobalGeometries.Vertices.size() * sizeof(vertex), PipelineContext);
+				IndexBuffer.UpdateSize(VulkanWindow.Gfx, SceneManager.GlobalGeometries.VertexIndices.data(), SceneManager.GlobalGeometries.VertexIndices.size() * sizeof(u32), PipelineContext);
 
 				GeometryDebugOffsets.UpdateSize(VulkanWindow.Gfx, DebugGeometries.Offsets.data(), DebugGeometries.Offsets.size() * sizeof(mesh::offset), PipelineContext);
 				DebugVertexBuffer.UpdateSize(VulkanWindow.Gfx, DebugGeometries.Vertices.data(), DebugGeometries.Vertices.size() * sizeof(vertex), PipelineContext);
@@ -898,13 +887,13 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 												  {DebugMeshDrawCommandDataBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT},
 												  {DebugMeshDrawVisibilityDataBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT},
 												  {DebugIndirectDrawIndexedCommands, 0, VK_ACCESS_SHADER_WRITE_BIT},
+												  {MeshDrawDebugCommandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT},
 											  }, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-			for(u32 PassIdx = 0; PassIdx < 2; PassIdx++)
+
 			{
 				mesh_debug_input Input = {};
 				Input.MeshCount = DebugGeometries.MeshCount;
-				Input.DrawCount = PassIdx == 0 ? DebugMeshInstances.size() : 1;
-				Input.InstanceCountCalculation = 1 - PassIdx;
+				Input.DrawCount = DebugMeshInstances.size();
 
 				DebugComputeContext.Begin(PipelineContext);
 
@@ -912,9 +901,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				DebugComputeContext.SetStorageBufferView(DebugMeshDrawCommandDataBuffer);
 				DebugComputeContext.SetStorageBufferView(DebugMeshDrawVisibilityDataBuffer);
 				DebugComputeContext.SetStorageBufferView(DebugIndirectDrawIndexedCommands);
+				DebugComputeContext.SetStorageBufferView(MeshDrawDebugCommandBuffer);
 				DebugComputeContext.SetConstant(&Input, sizeof(mesh_debug_input));
 
-				DebugComputeContext.Execute(PassIdx == 0 ? DebugMeshInstances.size() : 1);
+				DebugComputeContext.Execute(DebugMeshInstances.size());
 
 				DebugComputeContext.End();
 			}
@@ -940,7 +930,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				CascadeShadowContext.SetStorageBufferView(VertexBuffer);
 				CascadeShadowContext.SetStorageBufferView(MeshDrawShadowCommandBuffer);
 				CascadeShadowContext.SetConstant((void*)&Shadow, sizeof(mat4));
-				CascadeShadowContext.DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
+				CascadeShadowContext.DrawIndirect<indirect_draw_indexed_command>(SceneManager.GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
 
 				CascadeShadowContext.End();
 			}
@@ -973,7 +963,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 						ShadowContext.SetStorageBufferView(VertexBuffer);
 						ShadowContext.SetStorageBufferView(MeshDrawShadowCommandBuffer);
 						ShadowContext.SetConstant((void*)&Shadow, sizeof(mat4));
-						ShadowContext.DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
+						ShadowContext.DrawIndirect<indirect_draw_indexed_command>(SceneManager.GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
 
 						ShadowContext.End();
 						DirectionalSourceIdx++;
@@ -1005,7 +995,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 							CubeMapShadowContexts[CubeMapFaceIdx].SetStorageBufferView(VertexBuffer);
 							CubeMapShadowContexts[CubeMapFaceIdx].SetStorageBufferView(MeshDrawShadowCommandBuffer);
 							CubeMapShadowContexts[CubeMapFaceIdx].SetConstant((void*)&PointShadowInput, sizeof(point_shadow_input));
-							CubeMapShadowContexts[CubeMapFaceIdx].DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
+							CubeMapShadowContexts[CubeMapFaceIdx].DrawIndirect<indirect_draw_indexed_command>(SceneManager.GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
 
 							CubeMapShadowContexts[CubeMapFaceIdx].End();
 						}
@@ -1029,7 +1019,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 						ShadowContext.SetStorageBufferView(VertexBuffer);
 						ShadowContext.SetStorageBufferView(MeshDrawShadowCommandBuffer);
 						ShadowContext.SetConstant((void*)&Shadow, sizeof(mat4));
-						ShadowContext.DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
+						ShadowContext.DrawIndirect<indirect_draw_indexed_command>(SceneManager.GlobalGeometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
 
 						ShadowContext.End();
 						SpotLightSourceIdx++;
@@ -1054,7 +1044,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				DebugCameraViewContext.SetStorageBufferView(VertexBuffer);
 				DebugCameraViewContext.SetStorageBufferView(MeshDrawCommandBuffer);
 				DebugCameraViewContext.SetConstant((void*)&Shadow, sizeof(mat4));
-				DebugCameraViewContext.DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands);
+				DebugCameraViewContext.DrawIndirect<indirect_draw_indexed_command>(SceneManager.GlobalGeometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands);
 
 				DebugCameraViewContext.End();
 			}
@@ -1084,7 +1074,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				GfxContext.SetImageSampler({Textures[1]}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				GfxContext.SetImageSampler({Textures[2]}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 				GfxContext.SetImageSampler({Textures[3]}, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-				GfxContext.DrawIndirect<indirect_draw_indexed_command>(GlobalGeometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands);
+				GfxContext.DrawIndirect<indirect_draw_indexed_command>(SceneManager.GlobalGeometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands);
 
 				GfxContext.End();
 			}
@@ -1244,6 +1234,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				ImageBarrier(*PipelineContext.CommandList, SrcStageMask, DstStageMask, ImageBeginRenderBarriers);
 				PipelineContext.SetBufferBarriers({{DebugIndexBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDEX_READ_BIT}}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
 				PipelineContext.SetBufferBarriers({{DebugVertexBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+				PipelineContext.SetBufferBarriers({{MeshDrawDebugCommandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
 				PipelineContext.SetBufferBarriers({{DebugIndirectDrawIndexedCommands, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 
 				DebugContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VulkanWindow.Gfx->Width, VulkanWindow.Gfx->Height, {GfxColorTarget}, {0, 0, 0, 1});
@@ -1252,7 +1243,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 				DebugContext.SetStorageBufferView(DebugVertexBuffer);
 				DebugContext.SetUniformBufferView(WorldUpdateBuffer);
-				DebugContext.SetStorageBufferView(DebugMeshDrawCommandDataBuffer);
+				DebugContext.SetStorageBufferView(MeshDrawDebugCommandBuffer);
 				DebugContext.DrawIndirect<indirect_draw_indexed_command>(DebugGeometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands);
 
 				DebugContext.End();
