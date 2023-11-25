@@ -8,26 +8,16 @@
 #include <random>
 
 
-// TODO: Implement better engine architecture
-//			Move all related vulkan code api out of main function entirely
-//			Do another function as an entry to the program and made main function callable?
-//
-// TODO: Implement correct materials per object instance
-//			Implement objects that could emmit light
-//			Also implement visualization of light source
-//
 // TODO: Distinction between static and dynamic meshes and their instances
 //			Do I need to have 2 sets of every buffer which depends on vertices?
 //
-// TODO: Implement new instancing api for a mesh
-//
 // TODO: event system in the future?
 //
-// TODO: Implement mesh animations
+// TODO: mesh animation component
 // TODO: Implement reflections using cube maps
 //
 // TODO: Implement sound system with openal???
-//           Find API to implement this
+//			sound component???
 //
 // TODO: Use scene class and use vector of scene classes for multiple scenes
 //           Change between them at runtime and posibility to change them while main app is running(right now it is not quite work)
@@ -37,8 +27,6 @@
 // TODO: Implement ray tracing pipeline in the future
 // 
 // TODO: Implement better while loop architecture (currently in work)
-// TODO: Make everything to use memory allocator
-// TODO: Reorganize files for the corresponding files. For ex. win32_window files to platform folders and etc.
 // TODO: Minecraft like world rendering?
 //			Voxels?
 

@@ -174,12 +174,17 @@ StartScene()
 	{
 		GlobalGeometries.Clear();
 		GlobalDebugGeometries.Clear();
+		base_component::NextID = 0;
 
 		Scenes[CurrentScene]->Start();
 
-		for(std::unique_ptr<object_behavior>& Object : Scenes[CurrentScene]->Objects)
+		for(entity& Entity : Scenes[CurrentScene]->Registry.Entities)
 		{
-			GlobalGeometries.Load(Object->Mesh);
+			mesh_component* Mesh = Scenes[CurrentScene]->Registry.GetComponent<mesh_component>(Entity);
+			if(Mesh)
+			{
+				GlobalGeometries.Load(Mesh->Data);
+			}
 		}
 		GlobalDebugGeometries.LoadDebug(GlobalGeometries);
 	}
@@ -196,10 +201,14 @@ UpdateScene(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_com
 	{
 		Scenes[CurrentScene]->Reset();
 		Scenes[CurrentScene]->Update();
-		for(std::unique_ptr<object_behavior>& Object : Scenes[CurrentScene]->Objects)
+		for(entity& Entity : Scenes[CurrentScene]->Registry.Entities)
 		{
-			GlobalMeshInstances.insert(GlobalMeshInstances.end(), Object->Instances.begin(), Object->Instances.end());
-			GlobalMeshVisibility.insert(GlobalMeshVisibility.end(), Object->InstancesVisibility.begin(), Object->InstancesVisibility.end());
+			static_instances_component* InstancesComponent = Scenes[CurrentScene]->Registry.GetComponent<static_instances_component>(Entity);
+			if(InstancesComponent)
+			{
+				GlobalMeshInstances.insert(GlobalMeshInstances.end(), InstancesComponent->Data.begin(), InstancesComponent->Data.end());
+				GlobalMeshVisibility.insert(GlobalMeshVisibility.end(), InstancesComponent->Visibility.begin(), InstancesComponent->Visibility.end());
+			}
 		}
 		if(DebugMeshesDrawEnabled)
 		{

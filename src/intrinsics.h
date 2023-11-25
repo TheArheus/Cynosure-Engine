@@ -23,6 +23,7 @@
 #include <initializer_list>
 #include <type_traits>
 #include <filesystem>
+#include <typeindex>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -202,6 +203,9 @@ typedef double   r64;
 
 typedef uint32_t b32;
 typedef uint64_t b64;
+
+typedef u64 entity_handle;
+typedef std::bitset<32> signature;
 
 constexpr size_t KB(size_t val) { return val * 1000; };
 constexpr size_t MB(size_t val) { return KB(val) * 1000; };
@@ -442,82 +446,141 @@ public:
 #define GameSceneStartFunc()  void Start()
 #define GameSceneUpdateFunc() void Update()
 
-struct object_behavior
+struct entity
 {
-	mesh Mesh;
+	entity_handle Handle;
+};
 
-	std::bitset<32> Components;
+struct mesh_component
+{
+	mesh Data;
 
-	std::vector<mesh_draw_command_input> Instances;
-	std::vector<u32> InstancesVisibility;
+	mesh_component() = default;
 
-	u32  MeshIdx;
-	bool IsInitialized = false;
+	mesh_component(const std::string& Path, u32 BoundingGeneration = 0)
+	{
+		Data.Load(Path, BoundingGeneration);
+	}
+	
+	void LoadMesh(const std::string& Path, u32 BoundingGeneration = 0)
+	{
+		Data.Load(Path, BoundingGeneration);
+	}
+};
 
-	virtual ~object_behavior() {};
+struct debug_component
+{
+	mesh Data;
 
-	virtual void Start()  = 0;
-	virtual void Update() = 0;
+	debug_component() = default;
 
-	void AddInstance(std::vector<mesh_draw_command_input>& _Instances, vec4 Translate, vec4 Scale, bool IsVisible)
+	debug_component(mesh& NewData)
+	{
+		Data.LoadDebug(NewData);
+	}
+
+	void Load(mesh& NewData)
+	{
+		Data.LoadDebug(NewData);
+	}
+};
+
+// TODO: How do I add instance for a particular entity id, if it wouldn't be known here???
+// TODO: Instance ID's
+struct static_instances_component
+{
+	std::vector<u32> Visibility;
+	std::vector<mesh_draw_command_input> Data;
+
+	// TODO: Have only this one
+	void AddInstance(entity Entity, vec4 Translate, vec4 Scale, bool IsVisible)
 	{
 		mesh_draw_command_input Command = {};
 		Command.Translate = Translate;
 		Command.Scale = Scale;
-		Command.MeshIndex = MeshIdx;
-		_Instances.push_back(Command);
-		InstancesVisibility.push_back(IsVisible);
+		Command.MeshIndex = Entity.Handle;
+		Data.push_back(Command);
+		Visibility.push_back(IsVisible);
 	}
 
-	void AddInstance(std::vector<mesh_draw_command_input>& _Instances, mesh::material Mat, vec4 Translate, vec4 Scale, bool IsVisible)
+	void AddInstance(entity Entity, const mesh::material& Material, vec4 Translate, vec4 Scale, bool IsVisible)
 	{
 		mesh_draw_command_input Command = {};
-		Command.Mat = Mat;
+		Command.Mat = Material;
 		Command.Translate = Translate;
 		Command.Scale = Scale;
-		Command.MeshIndex = MeshIdx;
-		_Instances.push_back(Command);
-		InstancesVisibility.push_back(IsVisible);
+		Command.MeshIndex = Entity.Handle;
+		Data.push_back(Command);
+		Visibility.push_back(IsVisible);
 	}
+};
 
-	void AddInstance(vec4 Translate, vec4 Scale, bool IsVisible)
+// NOTE: this should reset every frame
+struct dynamic_instances_component
+{
+	std::vector<u32> Visibility;
+	std::vector<mesh_draw_command_input> Data;
+
+	// TODO: Have only this one
+	void AddInstance(entity Entity, vec4 Translate, vec4 Scale, bool IsVisible)
 	{
 		mesh_draw_command_input Command = {};
 		Command.Translate = Translate;
 		Command.Scale = Scale;
-		Command.MeshIndex = MeshIdx;
-		Instances.push_back(Command);
-		InstancesVisibility.push_back(IsVisible);
+		Command.MeshIndex = Entity.Handle;
+		Data.push_back(Command);
+		Visibility.push_back(IsVisible);
 	}
 
-	void AddInstance(mesh::material Mat, vec4 Translate, vec4 Scale, bool IsVisible)
+	void AddInstance(entity Entity, const mesh::material& Material, vec4 Translate, vec4 Scale, bool IsVisible)
 	{
 		mesh_draw_command_input Command = {};
-		Command.Mat = Mat;
+		Command.Mat = Material;
 		Command.Translate = Translate;
 		Command.Scale = Scale;
-		Command.MeshIndex = MeshIdx;
-		Instances.push_back(Command);
-		InstancesVisibility.push_back(IsVisible);
-	}
-
-	void UpdateInstances(std::vector<mesh_draw_command_input>& _Instances)
-	{
-		for(mesh_draw_command_input& Instance : _Instances)
-		{
-			AddInstance(Instance.Mat, Instance.Translate, Instance.Scale, true);
-		}
+		Command.MeshIndex = Entity.Handle;
+		Data.push_back(Command);
+		Visibility.push_back(IsVisible);
 	}
 
 	void Reset()
 	{
-		Instances.clear();
-		InstancesVisibility.clear();
+		Data.clear();
 	}
 };
 
-// TODO: implement particles
-struct particle_behavior
+struct alignas(16) light_component
+{
+	vec4 Pos;
+	vec4 Dir;
+	vec4 Col;
+	u32  LightType;
+
+	void PointLight(vec3 Position, float Radius, vec3 Color, float Intensity)
+	{
+		Pos = vec4(Position, Radius);
+		Col = vec4(Color, Intensity);
+		LightType = light_type_point;
+	}
+
+	void SpotLight(vec3 Position, float Angle, vec3 Direction, vec3 Color, float Intensity)
+	{
+		Pos = vec4(Position, Angle);
+		Dir = vec4(Direction);
+		Col = vec4(Color, Intensity);
+		LightType = light_type_spot;
+	}
+
+	void DirectionalLight(vec3 Position, vec3 Direction, vec3 Color, float Intensity)
+	{
+		Pos = vec4(Position);
+		Dir = vec4(Direction);
+		Col = vec4(Color, Intensity);
+		LightType = light_type_directional;
+	}
+};
+
+struct particle_component
 {
 	vec3  Position;
 	vec3  Velocity;
@@ -526,11 +589,194 @@ struct particle_behavior
 	float TimeMax;
 };
 
+struct base_component
+{
+	static size_t NextID;
+};
+
+size_t base_component::NextID = 0;
+
+template<typename T>
+struct component : public base_component
+{
+	static size_t GetNextID() 
+	{
+		size_t Result = NextID++;
+		return Result;
+	}
+};
+
+struct entity_system
+{
+	signature Signature;
+	std::vector<entity> Entities;
+
+	entity_system() = default;
+	~entity_system() = default;
+
+	template<typename component_type>
+	void RequireComponent()
+	{
+		//size_t ComponentID = component<component_type>::GetID();
+		//Signature.set(ComponentID);
+	}
+};
+
+struct base_pool
+{
+	virtual ~base_pool() = default;
+};
+
+template<typename T>
+struct component_pool : public base_pool
+{
+	std::vector<T> Data;
+
+	component_pool(size_t Capacity = 20)
+	{
+		Data.resize(Capacity);
+	}
+
+	~component_pool() = default;
+
+	void Add(T& Object)
+	{
+		Data.push_back(Object);
+	}
+
+	void Resize(size_t NewSize)
+	{
+		Data.resize(NewSize);
+	}
+
+	void Set(size_t Idx, T& Object)
+	{
+		Data[Idx] = Object;
+	}
+
+	T& Get(size_t Index)
+	{
+		return Data[Index];
+	}
+
+	T& operator[](size_t Index)
+	{
+		return Data[Index];
+	}
+};
+
+typedef std::unordered_map<std::type_index, std::shared_ptr<entity_system>> system_pool;
+struct registry
+{
+	size_t EntitiesCount = 0;
+
+	std::vector<entity> Entities;
+
+	std::unordered_map<std::type_index, u32> TypeIds;
+	std::vector<signature> EntitiesComponentSignatures;
+	std::vector<std::shared_ptr<base_pool>> ComponentPools;
+
+	system_pool Systems;
+
+	entity CreateEntity()
+	{
+		EntitiesCount++;
+		entity NewEntity(EntitiesCount);
+		Entities.push_back(NewEntity);
+
+		if((NewEntity.Handle - 1) >= EntitiesComponentSignatures.size())
+		{
+			EntitiesComponentSignatures.resize(Entities.size());
+		}
+
+		return NewEntity;
+	}
+
+	void AddEntity(entity NewEntity)
+	{
+		EntitiesCount++;
+		Entities.push_back(NewEntity);
+
+		if(NewEntity.Handle >= EntitiesComponentSignatures.size())
+		{
+			EntitiesComponentSignatures.resize(Entities.size() + 1);
+		}
+	}
+
+	template<typename component_type, typename ...args>
+	void AddComponent(entity& Object, args&&... Args)
+	{
+		const size_t EntityID = Object.Handle - 1;
+		const size_t ComponentID = component<component_type>::GetNextID();
+
+		if(ComponentID >= ComponentPools.size())
+		{
+			ComponentPools.resize(ComponentID + 1, nullptr);
+		}
+		if(ComponentPools[ComponentID] == nullptr)
+		{
+			std::shared_ptr<component_pool<component_type>> NewPool(new component_pool<component_type>());
+			ComponentPools[ComponentID] = NewPool;
+		}
+
+		std::shared_ptr<component_pool<component_type>> ComponentPool = std::static_pointer_cast<component_pool<component_type>>(ComponentPools[ComponentID]);
+		if(EntityID >= ComponentPool->Data.size())
+		{
+			ComponentPool->Resize(EntitiesCount);
+		}
+
+		component_type NewComponent(std::forward<args>(Args)...);
+
+		ComponentPool->Set(EntityID, NewComponent);
+		EntitiesComponentSignatures[EntityID].set(ComponentID);
+		TypeIds[std::type_index(typeid(component_type))] = ComponentID;
+	}
+
+	template<typename component_type>
+	component_type* GetComponent(entity& Object)
+	{
+		const size_t EntityID = Object.Handle - 1;
+
+		auto it = TypeIds.find(std::type_index(typeid(component_type)));
+		if(it == TypeIds.end()) {
+			return nullptr;
+		}
+
+		const size_t ComponentID = it->second;
+		if(HasComponent<component_type>(Object))
+		{
+			component_type* Component = &std::static_pointer_cast<component_pool<component_type>>(ComponentPools[ComponentID])->Get(EntityID);
+			return Component;
+		}
+
+		return nullptr;
+	}
+
+	template<typename component_type>
+	void RemoveComponent(entity& Object)
+	{
+		const size_t EntityID = Object.Handle - 1;
+		const size_t ComponentID = TypeIds[std::type_index(typeid(component_type))];
+
+		EntitiesComponentSignatures[EntityID].set(ComponentID, false);
+	}
+
+	template<typename component_type>
+	bool HasComponent(entity& Object)
+	{
+		const size_t EntityID = Object.Handle - 1;
+		const size_t ComponentID = TypeIds[std::type_index(typeid(component_type))];
+
+		return EntitiesComponentSignatures[EntityID].test(ComponentID);
+	}
+};
+
 struct scene
 {
 	bool IsInitialized = false;
 
-	std::vector<std::unique_ptr<object_behavior>> Objects;
+	registry Registry;
+
 	std::vector<light_source> LightSources;
 
 	scene() = default;
@@ -571,9 +817,10 @@ struct scene
 	// TODO: something better here
 	void Reset()
 	{
-		for(std::unique_ptr<object_behavior>& Object : Objects)
+		for(entity& Entity : Registry.Entities)
 		{
-			Object->Reset();
+			dynamic_instances_component* Component = Registry.GetComponent<dynamic_instances_component>(Entity);
+			if(Component) Component->Reset();
 		}
 		LightSources.clear();
 	}

@@ -19,7 +19,10 @@ float Gaussian(float x, float sigma) {
 void main()
 {
 	vec2 TextCoord = gl_GlobalInvocationID.xy;
-    if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y) return;
+    if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y || TextCoord.x < 0 || TextCoord.y < 0) 
+	{
+        return;
+    }
 
 	vec4  Result = vec4(0.0);
 	float SampleCount = 0.0;
