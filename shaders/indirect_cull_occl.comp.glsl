@@ -1,5 +1,7 @@
 #version 450
 
+#extension GL_EXT_scalar_block_layout: require
+
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 struct sphere
@@ -14,15 +16,6 @@ struct aabb
 	vec4 Max;
 };
 
-struct material
-{
-	vec4  LightEmmit;
-	float Specular;
-	uint  TextureIdx;
-	uint  NormalMapIdx;
-	uint  LightType;
-};
-
 struct offset
 {
 	aabb AABB;
@@ -35,20 +28,12 @@ struct offset
 	uint IndexCount;
 };
 
-struct mesh_draw_command_input
-{
-	material Mat;
-	vec4 Translate;
-	vec4 Scale;
-	uint MeshIndex;
-};
-
 struct mesh_draw_command
 {
-	material Mat;
 	vec4 Translate;
 	vec4 Scale;
 	vec4 Rotate;
+	uint MeshIndex;
 };
 
 struct plane
@@ -65,6 +50,8 @@ struct mesh_comp_culling_common_input
 	float NearZ;
 	uint  DrawCount;
 	uint  MeshCount;
+	uint  DebugDrawCount;
+	uint  DebugMeshCount;
 	mat4  Proj;
 	mat4  View;
 };
@@ -80,12 +67,11 @@ struct indirect_draw_indexed_command
 };
 
 
-layout(binding = 0) buffer readonly b0 { offset MeshOffsets[]; };
-layout(binding = 1) buffer b1 { mesh_draw_command_input MeshDrawCommandData[]; };
-layout(binding = 2) buffer b2 { uint MeshDrawVisibilityData[]; };
-layout(binding = 3) buffer b3 { mesh_draw_command MeshDrawCommands[]; };
-layout(binding = 4) buffer readonly b4 { mesh_comp_culling_common_input MeshCullingCommonInput; };
-layout(binding = 5) uniform sampler2D DepthPyramid;
+layout(binding = 0, std430) uniform readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };
+layout(binding = 1) buffer readonly b1 { offset MeshOffsets[]; };
+layout(binding = 2) buffer b2 { mesh_draw_command MeshDrawCommandData[]; };
+layout(binding = 3) buffer b3 { uint MeshDrawVisibilityData[]; };
+layout(binding = 4) uniform sampler2D DepthPyramid;
 
 
 void main()
@@ -149,10 +135,12 @@ void main()
 		vec2  BoxSize = (NewMax.xy - NewMin.xy) * HiZSize;
 		float Lod = floor(log2(max(BoxSize.x, BoxSize.y)));
 
-		vec2  BoxCoord = (NewMax.xy + NewMin.xy) * 0.5;
-		float PyramidDepth = textureLod(DepthPyramid, BoxCoord, Lod).x;
+		float a = textureLod(DepthPyramid, BoxMin.xy, Lod).x;
+		float b = textureLod(DepthPyramid, vec2(BoxMin.x, BoxMax.y), Lod).x;
+		float c = textureLod(DepthPyramid, vec2(BoxMax.x, BoxMin.y), Lod).x;
+		float d = textureLod(DepthPyramid, BoxMax.xy, Lod).x;
 
-		IsVisible = IsVisible && (NewMin.z < (PyramidDepth + 0.025));
+		IsVisible = IsVisible && (NewMin.z < (max(max(max(a, b), c), d) + 0.03));
 	}
 
 	MeshDrawVisibilityData[DrawIndex] = IsVisible ? 1 : 0;

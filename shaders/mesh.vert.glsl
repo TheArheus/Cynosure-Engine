@@ -1,5 +1,6 @@
 #version 450
 
+#extension GL_EXT_scalar_block_layout: require
 #extension GL_EXT_shader_16bit_storage: require
 #extension GL_EXT_shader_8bit_storage: require
 
@@ -21,6 +22,7 @@ struct global_world_data
 	uint  DirectionalLightSourceCount;
 	uint  PointLightSourceCount;
 	uint  SpotLightSourceCount;
+	float CascadeSplits[DEPTH_CASCADES_COUNT + 1];
 	float ScreenWidth;
 	float ScreenHeight;
 	float NearZ;
@@ -31,11 +33,16 @@ struct global_world_data
 
 struct material
 {
-	vec4  LightEmmit;
-	float Specular;
-	uint  TextureIdx;
-	uint  NormalMapIdx;
-	uint  LightType;
+	vec4 LightEmmit;
+	bool HasTexture;
+	uint TextureIdx;
+	bool HasNormalMap;
+	uint NormalMapIdx;
+	bool HasSpecularMap;
+	uint SpecularMapIdx;
+	bool HasHeightMap;
+	uint HeightMapIdx;
+	uint LightType;
 };
 
 struct vert_in
@@ -57,10 +64,10 @@ struct vert_out
 
 struct mesh_draw_command
 {
-	material Mat;
 	vec4 Translate;
 	vec4 Scale;
 	vec4 Rotate;
+	uint MatIdx;
 };
 
 vec4 QuatMul(vec4 lhs, vec4 rhs)
@@ -68,17 +75,20 @@ vec4 QuatMul(vec4 lhs, vec4 rhs)
 	return vec4(lhs.xyz * rhs.w + rhs.xyz * lhs.w + cross(lhs.xyz, rhs.xyz), dot(-lhs.xyz, rhs.xyz) + lhs.w * rhs.w);
 }
 
-layout(binding = 0) readonly buffer  block0 {vert_in In[];};
-layout(binding = 1) readonly uniform block1 {global_world_data WorldUpdate;};
-layout(binding = 2) readonly buffer  block2 {mesh_draw_command MeshDrawCommands[];};
+layout(set = 0, binding = 0, std430) readonly uniform b0 { global_world_data WorldUpdate; };
+layout(set = 0, binding = 1) readonly buffer  b1 { vert_in In[]; };
+layout(set = 0, binding = 2) readonly buffer  b2 { mesh_draw_command MeshDrawCommands[]; };
+layout(set = 0, binding = 3) readonly buffer  b3 { material MeshMaterials[]; };
 
 layout(location = 0) out vert_out Out;
-layout(location = 4) out mat3     TBN;
+layout(location = 4) out uint     MatIdx;
+layout(location = 5) out mat3     TBN;
 
 void main()
 {
 	uint VertexIndex   = gl_VertexIndex;
 	uint InstanceIndex = gl_InstanceIndex;
+	MatIdx = MeshDrawCommands[InstanceIndex].MatIdx;
 
 	Out.Coord = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
 
@@ -91,7 +101,7 @@ void main()
 	TBN          = mat3(Tang, Bitang, Normal);
 
 	Out.Norm      = vec4(Normal, 0.0);
-	Out.Col		  = MeshDrawCommands[InstanceIndex].Mat.LightEmmit;
+	Out.Col		  = MeshMaterials[MatIdx].LightEmmit;
 	Out.TextCoord = In[VertexIndex].TexPos;
 
 	gl_Position   = WorldUpdate.Proj * WorldUpdate.View * Out.Coord;

@@ -8,7 +8,7 @@ setlocal EnableDelayedExpansion
 set VulkanInc="%VULKAN_SDK%\Include"
 set VulkanLib="%VULKAN_SDK%\Lib"
 
-set CommonCompFlags=/std:c++latest /Zc:__cplusplus -fp:fast -nologo -MTd -EHsc -Od -Oi -WX- -W4 -GR- -Gm- -GS -FC -Zi -D_MBCS -wd4005 -wd4100 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267 -wd4324
+set CommonCompFlags=/std:c++latest /Zc:__cplusplus -fp:fast -nologo -MTd -EHsc -Od -Oi -WX- -W4 -GR- -Gm- -GS -FC -Zi -D_MBCS -wd4005 -wd4100 -wd4127 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267 -wd4324 -wd4505
 set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console
 
 set PlatformCppFiles="..\src\main.cpp"
@@ -25,7 +25,7 @@ if not exist ..\build\shaders\ mkdir ..\build\shaders\
 
 rem goto shader_build_skip
 glslangValidator ..\shaders\mesh.vert.glsl %DepthCascades% -o ..\build\shaders\mesh.vert.spv -e main --target-env vulkan1.3
-glslangValidator ..\shaders\mesh.frag.glsl %DepthCascades% %UseDebugColorBlend% -o ..\build\shaders\mesh.frag.spv -e main --target-env vulkan1.3
+glslangValidator ..\shaders\mesh.frag.glsl -gVS -g %DepthCascades% %UseDebugColorBlend% -o ..\build\shaders\mesh.frag.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.dbg.vert.glsl %DepthCascades% -o ..\build\shaders\mesh.dbg.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.dbg.frag.glsl %DepthCascades% -o ..\build\shaders\mesh.dbg.frag.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.dbg.comp.glsl -gVS -g -o ..\build\shaders\mesh.dbg.comp.spv -e main --target-env vulkan1.3
@@ -63,7 +63,7 @@ for %%f in ("..\..\src\game_scenes\*.cpp") do (
     )
     
     set ExportName=!ExportName!Create
-	cl %CommonCompFlags% "!FileName!" /LD /Fe"!BaseName!" -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName% -PDB:ce_!BaseName!_%random%.pdb
+	cl %CommonCompFlags% "!FileName!" /LD /Fe"!BaseName!" %DepthCascades% -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName% -PDB:ce_!BaseName!_%random%.pdb
 )
 popd
 

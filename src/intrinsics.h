@@ -26,7 +26,7 @@
 #include <typeindex>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "core/vendor/stb_image.h"
 
 enum button_symbol
 {
@@ -204,9 +204,6 @@ typedef double   r64;
 typedef uint32_t b32;
 typedef uint64_t b64;
 
-typedef u64 entity_handle;
-typedef std::bitset<32> signature;
-
 constexpr size_t KB(size_t val) { return val * 1000; };
 constexpr size_t MB(size_t val) { return KB(val) * 1000; };
 constexpr size_t GB(size_t val) { return MB(val) * 1000; };
@@ -217,19 +214,13 @@ constexpr size_t GiB(size_t val) { return MiB(val) * 1024; };
 
 template<typename T> struct type_name;
 
-#include "math.h"
-#include "mesh.h"
+#include "core/math.h"
+#include "core/mesh_loader/mesh.h"
 
 struct buttons
 {
 	bool IsDown;
 	bool WasDown;
-};
-
-struct view_data
-{
-	vec3 CameraPos;
-	vec3 ViewDir;
 };
 
 struct game_input
@@ -238,38 +229,29 @@ struct game_input
 	r32 DeltaTime;
 };
 
-// TODO: Make scale to be vec4 and add rotation vector
 struct alignas(16) mesh_draw_command
 {
-	mesh::material Mat;
 	vec4 Translate;
 	vec4 Scale;
 	vec4 Rotate;
-};
-
-struct alignas(16) mesh_draw_command_input
-{
-	mesh::material Mat;
-	vec4 Translate;
-	vec4 Scale;
 	u32  MeshIndex;
 };
 
-// NOTE: When light is point(w is a radius), then pos. Otherwise it is dir(w is cutoff angle for spot light).
+// NOTE: When light source is a point light Pos.w is a radius. Otherwise Pos.w is cutoff angle for spot light.
 struct alignas(16) light_source
 {
 	vec4 Pos;
 	vec4 Dir;
 	vec4 Col;
-	u32  LightType;
+	u32  Type;
 };
 
 struct texture_data
 {
-	u32 Width;
-	u32 Height;
-	u32 Depth;
-	void* Data;
+	u32 Width  = 0;
+	u32 Height = 0;
+	u32 Depth  = 0;
+	void* Data = 0;
 
 	texture_data() = default;
 	texture_data(const char* Path)
@@ -291,493 +273,41 @@ struct texture_data
 	}
 };
 
-// TODO: Move allocators out
-class allocator
+struct global_world_data 
 {
-public:
-	allocator(const std::size_t MemSize, void* const NewStart) noexcept : Size(MemSize), Start(NewStart), Used(0), AllocCount(0) {assert(MemSize > 0);}
-	allocator(const allocator&) = delete;
-	allocator& operator=(allocator&) = delete;
-
-	allocator(allocator&& Oth) noexcept : Size(Oth.Size), Used(Oth.Used), AllocCount(Oth.AllocCount), Start(Oth.Start)
-	{
-		Oth.Size = 0;
-		Oth.Used = 0;
-		Oth.Start = nullptr;
-		Oth.AllocCount = 0;
-	}
-	allocator& operator=(allocator&& Oth) noexcept
-	{
-		Size = Oth.Size;
-		Used = Oth.Used;
-		Start = Oth.Start;
-		AllocCount = Oth.AllocCount;
-
-		Oth.Size = 0;
-		Oth.Used = 0;
-		Oth.Start = nullptr;
-		Oth.AllocCount = 0;
-
-		return *this;
-	}
-
-	virtual ~allocator() noexcept
-	{
-		assert(Used == 0 && AllocCount == 0);
-	}
-
-	virtual void* Allocate(const std::size_t& Size, const std::uintptr_t& Alignment = sizeof(std::uintptr_t)) = 0;
-	virtual void  Free(void* const Mem) = 0;
-
-	size_t Size;
-	size_t Used;
-	size_t AllocCount;
-
-protected:
-	void* Start;
-};
-
-class linear_allocator : public allocator
-{
-public:
-	linear_allocator(const std::size_t MemSize, void* const Start) : allocator(MemSize, Start), Current(Start) {}
-	linear_allocator(linear_allocator&& Other) : allocator(std::move(Other)), Current(Other.Current) { Other.Current = nullptr; }
-	~linear_allocator() noexcept
-	{
-		Clear();
-	}
-
-	linear_allocator& operator=(linear_allocator&& Other)
-	{
-		allocator::operator=(std::move(Other));
-
-		Current = Other.Current;
-		Other.Current = nullptr;
-
-		return *this;
-	}
-
-	virtual void* Allocate(const std::size_t& AllocSize, const std::uintptr_t& Alignment = sizeof(std::uintptr_t)) override
-	{
-		assert(Size > 0 && Alignment > 0);
-
-		uintptr_t Ptr = (std::uintptr_t)Current;
-		uintptr_t Aligned = AlignUp(Ptr, Alignment);
-		size_t Forward = Aligned - Ptr;
-
-		if(Used + Forward + AllocSize > Size) return nullptr;
-
-		void* AlignedAddr = (void*)((uintptr_t)Current + Forward);
-		Current = (void*)((uintptr_t)AlignedAddr + AllocSize);
-		Used = (uintptr_t)Current - (uintptr_t)Start;
-
-		AllocCount++;
-		return AlignedAddr;
-	}
-
-	virtual void Free(void* const Mem) noexcept override {}
-
-	virtual void Clear() noexcept
-	{
-		Current = Start;
-		AllocCount = 0;
-		Used = 0;
-	}
-
-	virtual void Rewind(void* const Mark) noexcept
-	{
-		assert(Current >= Mark && Start <= Mark);
-		Current = Mark;
-		Used = (uintptr_t)Current - (uintptr_t)Start;
-	}
-
-protected:
-	void* Current;
-};
-
-template<typename T, class alloc_type>
-class allocator_adapter
-{
-public:
-	typedef T value_type;
-
-	allocator_adapter() = delete;
-	allocator_adapter(alloc_type& NewAllocator) noexcept : Allocator(NewAllocator) {}
-
-	template<typename U>
-	allocator_adapter(const allocator_adapter<U, alloc_type> Other) noexcept : Allocator(Other.Allocator) {}
-
-	[[nodiscard]] constexpr value_type* allocate(const std::size_t& AllocCount)
-	{
-		return (value_type*)Allocator.Allocate(AllocCount * sizeof(value_type), alignof(value_type));
-	}
-
-	constexpr void deallocate(value_type* Ptr, [[maybe_unused]] std::size_t DeallocCount) noexcept
-	{
-		Allocator.Free(Ptr);
-	}
-
-	std::size_t MaxAllocationSize() const noexcept
-	{
-		return Allocator.Size;
-	}
-
-	bool operator==(const allocator_adapter<T, alloc_type>& Other) const noexcept
-	{
-		if constexpr(std::is_base_of_v<alloc_type, linear_allocator>)
-		{
-			return Allocator.Start == Other.Allocator.Start;
-		}
-		// TODO: Other allocator types if needed
-		else
-		{
-			return true;
-		}
-	}
-
-	bool operator!=(const allocator_adapter<T, alloc_type>& Other) const noexcept
-	{
-		return !(*this == Other);
-	}
-
-	alloc_type& Allocator;
+	mat4  View;
+	mat4  DebugView;
+	mat4  Proj;
+	mat4  LightView[DEPTH_CASCADES_COUNT];
+	mat4  LightProj[DEPTH_CASCADES_COUNT];
+	vec4  CameraPos;
+	vec4  CameraDir;
+	vec4  GlobalLightPos;
+	float GlobalLightSize;
+	u32   DirectionalLightSourceCount;
+	u32   PointLightSourceCount;
+	u32   SpotLightSourceCount;
+	float CascadeSplits[DEPTH_CASCADES_COUNT + 1];
+	float ScreenWidth;
+	float ScreenHeight;
+	float NearZ;
+	float FarZ;
+	u32   DebugColors;
+	u32   LightSourceShadowsEnabled;
 };
 
 #define GameSceneStartFunc()  void Start()
 #define GameSceneUpdateFunc() void Update()
 
-struct entity
-{
-	entity_handle Handle;
-};
-
-struct mesh_component
-{
-	mesh Data;
-
-	mesh_component() = default;
-
-	mesh_component(const std::string& Path, u32 BoundingGeneration = 0)
-	{
-		Data.Load(Path, BoundingGeneration);
-	}
-	
-	void LoadMesh(const std::string& Path, u32 BoundingGeneration = 0)
-	{
-		Data.Load(Path, BoundingGeneration);
-	}
-};
-
-struct debug_component
-{
-	mesh Data;
-
-	debug_component() = default;
-
-	debug_component(mesh& NewData)
-	{
-		Data.LoadDebug(NewData);
-	}
-
-	void Load(mesh& NewData)
-	{
-		Data.LoadDebug(NewData);
-	}
-};
-
-// TODO: How do I add instance for a particular entity id, if it wouldn't be known here???
-// TODO: Instance ID's
-struct static_instances_component
-{
-	std::vector<u32> Visibility;
-	std::vector<mesh_draw_command_input> Data;
-
-	// TODO: Have only this one
-	void AddInstance(entity Entity, vec4 Translate, vec4 Scale, bool IsVisible)
-	{
-		mesh_draw_command_input Command = {};
-		Command.Translate = Translate;
-		Command.Scale = Scale;
-		Command.MeshIndex = Entity.Handle;
-		Data.push_back(Command);
-		Visibility.push_back(IsVisible);
-	}
-
-	void AddInstance(entity Entity, const mesh::material& Material, vec4 Translate, vec4 Scale, bool IsVisible)
-	{
-		mesh_draw_command_input Command = {};
-		Command.Mat = Material;
-		Command.Translate = Translate;
-		Command.Scale = Scale;
-		Command.MeshIndex = Entity.Handle;
-		Data.push_back(Command);
-		Visibility.push_back(IsVisible);
-	}
-};
-
-// NOTE: this should reset every frame
-struct dynamic_instances_component
-{
-	std::vector<u32> Visibility;
-	std::vector<mesh_draw_command_input> Data;
-
-	// TODO: Have only this one
-	void AddInstance(entity Entity, vec4 Translate, vec4 Scale, bool IsVisible)
-	{
-		mesh_draw_command_input Command = {};
-		Command.Translate = Translate;
-		Command.Scale = Scale;
-		Command.MeshIndex = Entity.Handle;
-		Data.push_back(Command);
-		Visibility.push_back(IsVisible);
-	}
-
-	void AddInstance(entity Entity, const mesh::material& Material, vec4 Translate, vec4 Scale, bool IsVisible)
-	{
-		mesh_draw_command_input Command = {};
-		Command.Mat = Material;
-		Command.Translate = Translate;
-		Command.Scale = Scale;
-		Command.MeshIndex = Entity.Handle;
-		Data.push_back(Command);
-		Visibility.push_back(IsVisible);
-	}
-
-	void Reset()
-	{
-		Data.clear();
-	}
-};
-
-struct alignas(16) light_component
-{
-	vec4 Pos;
-	vec4 Dir;
-	vec4 Col;
-	u32  LightType;
-
-	void PointLight(vec3 Position, float Radius, vec3 Color, float Intensity)
-	{
-		Pos = vec4(Position, Radius);
-		Col = vec4(Color, Intensity);
-		LightType = light_type_point;
-	}
-
-	void SpotLight(vec3 Position, float Angle, vec3 Direction, vec3 Color, float Intensity)
-	{
-		Pos = vec4(Position, Angle);
-		Dir = vec4(Direction);
-		Col = vec4(Color, Intensity);
-		LightType = light_type_spot;
-	}
-
-	void DirectionalLight(vec3 Position, vec3 Direction, vec3 Color, float Intensity)
-	{
-		Pos = vec4(Position);
-		Dir = vec4(Direction);
-		Col = vec4(Color, Intensity);
-		LightType = light_type_directional;
-	}
-};
-
-struct particle_component
-{
-	vec3  Position;
-	vec3  Velocity;
-	vec3  Acceleration;
-	float Time;
-	float TimeMax;
-};
-
-struct base_component
-{
-	static size_t NextID;
-};
-
-size_t base_component::NextID = 0;
-
-template<typename T>
-struct component : public base_component
-{
-	static size_t GetNextID() 
-	{
-		size_t Result = NextID++;
-		return Result;
-	}
-};
-
-struct entity_system
-{
-	signature Signature;
-	std::vector<entity> Entities;
-
-	entity_system() = default;
-	~entity_system() = default;
-
-	template<typename component_type>
-	void RequireComponent()
-	{
-		//size_t ComponentID = component<component_type>::GetID();
-		//Signature.set(ComponentID);
-	}
-};
-
-struct base_pool
-{
-	virtual ~base_pool() = default;
-};
-
-template<typename T>
-struct component_pool : public base_pool
-{
-	std::vector<T> Data;
-
-	component_pool(size_t Capacity = 20)
-	{
-		Data.resize(Capacity);
-	}
-
-	~component_pool() = default;
-
-	void Add(T& Object)
-	{
-		Data.push_back(Object);
-	}
-
-	void Resize(size_t NewSize)
-	{
-		Data.resize(NewSize);
-	}
-
-	void Set(size_t Idx, T& Object)
-	{
-		Data[Idx] = Object;
-	}
-
-	T& Get(size_t Index)
-	{
-		return Data[Index];
-	}
-
-	T& operator[](size_t Index)
-	{
-		return Data[Index];
-	}
-};
-
-typedef std::unordered_map<std::type_index, std::shared_ptr<entity_system>> system_pool;
-struct registry
-{
-	size_t EntitiesCount = 0;
-
-	std::vector<entity> Entities;
-
-	std::unordered_map<std::type_index, u32> TypeIds;
-	std::vector<signature> EntitiesComponentSignatures;
-	std::vector<std::shared_ptr<base_pool>> ComponentPools;
-
-	system_pool Systems;
-
-	entity CreateEntity()
-	{
-		EntitiesCount++;
-		entity NewEntity(EntitiesCount);
-		Entities.push_back(NewEntity);
-
-		if((NewEntity.Handle - 1) >= EntitiesComponentSignatures.size())
-		{
-			EntitiesComponentSignatures.resize(Entities.size());
-		}
-
-		return NewEntity;
-	}
-
-	void AddEntity(entity NewEntity)
-	{
-		EntitiesCount++;
-		Entities.push_back(NewEntity);
-
-		if(NewEntity.Handle >= EntitiesComponentSignatures.size())
-		{
-			EntitiesComponentSignatures.resize(Entities.size() + 1);
-		}
-	}
-
-	template<typename component_type, typename ...args>
-	void AddComponent(entity& Object, args&&... Args)
-	{
-		const size_t EntityID = Object.Handle - 1;
-		const size_t ComponentID = component<component_type>::GetNextID();
-
-		if(ComponentID >= ComponentPools.size())
-		{
-			ComponentPools.resize(ComponentID + 1, nullptr);
-		}
-		if(ComponentPools[ComponentID] == nullptr)
-		{
-			std::shared_ptr<component_pool<component_type>> NewPool(new component_pool<component_type>());
-			ComponentPools[ComponentID] = NewPool;
-		}
-
-		std::shared_ptr<component_pool<component_type>> ComponentPool = std::static_pointer_cast<component_pool<component_type>>(ComponentPools[ComponentID]);
-		if(EntityID >= ComponentPool->Data.size())
-		{
-			ComponentPool->Resize(EntitiesCount);
-		}
-
-		component_type NewComponent(std::forward<args>(Args)...);
-
-		ComponentPool->Set(EntityID, NewComponent);
-		EntitiesComponentSignatures[EntityID].set(ComponentID);
-		TypeIds[std::type_index(typeid(component_type))] = ComponentID;
-	}
-
-	template<typename component_type>
-	component_type* GetComponent(entity& Object)
-	{
-		const size_t EntityID = Object.Handle - 1;
-
-		auto it = TypeIds.find(std::type_index(typeid(component_type)));
-		if(it == TypeIds.end()) {
-			return nullptr;
-		}
-
-		const size_t ComponentID = it->second;
-		if(HasComponent<component_type>(Object))
-		{
-			component_type* Component = &std::static_pointer_cast<component_pool<component_type>>(ComponentPools[ComponentID])->Get(EntityID);
-			return Component;
-		}
-
-		return nullptr;
-	}
-
-	template<typename component_type>
-	void RemoveComponent(entity& Object)
-	{
-		const size_t EntityID = Object.Handle - 1;
-		const size_t ComponentID = TypeIds[std::type_index(typeid(component_type))];
-
-		EntitiesComponentSignatures[EntityID].set(ComponentID, false);
-	}
-
-	template<typename component_type>
-	bool HasComponent(entity& Object)
-	{
-		const size_t EntityID = Object.Handle - 1;
-		const size_t ComponentID = TypeIds[std::type_index(typeid(component_type))];
-
-		return EntitiesComponentSignatures[EntityID].test(ComponentID);
-	}
-};
+#include "core\allocators\allocators.hpp"
+#include "core\entity_component_system\entity_systems.h"
+#include "core\entity_component_system\components.h"
 
 struct scene
 {
-	bool IsInitialized = false;
-
 	registry Registry;
 
-	std::vector<light_source> LightSources;
+	bool IsInitialized = false;
 
 	scene() = default;
 	virtual ~scene() {};
@@ -785,44 +315,14 @@ struct scene
 	virtual GameSceneStartFunc()  = 0;
 	virtual GameSceneUpdateFunc() = 0;
 
-	void AddPointLight(vec3 Position, float Radius, vec3 Color, float Intensity)
-	{
-		light_source NewLightSource = {};
-		NewLightSource.Pos = vec4(Position, Radius);
-		NewLightSource.Col = vec4(Color, Intensity);
-		NewLightSource.LightType = light_type_point;
-		LightSources.push_back(NewLightSource);
-	}
-
-	void AddSpotLight(vec3 Position, float Angle, vec3 Direction, vec3 Color, float Intensity)
-	{
-		light_source NewLightSource = {};
-		NewLightSource.Pos = vec4(Position, Angle);
-		NewLightSource.Dir = vec4(Direction);
-		NewLightSource.Col = vec4(Color, Intensity);
-		NewLightSource.LightType = light_type_spot;
-		LightSources.push_back(NewLightSource);
-	}
-
-	void AddDirectionalLight(vec3 Position, vec3 Direction, vec3 Color, float Intensity)
-	{
-		light_source NewLightSource = {};
-		NewLightSource.Pos = vec4(Position);
-		NewLightSource.Dir = vec4(Direction);
-		NewLightSource.Col = vec4(Color, Intensity);
-		NewLightSource.LightType = light_type_directional;
-		LightSources.push_back(NewLightSource);
-	}
-
 	// TODO: something better here
 	void Reset()
 	{
 		for(entity& Entity : Registry.Entities)
 		{
-			dynamic_instances_component* Component = Registry.GetComponent<dynamic_instances_component>(Entity);
+			dynamic_instances_component* Component = Entity.GetComponent<dynamic_instances_component>();
 			if(Component) Component->Reset();
 		}
-		LightSources.clear();
 	}
 };
 

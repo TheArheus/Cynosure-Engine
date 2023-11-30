@@ -1,5 +1,7 @@
 #version 450
 
+#extension GL_EXT_scalar_block_layout: require
+
 #extension GL_EXT_shader_16bit_storage: require
 #extension GL_EXT_shader_8bit_storage: require
 
@@ -30,6 +32,7 @@ struct global_world_data
 	uint  DirectionalLightSourceCount;
 	uint  PointLightSourceCount;
 	uint  SpotLightSourceCount;
+	float CascadeSplits[DEPTH_CASCADES_COUNT + 1];
 	float ScreenWidth;
 	float ScreenHeight;
 	float NearZ;
@@ -40,35 +43,30 @@ struct global_world_data
 
 struct material
 {
-	vec4  LightEmmit;
-	float Specular;
-	uint  TextureIdx;
-	uint  NormalMapIdx;
-	uint  LightType;
+	vec4 LightEmmit;
+	bool HasTexture;
+	uint TextureIdx;
+	bool HasNormalMap;
+	uint NormalMapIdx;
+	bool HasSpecularMap;
+	uint SpecularMapIdx;
+	bool HasHeightMap;
+	uint HeightMapIdx;
+	uint LightType;
 };
 
 struct mesh_draw_command
 {
-	material Mat;
 	vec4 Translate;
 	vec4 Scale;
 	vec4 Rotate;
+	uint MatIdx;
 };
 
-layout(binding = 0) readonly buffer block0
-{
-	vert_in In[];
-};
-
-layout(binding = 1) readonly uniform block1
-{
-	global_world_data WorldUpdate;
-};
-
-layout(binding = 2) readonly buffer block2
-{
-	mesh_draw_command MeshData[];
-};
+layout(binding = 0, std430) readonly uniform b0 { global_world_data WorldUpdate; };
+layout(binding = 1) readonly buffer  b1 { vert_in In[]; };
+layout(binding = 2) readonly buffer  b2 { mesh_draw_command MeshData[]; };
+layout(binding = 3) readonly buffer  b3 { material MeshMaterials[]; };
 
 layout(location = 0) out vec4 OutCol;
 
@@ -76,6 +74,6 @@ void main()
 {
 	vec4 Position = In[gl_VertexIndex].Pos * MeshData[gl_InstanceIndex].Scale + MeshData[gl_InstanceIndex].Translate;
 	gl_Position = WorldUpdate.Proj * WorldUpdate.View * Position;
-	OutCol = MeshData[gl_InstanceIndex].Mat.LightEmmit;
+	OutCol = MeshMaterials[MeshData[gl_InstanceIndex].MatIdx].LightEmmit;
 }
 

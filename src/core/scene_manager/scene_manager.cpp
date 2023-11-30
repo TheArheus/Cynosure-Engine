@@ -1,47 +1,4 @@
 
-struct scene_manager
-{
-	struct scene_info
-	{
-		HMODULE Module;
-		std::string Name;
-		std::string Path;
-		std::filesystem::file_time_type LastFileCreation;
-		bool IsInitialized;
-	};
-
-	u32 CurrentScene = 0;
-	std::vector<std::unique_ptr<scene>> Scenes;
-	std::vector<scene_info> Infos;
-
-	mesh GlobalGeometries;
-	mesh GlobalDebugGeometries;
-
-	bool DebugMeshesDrawEnabled = true;
-
-	scene_manager(std::string ScenesPath = "..\\build\\scenes\\")
-	{
-		LoadAllScenes(ScenesPath);
-	}
-
-	// TODO: Load a scenes by their file names. Load and unload if scene was recompiled(many if needed, but for this I need to check this every times in the loop I guess but that is a lot of work and think about something better)
-	void LoadScene(const std::filesystem::directory_entry& SceneCode);
-	void LoadAllScenes(std::string ScenesPath = "..\\build\\scenes\\");
-	void UpdateScenes(std::string ScenesPath = "..\\build\\scenes\\");
-
-	bool IsCurrentSceneInitialized(){return Infos[CurrentScene].IsInitialized;}
-
-	void StartScene();
-	void UpdateScene(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalInstances, 
-					 std::vector<u32, allocator_adapter<u32, linear_allocator>>& GlobalMeshVisibility, 
-					 std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalDebugInstances, 
-					 std::vector<u32, allocator_adapter<u32, linear_allocator>>& DebugMeshVisibility,
-					 std::vector<light_source, allocator_adapter<light_source, linear_allocator>>& GlobalLightSources);
-
-	void SaveSceneStateToFile(const char* FilePath);
-	void LoadSceneStateFromFile(const char* FilePath);
-};
-
 void scene_manager::
 LoadScene(const std::filesystem::directory_entry& SceneCode)
 {
@@ -168,66 +125,51 @@ LoadSceneStateFromFile(const char* FilePath)
 }
 
 void scene_manager::
-StartScene()
+StartScene(window& Window)
 {
 	if(!Scenes[CurrentScene]->IsInitialized)
 	{
 		GlobalGeometries.Clear();
 		GlobalDebugGeometries.Clear();
-		base_component::NextID = 0;
 
 		Scenes[CurrentScene]->Start();
 
-		for(entity& Entity : Scenes[CurrentScene]->Registry.Entities)
-		{
-			mesh_component* Mesh = Scenes[CurrentScene]->Registry.GetComponent<mesh_component>(Entity);
-			if(Mesh)
-			{
-				GlobalGeometries.Load(Mesh->Data);
-			}
-		}
-		GlobalDebugGeometries.LoadDebug(GlobalGeometries);
+		Scenes[CurrentScene]->Registry.AddSystem<light_sources_system>();
+		Scenes[CurrentScene]->Registry.AddSystem<world_update_system>();
+		Scenes[CurrentScene]->Registry.AddSystem<render_system>();
+		Scenes[CurrentScene]->Registry.AddSystem<render_debug_system>();
+
+		Scenes[CurrentScene]->Registry.UpdateSystems();
+
+		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->Setup(Window, GlobalHeap, MeshCompCullingCommonData);
+		Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Setup(Window, GlobalHeap, MeshCompCullingCommonData, GfxColorTarget.Info.Format);
 	}
 }
 
 void scene_manager::
-UpdateScene(std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalMeshInstances, 
-			std::vector<u32, allocator_adapter<u32, linear_allocator>>& GlobalMeshVisibility, 
-			std::vector<mesh_draw_command_input, allocator_adapter<mesh_draw_command_input, linear_allocator>>& GlobalDebugInstances, 
-			std::vector<u32, allocator_adapter<u32, linear_allocator>>& DebugMeshVisibility,
-			std::vector<light_source, allocator_adapter<light_source, linear_allocator>>& GlobalLightSources)
+UpdateScene(window& Window, 
+			alloc_vector<mesh_draw_command>& DynamicMeshInstances, alloc_vector<u32>& DynamicMeshVisibility, 
+			alloc_vector<mesh_draw_command>& DynamicDebugInstances, alloc_vector<u32>& DynamicDebugVisibility,
+			alloc_vector<light_source>& GlobalLightSources)
 {
 	if(Scenes[CurrentScene]->IsInitialized)
 	{
 		Scenes[CurrentScene]->Reset();
 		Scenes[CurrentScene]->Update();
-		for(entity& Entity : Scenes[CurrentScene]->Registry.Entities)
+
+		if(!Window.IsGfxPaused)
 		{
-			static_instances_component* InstancesComponent = Scenes[CurrentScene]->Registry.GetComponent<static_instances_component>(Entity);
-			if(InstancesComponent)
-			{
-				GlobalMeshInstances.insert(GlobalMeshInstances.end(), InstancesComponent->Data.begin(), InstancesComponent->Data.end());
-				GlobalMeshVisibility.insert(GlobalMeshVisibility.end(), InstancesComponent->Visibility.begin(), InstancesComponent->Visibility.end());
-			}
+			Scenes[CurrentScene]->Registry.GetSystem<render_system>()->UpdateResources();
+
+			PipelineContext.Begin(Window.Gfx);
+
+			Scenes[CurrentScene]->Registry.GetSystem<light_sources_system>()->Update(WorldUpdate, GlobalLightSources);
+			Scenes[CurrentScene]->Registry.GetSystem<world_update_system>()->Update(Window, WorldUpdate, MeshCompCullingCommonData);
+			Scenes[CurrentScene]->Registry.GetSystem<render_system>()->Render(Window, PipelineContext, GfxColorTarget, GfxDepthTarget, DebugCameraViewDepthTarget, WorldUpdate, MeshCompCullingCommonData, DynamicMeshInstances, DynamicMeshVisibility, GlobalLightSources);
+			Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Render(Window, PipelineContext, GfxColorTarget, GfxDepthTarget, WorldUpdate, MeshCompCullingCommonData, DynamicDebugInstances, DynamicDebugVisibility);
+
+			PipelineContext.EmplaceColorTarget(Window.Gfx, GfxColorTarget);
+			PipelineContext.Present(Window.Gfx);
 		}
-		if(DebugMeshesDrawEnabled)
-		{
-			for(const mesh_draw_command_input& ObjectInstanceCommand : GlobalMeshInstances)
-			{
-				GlobalDebugInstances.push_back({{vec4(vec3(1, 0, 0), 1), 0, 0, 0, 0}, ObjectInstanceCommand.Translate, ObjectInstanceCommand.Scale, (ObjectInstanceCommand.MeshIndex-1)*3 + 1});
-				DebugMeshVisibility.push_back(true);
-			}
-			for(const mesh_draw_command_input& ObjectInstanceCommand : GlobalMeshInstances)
-			{
-				GlobalDebugInstances.push_back({{vec4(vec3(0, 1, 0), 1), 0, 0, 0, 0}, ObjectInstanceCommand.Translate, ObjectInstanceCommand.Scale, (ObjectInstanceCommand.MeshIndex-1)*3 + 2});
-				DebugMeshVisibility.push_back(true);
-			}
-			for(const mesh_draw_command_input& ObjectInstanceCommand : GlobalMeshInstances)
-			{
-				GlobalDebugInstances.push_back({{vec4(vec3(0, 0, 1), 1), 0, 0, 0, 0}, ObjectInstanceCommand.Translate, ObjectInstanceCommand.Scale, (ObjectInstanceCommand.MeshIndex-1)*3 + 3});
-				DebugMeshVisibility.push_back(true);
-			}
-		}
-		GlobalLightSources.insert(GlobalLightSources.end(), Scenes[CurrentScene]->LightSources.begin(), Scenes[CurrentScene]->LightSources.end());
 	}
 }

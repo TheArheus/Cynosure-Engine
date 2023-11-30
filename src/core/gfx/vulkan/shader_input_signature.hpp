@@ -1,3 +1,4 @@
+#pragma once
 
 // TODO: use vkAllocateDescriptorSets and vkCmdBindDescriptorSets and vkUpdateDescriptorSets
 // TODO: use make it so I could create both push descriptors sets and ordinary descriptor sets
@@ -166,8 +167,21 @@ public:
 	template<class backend>
 	void UpdateAll(std::unique_ptr<backend>& Gfx)
 	{
-		// TODO: pipeline layout recreation
 		Device = Gfx->Device;
+
+		if (Handle != VK_NULL_HANDLE) 
+		{
+			vkDestroyPipelineLayout(Device, Handle, nullptr);
+			Handle = VK_NULL_HANDLE;
+		}
+
+		VkPipelineLayoutCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+		CreateInfo.pSetLayouts = Layouts.data();
+		CreateInfo.setLayoutCount = Layouts.size();
+		CreateInfo.pushConstantRangeCount = PushConstants.size();
+		CreateInfo.pPushConstantRanges = PushConstants.data();
+
+		VK_CHECK(vkCreatePipelineLayout(Device, &CreateInfo, nullptr, &Handle));
 	}
 
 	template<class backend>

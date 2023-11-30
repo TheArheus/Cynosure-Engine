@@ -1,5 +1,7 @@
 #version 450
 
+#extension GL_EXT_scalar_block_layout: require
+
 #define SAMPLES_COUNT 64
 #define light_type_none 0
 #define light_type_directional 1
@@ -23,6 +25,7 @@ struct global_world_data
 	uint  DirectionalLightSourceCount;
 	uint  PointLightSourceCount;
 	uint  SpotLightSourceCount;
+	float CascadeSplits[DEPTH_CASCADES_COUNT + 1];
 	float ScreenWidth;
 	float ScreenHeight;
 	float NearZ;
@@ -39,9 +42,9 @@ struct light_source
 	uint Type;
 };
 
-layout(set = 0, binding = 0) readonly uniform block1 { global_world_data WorldUpdate; };
-layout(set = 0, binding = 1) uniform block2 { light_source LightSources[1024]; };
-layout(set = 0, binding = 2) buffer  block3 { vec2 PoissonDisk[SAMPLES_COUNT]; };
+layout(set = 0, binding = 0, std430) uniform b0 { global_world_data WorldUpdate; };
+layout(set = 0, binding = 1) uniform b1 { light_source LightSources[1024]; };
+layout(set = 0, binding = 2) buffer  b2 { vec2 PoissonDisk[SAMPLES_COUNT]; };
 layout(set = 0, binding = 3) uniform sampler3D RandomAnglesTexture;
 layout(set = 0, binding = 4) uniform sampler2D GBuffer[GBUFFER_COUNT];
 layout(set = 0, binding = 5) uniform sampler2D AmbientOcclusionBuffer;
@@ -49,17 +52,11 @@ layout(set = 0, binding = 6) uniform writeonly image2D ColorTarget;
 layout(set = 0, binding = 7) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
 layout(set = 1, binding = 0) uniform sampler2D ShadowMaps[LIGHT_SOURCES_MAX_COUNT];
 layout(set = 1, binding = 1) uniform samplerCube PointShadowMaps[LIGHT_SOURCES_MAX_COUNT];
-layout(push_constant) uniform pushConstant { float CascadeSplits[DEPTH_CASCADES_COUNT + 1]; };
 
 float GetRandomValue(vec2 Seed)
 {
     float  RandomValue = fract(sin(dot(Seed, vec2(12.9898, 78.233))) * 43758.5453);
     return RandomValue;
-}
-
-float GetSearchWidth(float ReceiverDepth, float Near)
-{
-    return WorldUpdate.GlobalLightSize * (ReceiverDepth - Near) / WorldUpdate.CameraPos.z;
 }
 
 vec3 WorldPosFromDepth(vec2 TextCoord, float Depth) {
@@ -84,14 +81,19 @@ vec4 QuatMul(vec4 lhs, vec4 rhs)
 {
 	return vec4(lhs.xyz * rhs.w + rhs.xyz * lhs.w + cross(lhs.xyz, rhs.xyz), dot(-lhs.xyz, rhs.xyz) + lhs.w * rhs.w);
 }
+
+float GetSearchWidth(float ReceiverDepth, float Near, float CameraPosZ)
+{
+    return WorldUpdate.GlobalLightSize * (Near - ReceiverDepth) / CameraPosZ;
+}
  
-float GetBlockerDistance(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation, float ReceiverDepth, float Bias, float Near)
+float GetBlockerDistance(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation, float ReceiverDepth, float Bias, float Near, float CameraPosZ)
 {
     float SumBlockerDistances = 0.0f;
     int   NumBlockerDistances = 0;
  
 	vec2 TextureSize = 1.0f / textureSize(ShadowSampler, 0);
-    int sw = int(GetSearchWidth(ReceiverDepth, Near));
+    int  sw = int(GetSearchWidth(ReceiverDepth, Near, CameraPosZ));
     for (int SampleIdx = 0; SampleIdx < SAMPLES_COUNT; ++SampleIdx)
     {
 		vec2 Offset = vec2(Rotation.x * PoissonDisk[SampleIdx].x - Rotation.y * PoissonDisk[SampleIdx].y,
@@ -100,7 +102,7 @@ float GetBlockerDistance(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotatio
 		float Depth = texture(ShadowSampler, ShadowCoord + Offset*TextureSize*sw).r;
         if (Depth < ReceiverDepth + Bias)
         {
-            ++NumBlockerDistances;
+            NumBlockerDistances += 1;
             SumBlockerDistances += Depth;
         }
     }
@@ -115,9 +117,9 @@ float GetBlockerDistance(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotatio
     }
 }
 
-float GetPCFKernelSize(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation, float ReceiverDepth, float Bias, float Near)
+float GetPCFKernelSize(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation, float ReceiverDepth, float Bias, float Near, float CameraPosZ)
 {
-    float BlockerDistance = GetBlockerDistance(ShadowSampler, ShadowCoord, Rotation, ReceiverDepth, Bias, Near);
+    float BlockerDistance = GetBlockerDistance(ShadowSampler, ShadowCoord, Rotation, ReceiverDepth, Bias, Near, CameraPosZ);
 
     if (BlockerDistance == -1)
     {
@@ -128,20 +130,21 @@ float GetPCFKernelSize(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation,
     return PenumbraWidth * WorldUpdate.GlobalLightSize * Near / ReceiverDepth;
 }
 
-float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, vec2 Rotation, float Near, vec3 Normal, vec3 CurrLightPos)
+float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, vec2 Rotation, float Near, vec3 Normal, vec3 CurrLightPos, vec4 CameraPosLS)
 {
 	vec3  LightPos = CurrLightPos * 5000000;
 	float Bias = dot(LightPos, Normal) > 0 ? -0.005 : 0.2;
 
-	vec2   TextureSize = 1.0f / textureSize(ShadowSampler, 0);
-	vec3   ProjPos = PositionInLightSpace.xyz / PositionInLightSpace.w;
-	float  ObjectDepth = ProjPos.z;
-	vec2   ShadowCoord = ProjPos.xy * vec2(0.5, -0.5) + 0.5;
+	vec3 CameraPosProjLS = CameraPosLS.xyz / CameraPosLS.w;
+
+	vec2  TextureSize = 1.0f / textureSize(ShadowSampler, 0);
+	vec3  ProjPos = PositionInLightSpace.xyz / PositionInLightSpace.w;
+	float ObjectDepth = ProjPos.z;
+	vec2  ShadowCoord = ProjPos.xy * vec2(0.5, -0.5) + 0.5;
 
 	float Result = 0.0;
 
-	if(Near < 1) Near = 1;
-	float KernelSize   = GetPCFKernelSize(ShadowSampler, ShadowCoord, Rotation, ObjectDepth, Bias, Near);
+	float KernelSize   = GetPCFKernelSize(ShadowSampler, ShadowCoord, Rotation, ObjectDepth, Bias, Near, CameraPosProjLS.z);
 	for(uint SampleIdx = 0; SampleIdx < SAMPLES_COUNT; SampleIdx++)
 	{
 		vec2 Offset = vec2(Rotation.x * PoissonDisk[SampleIdx].x - Rotation.y * PoissonDisk[SampleIdx].y,
@@ -267,11 +270,13 @@ void main()
 	vec3  Rotation3D = vec3(cos(RotationAngles.x)*sin(RotationAngles.y), sin(RotationAngles.x)*sin(RotationAngles.y), cos(RotationAngles.y));
 
 	vec4 ShadowPos[4];
+	vec4 CameraPosLS[4];
 	for(uint CascadeIdx = 0;
 		CascadeIdx < DEPTH_CASCADES_COUNT;
 		++CascadeIdx)
 	{
 		ShadowPos[CascadeIdx] = WorldUpdate.LightProj[CascadeIdx] * WorldUpdate.LightView[CascadeIdx] * CoordWS;
+		CameraPosLS[CascadeIdx] = WorldUpdate.LightProj[CascadeIdx] * WorldUpdate.LightView[CascadeIdx] * WorldUpdate.CameraPos;
 	}
 
 	vec3 CascadeColors[] = 
@@ -284,6 +289,7 @@ void main()
 		vec3(0, 1, 1),
 		vec3(1, 1, 1),
 	};
+
 
 	vec4 GlobalLightPos = WorldUpdate.GlobalLightPos;
 	vec4 GlobalLightDir = normalize(-WorldUpdate.GlobalLightPos);
@@ -335,6 +341,7 @@ void main()
 	uint  Layer = 0;
 	float GlobalShadow = 0.0;
 	vec3  CascadeCol;
+#if 0
 	for(uint CascadeIdx = 1;
 		CascadeIdx <= DEPTH_CASCADES_COUNT;
 		++CascadeIdx)
@@ -342,13 +349,13 @@ void main()
 		if(abs(CoordVS.z) < CascadeSplits[CascadeIdx])
 		{
 			Layer  = CascadeIdx - 1;
-			GlobalShadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation2D, CascadeSplits[CascadeIdx - 1], VertexNormalWS, GlobalLightPos.xyz);
+			GlobalShadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation2D, CascadeSplits[CascadeIdx - 1], VertexNormalWS, GlobalLightPos.xyz, CameraPosLS[Layer]);
 			CascadeCol = CascadeColors[Layer];
 
 			float Fade = clamp((1.0 - (CoordVS.z * CoordVS.z) / (CascadeSplits[CascadeIdx] * CascadeSplits[CascadeIdx])) / 0.2, 0.0, 1.0);
 			if(Fade > 0.0 && Fade < 1.0)
 			{
-				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation2D, CascadeSplits[CascadeIdx], VertexNormalWS, GlobalLightPos.xyz);
+				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation2D, CascadeSplits[CascadeIdx], VertexNormalWS, GlobalLightPos.xyz, CameraPosLS[CascadeIdx]);
 				vec3  NextCascadeCol = CascadeColors[Layer + 1];
 				GlobalShadow = mix(NextShadow, GlobalShadow, Fade);
 				CascadeCol = mix(NextCascadeCol, CascadeCol, Fade);
@@ -357,6 +364,7 @@ void main()
 			break;
 		}
 	}
+#endif
 
 	vec3  ShadowCol = vec3(0.00001);
 	float Shadow = (GlobalShadow + LightShadow) / 2.0;
@@ -371,7 +379,7 @@ void main()
 	else
 	{
 		vec3 FinalLight = (Diffuse.xyz*0.2 + LightDiffuse + LightSpecular) * AmbientOcclusion;
-		FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
+		//FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(pow(FinalLight, vec3(1.0 / 2.0)), 1));
 	}
 #endif

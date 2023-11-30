@@ -1,5 +1,7 @@
 #version 450
 
+#extension GL_EXT_scalar_block_layout: require
+
 #define SAMPLES_COUNT 64
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
@@ -26,11 +28,11 @@ struct global_world_data
 	bool  LightSourceShadowsEnabled;
 };
 
-layout(binding = 0) readonly uniform block0 { global_world_data WorldUpdate; };
-layout(binding = 1) buffer   block1 { vec3 HemisphereSamples[SAMPLES_COUNT]; };
-layout(binding = 2) uniform  sampler2D NoiseTexture;
-layout(binding = 3) uniform  sampler2D GBuffer[GBUFFER_COUNT];
-layout(binding = 4) uniform  writeonly image2D OcclusionTarget;
+layout(binding = 0, std430) uniform block0 { global_world_data WorldUpdate; };
+layout(binding = 1) buffer  block1 { vec3 HemisphereSamples[SAMPLES_COUNT]; };
+layout(binding = 2) uniform sampler2D NoiseTexture;
+layout(binding = 3) uniform sampler2D GBuffer[GBUFFER_COUNT];
+layout(binding = 4) uniform writeonly image2D OcclusionTarget;
 
 
 void main()

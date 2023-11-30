@@ -1,5 +1,7 @@
 #version 450
 
+#extension GL_EXT_scalar_block_layout: require
+
 struct global_world_data
 {
 	mat4  View;
@@ -14,6 +16,7 @@ struct global_world_data
 	uint  DirectionalLightSourceCount;
 	uint  PointLightSourceCount;
 	uint  SpotLightSourceCount;
+	float CascadeSplits[DEPTH_CASCADES_COUNT + 1];
 	float ScreenWidth;
 	float ScreenHeight;
 	float NearZ;
@@ -30,14 +33,30 @@ struct vert_in
 	vec2 TextCoord;
 };
 
-layout(binding = 1) readonly uniform block1 { global_world_data WorldUpdate; };
-layout(binding = 3) uniform sampler2D DiffuseSampler;
-layout(binding = 4) uniform sampler2D NormalSampler;
-layout(binding = 5) uniform sampler2D SpecularSampler;
-layout(binding = 6) uniform sampler2D HeightSampler;
+struct material
+{
+	vec4 LightEmmit;
+	bool HasTexture;
+	uint TextureIdx;
+	bool HasNormalMap;
+	uint NormalMapIdx;
+	bool HasSpecularMap;
+	uint SpecularMapIdx;
+	bool HasHeightMap;
+	uint HeightMapIdx;
+	uint LightType;
+};
 
-layout(location = 0) in vert_in In;
-layout(location = 4) in mat3    TBN;
+layout(set = 0, binding = 0, std430) uniform b0 { global_world_data WorldUpdate; };
+layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
+layout(set = 1, binding = 0) uniform sampler2D DiffuseSamplers[1024];
+layout(set = 1, binding = 1) uniform sampler2D NormalSamplers[1024];
+layout(set = 1, binding = 2) uniform sampler2D SpecularSamplers[1024];
+layout(set = 1, binding = 3) uniform sampler2D HeightSamplers[1024];
+
+layout(location = 0) in vert_in   In;
+layout(location = 4) in flat uint MatIdx;
+layout(location = 5) in mat3      TBN;
 
 layout(location = 0) out vec4  OutputVertexPosition;
 layout(location = 1) out vec4  OutputVertexNormal;
@@ -52,9 +71,14 @@ void main()
 	OutputVertexPosition = In.Coord;
 	OutputVertexNormal   = In.Norm * 0.5 + 0.5;
 
+	uint TextureIdx     = MeshMaterials[MatIdx].TextureIdx;
+	uint NormalMapIdx   = MeshMaterials[MatIdx].NormalMapIdx;
+	uint SpecularMapIdx = MeshMaterials[MatIdx].SpecularMapIdx;
+	uint HeightMapIdx   = MeshMaterials[MatIdx].HeightMapIdx;
+
 	vec2 TextCoord = In.TextCoord;
 	vec3 ViewDir = (WorldUpdate.CameraPos - In.Coord).xyz;
-	if(length(ViewDir) < 6)
+	if((length(ViewDir) < 6) && MeshMaterials[MatIdx].HasHeightMap)
 	{
 		ViewDir = normalize(transpose(TBN) * ViewDir);
 		float HeightScale = 0.04;
@@ -67,29 +91,35 @@ void main()
 
 		vec2  DeltaTextCoord   = ViewDir.xy * HeightScale * LayersDepth;
 		vec2  CurrentTextCoord = In.TextCoord;
-		float CurrentDepth     = 1.0 - texture(HeightSampler, CurrentTextCoord).r;
+		float CurrentDepth     = 1.0 - texture(HeightSamplers[HeightMapIdx], CurrentTextCoord).r;
 		while(CurrentLayerDepth < CurrentDepth)
 		{
 			CurrentTextCoord  -= DeltaTextCoord;
-			CurrentDepth       = 1.0 - texture(HeightSampler, CurrentTextCoord).r;
+			CurrentDepth       = 1.0 - texture(HeightSamplers[HeightMapIdx], CurrentTextCoord).r;
 			CurrentLayerDepth += LayersDepth;
 		}
 
 		vec2 PrevTextCoord = CurrentTextCoord + DeltaTextCoord;
 
 		float AfterDepth  = CurrentDepth - CurrentLayerDepth;
-		float BeforeDepth = 1.0 - texture(HeightSampler, PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
+		float BeforeDepth = 1.0 - texture(HeightSamplers[HeightMapIdx], PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
 		float Weight	  = AfterDepth / (AfterDepth - BeforeDepth);
 		TextCoord   = mix(PrevTextCoord, CurrentTextCoord, Weight);
 
 		if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard;
 	}
 
-	OutputFragmentNormal = vec4((TBN * texture(NormalSampler, TextCoord).rgb) * 0.5 + 0.5, 0);
+	OutputFragmentNormal = OutputVertexNormal;
+	if(MeshMaterials[MatIdx].HasNormalMap)
+		OutputFragmentNormal = vec4((TBN * texture(NormalSamplers[NormalMapIdx], TextCoord).rgb) * 0.5 + 0.5, 0);
 #if DEBUG_COLOR_BLEND
-	OutputDiffuse		 = vec4(vec3(0.1), 1.0);
+	OutputDiffuse		 = vec4(vec3(0.1) * In.Col.rgb, 1.0);
 #else
-	OutputDiffuse		 = In.Col * vec4(texture(DiffuseSampler, TextCoord).rgb, 1);
+	OutputDiffuse		 = In.Col;
+	if(MeshMaterials[MatIdx].HasTexture)
+		OutputDiffuse *= vec4(texture(DiffuseSamplers[TextureIdx], TextCoord).rgb, 1);
 #endif
-	OutputSpecular		 = texture(SpecularSampler, TextCoord).r;
+	OutputSpecular		 = 1.0;
+	if(MeshMaterials[MatIdx].HasSpecularMap)
+		OutputSpecular *= texture(SpecularSamplers[SpecularMapIdx], TextCoord).r;
 }

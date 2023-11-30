@@ -1,4 +1,4 @@
-
+#pragma once
 
 class window;
 class renderer_backend

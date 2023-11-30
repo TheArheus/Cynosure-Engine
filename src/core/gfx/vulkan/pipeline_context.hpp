@@ -1,3 +1,4 @@
+#pragma once
 
 union descriptor_info
 {
@@ -65,6 +66,12 @@ struct global_pipeline_context
 
 	template<typename T>
 	global_pipeline_context(std::unique_ptr<T>& Context)
+	{
+		CreateResource(Context);
+	}
+
+	template<typename T>
+	void CreateResource(std::unique_ptr<T>& Context)
 	{
 		Device = Context->Device;
 
@@ -328,10 +335,13 @@ public:
 		uint8_t ViewMask;
 	};
 
+	render_context() = default;
+
 	template<typename T>
 	render_context(std::unique_ptr<T>& Context,
 				   const shader_input& Signature,
-				   std::initializer_list<const std::string> ShaderList, const std::vector<VkFormat>& ColorTargetFormats, const input_data& InputData = {true, true, true, false, false, 0}) : InputSignature(&Signature), UseColorTarget(InputData.UseColor), UseDepthTarget(InputData.UseDepth)
+				   std::initializer_list<const std::string> ShaderList, const std::vector<VkFormat>& ColorTargetFormats, const input_data& InputData = {true, true, true, false, false, 0}) 
+				 : InputSignature(&Signature), UseColorTarget(InputData.UseColor), UseDepthTarget(InputData.UseDepth)
 	{		
 		RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
 		Device = Context->Device;
@@ -820,6 +830,8 @@ private:
 class compute_context
 {
 public:
+	compute_context() = default;
+
 	template<class T>
 	compute_context(std::unique_ptr<T>& Context, const shader_input& Signature, const std::string& Shader) :
 		InputSignature(&Signature)

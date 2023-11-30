@@ -1,5 +1,5 @@
-
 #ifndef WIN32_WINDOWS_H_
+#define WIN32_WINDOWS_H_
 
 #include <windowsx.h>
 
@@ -34,6 +34,7 @@ private:
 	};
 
 public:
+	window() = default;
 	window(unsigned int Width, unsigned int Height, const char* Name);
 	window(const char* Name) : window(GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), Name){}
 	window(window&& rhs) = default;
@@ -90,5 +91,4 @@ private:
 	s32 MouseY;
 };
 
-#define WIN32_WINDOWS_H_
 #endif
