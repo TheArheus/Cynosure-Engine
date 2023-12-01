@@ -100,7 +100,7 @@ void main()
 	IndirectDrawIndexedCommands[CommandIdx].FirstInstance = CommandIdx == 0 ? 0 : IndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + IndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
 
 	InstanceIdx += IndirectDrawIndexedCommands[CommandIdx].FirstInstance;
-	MeshDrawCommands[InstanceIdx].MeshIndex   = CommandIdx;
+	MeshDrawCommands[InstanceIdx].MeshIndex = CommandIdx;
 	MeshDrawCommands[InstanceIdx].Translate = MeshDrawCommandData[DrawIndex].Translate;
 	MeshDrawCommands[InstanceIdx].Scale     = MeshDrawCommandData[DrawIndex].Scale;
 }

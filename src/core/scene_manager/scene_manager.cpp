@@ -154,8 +154,11 @@ UpdateScene(window& Window,
 {
 	if(Scenes[CurrentScene]->IsInitialized)
 	{
+		Window.EventsDispatcher.DispatchEvents();
 		Scenes[CurrentScene]->Reset();
 		Scenes[CurrentScene]->Update();
+
+		Scenes[CurrentScene]->Registry.GetSystem<world_update_system>()->SubscribeToEvents(Window.EventsDispatcher);
 
 		if(!Window.IsGfxPaused)
 		{

@@ -98,6 +98,10 @@ struct render_system : public entity_system
 		CubeMapUpVectors [5] = vec3( 0.0, -1.0,  0.0); // -Z
 	}
 
+	void SubscribeToEvents(event_bus& Events)
+	{
+	}
+
 	void Setup(window& Window, memory_heap& GlobalHeap, mesh_comp_culling_common_input& MeshCommonCullingInput)
 	{
 		texture_data Texture = {};
@@ -547,6 +551,7 @@ struct render_system : public entity_system
 			{
 				{WorldUpdateBuffer, 0, VK_ACCESS_TRANSFER_WRITE_BIT},
 				{MeshCommonCullingInputBuffer, 0, VK_ACCESS_TRANSFER_WRITE_BIT},
+				{LightSourcesBuffer, 0, VK_ACCESS_TRANSFER_WRITE_BIT},
 			};
 			PipelineContext.SetBufferBarriers(SetupBufferBarrier, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
@@ -559,7 +564,8 @@ struct render_system : public entity_system
 		{
 			FrustCullingContext.Begin(PipelineContext);
 
-			PipelineContext.SetBufferBarrier({MeshCommonCullingInputBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+			PipelineContext.SetBufferBarrier({MeshCommonCullingInputBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
 			FrustCullingContext.SetUniformBufferView(MeshCommonCullingInputBuffer);
 			FrustCullingContext.SetStorageBufferView(GeometryOffsets);
 			FrustCullingContext.SetStorageBufferView(MeshDrawCommandDataBuffer);
@@ -699,6 +705,9 @@ struct render_system : public entity_system
 			};
 			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
 
+			PipelineContext.SetBufferBarriers({{MeshDrawCommandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+			PipelineContext.SetBufferBarriers({{IndirectDrawIndexedCommands, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
+
 			DebugCameraViewContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, DebugCameraViewDepthTarget.Width, DebugCameraViewDepthTarget.Height, DebugCameraViewDepthTarget, {1, 0});
 			DebugCameraViewContext.Begin(Window.Gfx, PipelineContext, DebugCameraViewDepthTarget.Width, DebugCameraViewDepthTarget.Height);
 
@@ -740,6 +749,7 @@ struct render_system : public entity_system
 				ImageBeginRenderBarriers.push_back(CreateImageBarrier(ColorTarget.Handle, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
 			ImageBeginRenderBarriers.push_back(CreateImageBarrier(GfxDepthTarget.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
 			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ImageBeginRenderBarriers);
+
 			PipelineContext.SetBufferBarrier({WorldUpdateBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 			PipelineContext.SetBufferBarrier({MeshMaterialsBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
@@ -844,6 +854,8 @@ struct render_system : public entity_system
 				ColorPassBarrier.push_back(CreateImageBarrier(LightShadows[ShadowMapIdx].Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
 			}
 			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, ColorPassBarrier);
+
+			PipelineContext.SetBufferBarrier({LightSourcesBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 			ColorPassContext.SetUniformBufferView(WorldUpdateBuffer);
 			ColorPassContext.SetUniformBufferView(LightSourcesBuffer);

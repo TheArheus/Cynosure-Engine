@@ -7,6 +7,10 @@ struct light_sources_system : public entity_system
 		RequireComponent<light_component>();
 	}
 
+	void SubscribeToEvents(event_bus& Events)
+	{
+	}
+
 	void Update(global_world_data& WorldUpdate, alloc_vector<light_source>& GlobalLightSources)
 	{
 		//WorldUpdate.LightSourceShadowsEnabled = false;

@@ -10,7 +10,7 @@
 #include <random>
 
 
-// TODO: Event system
+// TODO: Handle multiple buttons being pressed
 // TODO: Proper light source shadows
 //
 // TODO: Handle dynamic entities that updates every frame
@@ -38,17 +38,11 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	Window.InitGraphics();
 	scene_manager SceneManager(Window);
 
-	double TargetFrameRate = 1.0 / 60 * 1000.0; // Frames Per Milliseconds
-
 	u32 GlobalMemorySize = MiB(128);
 	void* MemoryBlock = malloc(GlobalMemorySize);
 
-	bool IsCameraLocked = false;
-	bool IsDebugColors  = false;
+	double TargetFrameRate = 1.0 / 60 * 1000.0; // Frames Per Milliseconds
 
-	u32 DirectionalLightSourceCount = 0;
-	u32 PointLightSourceCount = 0;
-	u32 SpotLightSourceCount = 0;
 	double TimeLast = window::GetTimestamp();
 	double TimeElapsed = 0.0;
 	double TimeEnd = 0.0;
@@ -81,79 +75,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		DebugGeometries.Load(SceneManager.GlobalDebugGeometries);
 		SceneManager.UpdateScene(Window, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
-		if(Window.Buttons[EC_I].IsDown)
-		{
-			IsDebugColors = !IsDebugColors;
-		}
-		if(Window.Buttons[EC_L].IsDown)
-		{
-			IsCameraLocked = !IsCameraLocked;
-		}
-		if(!IsCameraLocked)
-		{
-			//ViewDir = ViewData.ViewDir;
-			//ViewPos = ViewData.CameraPos;
-		}
-
-#if 0
-		float CameraSpeed = 0.01f;
-		if(Window.Buttons[EC_R].IsDown)
-		{
-			ViewData.CameraPos += vec3(0, 4.0f*CameraSpeed, 0);
-		}
-		if(GameInput.Buttons[EC_F].IsDown)
-		{
-			ViewData.CameraPos -= vec3(0, 4.0f*CameraSpeed, 0);
-		}
-		if(GameInput.Buttons[EC_W].IsDown)
-		{
-			ViewData.CameraPos += (ViewData.ViewDir * 4.0f*CameraSpeed);
-		}
-		if(GameInput.Buttons[EC_S].IsDown)
-		{
-			ViewData.CameraPos -= (ViewData.ViewDir * 4.0f*CameraSpeed);
-		}
-#if 0
-		vec3 z = (ViewData.ViewDir - ViewData.CameraPos).Normalize();
-		vec3 x = Cross(vec3(0, 1, 0), z).Normalize();
-		vec3 y = Cross(z, x);
-		vec3 Horizontal = x;
-		if(GameInput.Buttons[EC_D].IsDown)
-		{
-			ViewData.CameraPos -= Horizontal * CameraSpeed;
-		}
-		if(GameInput.Buttons[EC_A].IsDown)
-		{
-			ViewData.CameraPos += Horizontal * CameraSpeed;
-		}
-#endif
-		if(GameInput.Buttons[EC_LEFT].IsDown)
-		{
-			quat ViewDirQuat(ViewData.ViewDir, 0);
-			quat RotQuat( CameraSpeed * 2, vec3(0, 1, 0));
-			ViewData.ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
-		}
-		if(GameInput.Buttons[EC_RIGHT].IsDown)
-		{
-			quat ViewDirQuat(ViewData.ViewDir, 0);
-			quat RotQuat(-CameraSpeed * 2, vec3(0, 1, 0));
-			ViewData.ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
-		}
-		vec3 U = Cross(vec3(0, 1, 0), ViewData.ViewDir);
-		if(GameInput.Buttons[EC_UP].IsDown)
-		{
-			quat ViewDirQuat(ViewData.ViewDir, 0);
-			quat RotQuat( CameraSpeed, U);
-			ViewData.ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
-		}
-		if(GameInput.Buttons[EC_DOWN].IsDown)
-		{
-			quat ViewDirQuat(ViewData.ViewDir, 0);
-			quat RotQuat(-CameraSpeed, U);
-			ViewData.ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
-		}
-#endif
-
 		TimeEnd = window::GetTimestamp();
 		TimeElapsed = (TimeEnd - TimeLast);
 
@@ -165,7 +86,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				double TimeToSleep = TargetFrameRate - TimeElapsed;
 				if (TimeToSleep > 0) 
 				{
-					Sleep(TimeToSleep);
+					Sleep(static_cast<DWORD>(TimeToSleep));
 				}
 				TimeEnd = window::GetTimestamp();
 				TimeElapsed = TimeEnd - TimeLast;

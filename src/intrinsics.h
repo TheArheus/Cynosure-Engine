@@ -24,6 +24,7 @@
 #include <type_traits>
 #include <filesystem>
 #include <typeindex>
+#include <functional>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "core/vendor/stb_image.h"
@@ -217,16 +218,11 @@ template<typename T> struct type_name;
 #include "core/math.h"
 #include "core/mesh_loader/mesh.h"
 
-struct buttons
+struct button
 {
 	bool IsDown;
 	bool WasDown;
-};
-
-struct game_input
-{
-	buttons* Buttons;
-	r32 DeltaTime;
+	u16  RepeatCount;
 };
 
 struct alignas(16) mesh_draw_command
@@ -273,7 +269,7 @@ struct texture_data
 	}
 };
 
-struct global_world_data 
+struct alignas(16) global_world_data 
 {
 	mat4  View;
 	mat4  DebugView;
@@ -300,6 +296,7 @@ struct global_world_data
 #define GameSceneUpdateFunc() void Update()
 
 #include "core\allocators\allocators.hpp"
+#include "core\events\events.hpp"
 #include "core\entity_component_system\entity_systems.h"
 #include "core\entity_component_system\components.h"
 

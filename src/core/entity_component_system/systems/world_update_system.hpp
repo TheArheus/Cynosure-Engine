@@ -2,28 +2,43 @@
 
 struct world_update_system : entity_system
 {
+	vec3 ViewPos;
+	vec3 ViewDir;
+	vec3 LockedViewPos;
+	vec3 LockedViewDir;
+
 	bool IsCameraLocked = false;
 	bool IsDebugColors  = false;
-
-	mat4 LockedCameraProj;
-	mat4 LockedCameraView;
 
 	system_constructor(world_update_system)
 	{
 		RequireComponent<camera_component>();
+
+		ViewPos = vec3(0);
+		ViewDir = vec3(0, 0, 1);
+	}
+
+	void SubscribeToEvents(event_bus& Events)
+	{
+		Events.Subscribe(this, &world_update_system::OnButtonDown);
 	}
 
 	void Update(window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCompCullingCommonData)
 	{
 		camera_component* CurrentCameraData = Entities[0].GetComponent<camera_component>();
 
+		if(!IsCameraLocked)
+		{
+			LockedViewPos = ViewPos;
+			LockedViewDir = ViewDir;
+		}
+
 		float FOV   = CurrentCameraData->ProjectionData.FOV;
 		float NearZ = CurrentCameraData->ProjectionData.NearZ;
 		float FarZ  = CurrentCameraData->ProjectionData.FarZ;
 		mat4  CameraProj = PerspRH(FOV, Window.Gfx->Width, Window.Gfx->Height, NearZ, FarZ);
-		mat4  CameraView = LookAtRH(vec3(0, 0, 0), vec3(0, 0, 1), vec3(0, 1, 0));
-		LockedCameraProj = CameraProj;
-		LockedCameraView = CameraView;
+		mat4  CameraView = LookAtRH(ViewPos, ViewPos + ViewDir, vec3(0, 1, 0));
+		mat4  LockedCameraView = LookAtRH(LockedViewPos, LockedViewPos + LockedViewDir, vec3(0, 1, 0));
 
 		WorldUpdate.CascadeSplits[0] = NearZ;
 		for(u32 CascadeIdx = 1;
@@ -40,8 +55,8 @@ struct world_update_system : entity_system
 		WorldUpdate.View			= CameraView;
 		WorldUpdate.DebugView		= LockedCameraView;
 		WorldUpdate.Proj			= CameraProj;
-		//WorldUpdate.CameraPos		= vec4(ViewPos, 1);
-		//WorldUpdate.CameraDir		= vec4(ViewDir, 0);
+		WorldUpdate.CameraPos		= vec4(ViewPos, 1);
+		WorldUpdate.CameraDir		= vec4(ViewDir, 0);
 		//WorldUpdate.GlobalLightPos	= vec4(LightPos, 1);
 		WorldUpdate.GlobalLightSize = 1;
 		WorldUpdate.NearZ			= NearZ;
@@ -133,6 +148,75 @@ struct world_update_system : entity_system
 			RoundOffset.z = 0.0f;
 			RoundOffset.w = 0.0f;
 			WorldUpdate.LightProj[CascadeIdx - 1].Line3 += RoundOffset;
+		}
+	}
+
+	void OnButtonDown(key_down_event& Event)
+	{
+		if(Event.Code == EC_I)
+		{
+			IsDebugColors = !IsDebugColors;
+		}
+		if(Event.Code == EC_L)
+		{
+			IsCameraLocked = !IsCameraLocked;
+		}
+
+		float CameraSpeed = 0.00001f;
+		if(Event.Code == EC_R)
+		{
+			ViewPos += vec3(0, 4.0f*CameraSpeed, 0);
+		}
+		if(Event.Code == EC_F)
+		{
+			ViewPos -= vec3(0, 4.0f*CameraSpeed, 0);
+		}
+		if(Event.Code == EC_W)
+		{
+			ViewPos += (ViewDir * 4.0f*CameraSpeed);
+		}
+		if(Event.Code == EC_S)
+		{
+			ViewPos -= (ViewDir * 4.0f*CameraSpeed);
+		}
+#if 0
+		vec3 z = (ViewData.ViewDir - ViewData.CameraPos).Normalize();
+		vec3 x = Cross(vec3(0, 1, 0), z).Normalize();
+		vec3 y = Cross(z, x);
+		vec3 Horizontal = x;
+		if(GameInput.Buttons[EC_D].IsDown)
+		{
+			ViewData.CameraPos -= Horizontal * CameraSpeed;
+		}
+		if(GameInput.Buttons[EC_A].IsDown)
+		{
+			ViewData.CameraPos += Horizontal * CameraSpeed;
+		}
+#endif
+		if(Event.Code == EC_LEFT)
+		{
+			quat ViewDirQuat(ViewDir, 0);
+			quat RotQuat( CameraSpeed * 2, vec3(0, 1, 0));
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
+		if(Event.Code == EC_RIGHT)
+		{
+			quat ViewDirQuat(ViewDir, 0);
+			quat RotQuat(-CameraSpeed * 2, vec3(0, 1, 0));
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
+		vec3 U = Cross(vec3(0, 1, 0), ViewDir);
+		if(Event.Code == EC_UP)
+		{
+			quat ViewDirQuat(ViewDir, 0);
+			quat RotQuat( CameraSpeed, U);
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
+		if(Event.Code == EC_DOWN)
+		{
+			quat ViewDirQuat(ViewDir, 0);
+			quat RotQuat(-CameraSpeed, U);
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
 		}
 	}
 };

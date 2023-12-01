@@ -55,13 +55,12 @@ public:
 	void SetTitle(std::string& Title);
 	bool IsRunning(){return WindowClass.IsRunning;}
 
-	r32 GetMousePosX(){ return MouseX / Width;  }
-	r32 GetMousePosY(){ return MouseY / Height; }
-
 	static void* GetProcAddr(HMODULE& Library, const char* SourceName, const char* FuncName);
 	static void  FreeLoadedLibrary(HMODULE& Library);
 
-	buttons Buttons[256] = {};
+	button Buttons[256];
+
+	event_bus EventsDispatcher;
 
 	HWND Handle;
 	const char* Name;
@@ -86,9 +85,6 @@ private:
 	LRESULT DispatchMessages(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam);
 
 	static LARGE_INTEGER TimerFrequency;
-
-	s32 MouseX;
-	s32 MouseY;
 };
 
 #endif

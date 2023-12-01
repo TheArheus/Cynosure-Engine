@@ -23,6 +23,7 @@ struct global_world_data
 	mat4  View;
 	mat4  DebugView;
 	mat4  Proj;
+	vec4 _Padding0;
 	mat4  LightView[DEPTH_CASCADES_COUNT];
 	mat4  LightProj[DEPTH_CASCADES_COUNT];
 	vec4  CameraPos;

@@ -8,7 +8,7 @@ setlocal EnableDelayedExpansion
 set VulkanInc="%VULKAN_SDK%\Include"
 set VulkanLib="%VULKAN_SDK%\Lib"
 
-set CommonCompFlags=/std:c++latest /Zc:__cplusplus -fp:fast -nologo -MTd -EHsc -Od -Oi -WX- -W4 -GR- -Gm- -GS -FC -Zi -D_MBCS -wd4005 -wd4100 -wd4127 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267 -wd4324 -wd4505
+set CommonCompFlags=/std:c++latest /Zc:__cplusplus -fp:fast -nologo -MTd -EHsc -Od -Oi -WX- -W4 -GR -Gm- -GS -FC -Zi -D_MBCS -wd4005 -wd4100 -wd4127 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267 -wd4324 -wd4505
 set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console
 
 set PlatformCppFiles="..\src\main.cpp"
@@ -23,7 +23,11 @@ if not exist ..\build\ mkdir ..\build\
 if not exist ..\build\scenes\ mkdir ..\build\scenes\
 if not exist ..\build\shaders\ mkdir ..\build\shaders\
 
-rem goto shader_build_skip
+for /f "tokens=1-3 delims=:" %%a in ("%time%") do (
+	set /a "StartTime=%%a*3600 + %%b*60 + %%c"
+)
+
+goto shader_build_skip
 glslangValidator ..\shaders\mesh.vert.glsl %DepthCascades% -o ..\build\shaders\mesh.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.frag.glsl -gVS -g %DepthCascades% %UseDebugColorBlend% -o ..\build\shaders\mesh.frag.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.dbg.vert.glsl %DepthCascades% -o ..\build\shaders\mesh.dbg.vert.spv -e main --target-env vulkan1.3
@@ -71,6 +75,14 @@ pushd ..\build\
 del *.pdb > NUL 2> NUL
 cl %CommonCompFlags% /I%VulkanInc% user32.lib kernel32.lib vulkan-1.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
 popd
+
+for /f "tokens=1-3 delims=:" %%a in ("%time%") do (
+	set /a "EndTime=%%a*3600 + %%b*60 + %%c"
+)
+
+set /a ElapsedTime=%EndTime%-%StartTime%
+
+echo Compilation took %ElapsedTime% seconds.
 
 goto :eof
 

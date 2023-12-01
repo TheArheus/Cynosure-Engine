@@ -28,7 +28,7 @@ struct cube_scene : scene
 		PlaneObject.AddComponent<debug_component>();
 
 		entity CameraObject = Registry.CreateEntity();
-		CameraObject.AddComponent<camera_component>(90.0f, 0.01f, 100.0f, false);
+		CameraObject.AddComponent<camera_component>(45.0f, 0.01f, 100.0f, false);
 
 		entity LightComponent0 = Registry.CreateEntity();
 		entity LightComponent1 = Registry.CreateEntity();
