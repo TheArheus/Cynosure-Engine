@@ -15,7 +15,7 @@ struct world_update_system : entity_system
 		RequireComponent<camera_component>();
 
 		ViewPos = vec3(0);
-		ViewDir = vec3(0, 0, 1);
+		ViewDir = vec3(1, 0, 0);
 	}
 
 	void SubscribeToEvents(event_bus& Events)
@@ -162,7 +162,7 @@ struct world_update_system : entity_system
 			IsCameraLocked = !IsCameraLocked;
 		}
 
-		float CameraSpeed = 0.00001f;
+		float CameraSpeed = 0.01f;
 		if(Event.Code == EC_R)
 		{
 			ViewPos += vec3(0, 4.0f*CameraSpeed, 0);

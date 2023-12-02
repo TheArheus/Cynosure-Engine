@@ -56,6 +56,7 @@ struct event_bus
 	void Reset()
 	{
 		EventList.clear();
+        EventsQueue.clear();
 	}
 
 	template<typename owner, typename event_type>
@@ -91,6 +92,5 @@ struct event_bus
         {
             EventFunction();
         }
-        EventsQueue.clear();
     }
 };

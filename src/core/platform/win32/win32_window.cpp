@@ -51,6 +51,9 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 	{
 		switch(Message)
 		{
+#if 0
+			// TODO: Consider to do in the future
+			// correct window resizing
 			case WM_ENTERSIZEMOVE:
 			{
 				IsGfxPaused = true;
@@ -59,7 +62,10 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 			case WM_EXITSIZEMOVE:
 			{
 				IsGfxPaused = false;
-				EventsDispatcher.Emit<resize_event>(Width, Height);
+				if (Gfx)
+				{
+					Gfx->RecreateSwapchain(Width, Height);
+				}
 				return 0;
 			} break;
 			case WM_SIZE:
@@ -69,7 +75,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 
 				return 0;
 			} break;
-
+#endif
 			case WM_SYSKEYDOWN:
 			case WM_SYSKEYUP:
 			case WM_KEYDOWN:
@@ -80,9 +86,9 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 				u16 RepeatCount = LOWORD(lParam);
 
 				bool IsPressed  = (Message == WM_KEYDOWN || Message == WM_SYSKEYDOWN);
-				bool IsReleased = (Message == WM_KEYUP   || Message == WM_SYSKEYUP);
 				bool IsExtended = (Flags & KF_EXTENDED) == KF_EXTENDED;
-				bool WasDown    = (Flags & KF_REPEAT  ) == KF_REPEAT;
+				bool WasDown    = (Flags & KF_REPEAT) == KF_REPEAT;
+				bool IsReleased = (Flags & KF_UP) == KF_UP;
 
 				switch(VkCode)
 				{
@@ -94,16 +100,13 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 					} break;
 				}
 
-				Buttons[VkCode] = {WasDown, IsPressed, RepeatCount};
-				if(IsPressed)  EventsDispatcher.Emit<key_down_event>(VkCode, RepeatCount);
-				if(IsReleased) EventsDispatcher.Emit<key_up_event>(VkCode, RepeatCount);
+				Buttons[VkCode] = {IsPressed, WasDown, RepeatCount};
 			} break;
 
 			case WM_MOUSEMOVE:
 			{
-				s32 MouseX = GET_X_LPARAM(lParam);
-				s32 MouseY = GET_Y_LPARAM(lParam);
-				EventsDispatcher.Emit<mouse_move_event>(MouseX / float(Width), MouseY / float(Height));
+				MouseX = GET_X_LPARAM(lParam);
+				MouseY = GET_Y_LPARAM(lParam);
 			} break;
 
 			case WM_MOUSEWHEEL:
@@ -111,7 +114,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 				s32 WheelDelta = GET_WHEEL_DELTA_WPARAM(wParam);
 				if(WheelDelta != 0)
 				{
-					EventsDispatcher.Emit<mouse_wheel_event>(WheelDelta < 0 ? -1 : 1);
+					WheelDelta = WheelDelta < 0 ? -1 : 1;
 				}
 			} break;
 
@@ -122,9 +125,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 			case WM_MBUTTONUP:
 			case WM_RBUTTONUP:
 			{
-				bool IsPressed  = (Message == WM_LBUTTONDOWN || Message == WM_RBUTTONDOWN || Message == WM_MBUTTONDOWN);
-				bool IsReleased = (Message == WM_LBUTTONUP   || Message == WM_MBUTTONUP   || Message == WM_MBUTTONUP);
-
+				bool IsPressed = Message == WM_LBUTTONDOWN || Message == WM_RBUTTONDOWN || Message == WM_MBUTTONDOWN;
 				u16 RepeatCount = LOWORD(lParam);
 
 				switch(Message)
@@ -132,25 +133,19 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 					case WM_LBUTTONDOWN:
 					case WM_LBUTTONUP:
 					{
-						Buttons[EC_LBUTTON] = {RepeatCount > 1, IsPressed, RepeatCount};
-						if(IsPressed)  EventsDispatcher.Emit<key_down_event>(EC_LBUTTON, RepeatCount);
-						if(IsReleased) EventsDispatcher.Emit<key_up_event>(EC_LBUTTON, RepeatCount);
+						Buttons[EC_LBUTTON] = {IsPressed, false, RepeatCount};
 					} break;
 
 					case WM_RBUTTONDOWN:
 					case WM_RBUTTONUP:
 					{
-						Buttons[EC_RBUTTON] = {RepeatCount > 1, IsPressed, RepeatCount};
-						if(IsPressed)  EventsDispatcher.Emit<key_down_event>(EC_RBUTTON, RepeatCount);
-						if(IsReleased) EventsDispatcher.Emit<key_up_event>(EC_RBUTTON, RepeatCount);
+						Buttons[EC_RBUTTON] = {IsPressed, false, RepeatCount};
 					} break;
 
 					case WM_MBUTTONDOWN:
 					case WM_MBUTTONUP:
 					{
-						Buttons[EC_MBUTTON] = {RepeatCount > 1, IsPressed, RepeatCount};
-						if(IsPressed)  EventsDispatcher.Emit<key_down_event>(EC_MBUTTON, RepeatCount);
-						if(IsReleased) EventsDispatcher.Emit<key_up_event>(EC_MBUTTON, RepeatCount);
+						Buttons[EC_MBUTTON] = {IsPressed, false, RepeatCount};
 					}break;
 				}
 			} break;
@@ -164,6 +159,21 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 	}
 
 	return DefWindowProc(hWindow, Message, wParam, lParam);
+}
+
+void window::EmitEvents()
+{
+	for(u16 Code = 0; Code < 256; ++Code)
+	{
+		if(Buttons[Code].IsDown && !Buttons[Code].WasDown)
+		{
+			EventsDispatcher.Emit<key_down_event>(Code, Buttons[Code].RepeatCount);
+		}
+		else if(!Buttons[Code].IsDown && Buttons[Code].WasDown)
+		{
+			EventsDispatcher.Emit<key_up_event>(Code, Buttons[Code].RepeatCount);
+		}
+	}
 }
 
 std::optional<int> window::ProcessMessages()

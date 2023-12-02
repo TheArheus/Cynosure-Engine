@@ -154,7 +154,6 @@ UpdateScene(window& Window,
 {
 	if(Scenes[CurrentScene]->IsInitialized)
 	{
-		Window.EventsDispatcher.DispatchEvents();
 		Scenes[CurrentScene]->Reset();
 		Scenes[CurrentScene]->Update();
 

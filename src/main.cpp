@@ -49,8 +49,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	double AvgCpuTime = 0.0;
 	while(Window.IsRunning())
 	{
-		mesh DebugGeometries;
-
 		linear_allocator SystemsAllocator(GlobalMemorySize, MemoryBlock);
 		linear_allocator LightSourcesAlloc(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT, SystemsAllocator.Allocate(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT));
 		linear_allocator GlobalMeshInstancesAlloc(MiB(16), SystemsAllocator.Allocate(MiB(16)));
@@ -64,16 +62,21 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		alloc_vector<u32> DebugMeshVisibility(DebugMeshVisibleAlloc);
 
 		alloc_vector<light_source> GlobalLightSources(LightSourcesAlloc);
-		
-		auto Result = Window.ProcessMessages();
-		if(Result) return *Result;
+
+		Window.EventsDispatcher.Reset();
 
 		SceneManager.UpdateScenes();
 		if(!SceneManager.IsCurrentSceneInitialized()) continue;
 
 		SceneManager.StartScene(Window);
-		DebugGeometries.Load(SceneManager.GlobalDebugGeometries);
 		SceneManager.UpdateScene(Window, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
+
+		Window.EmitEvents();
+
+		auto Result = Window.ProcessMessages();
+		if(Result) return *Result;
+
+		Window.EventsDispatcher.DispatchEvents();
 
 		TimeEnd = window::GetTimestamp();
 		TimeElapsed = (TimeEnd - TimeLast);

@@ -177,7 +177,6 @@ renderer_backend(window* Window)
 
 	vkCreateDevice(PhysicalDevice, &DeviceCreateInfo, nullptr, &Device);
 
-	// TODO: Move this to CreateSwapchain/CreateSurface function for a portability
 	VkWin32SurfaceCreateInfoKHR SurfaceCreateInfo = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
 	SurfaceCreateInfo.hinstance = Window->WindowClass.Inst;
 	SurfaceCreateInfo.hwnd = Window->Handle;
