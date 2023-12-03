@@ -23,9 +23,12 @@ struct world_update_system : entity_system
 		Events.Subscribe(this, &world_update_system::OnButtonDown);
 	}
 
-	void Update(window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCompCullingCommonData)
+	void Update(window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCompCullingCommonData, vec3 GlobalLightPos)
 	{
 		camera_component* CurrentCameraData = Entities[0].GetComponent<camera_component>();
+		vec3 GlobalLightDir = -Normalize(GlobalLightPos);
+		u32  GlobalShadowWidth  = PreviousPowerOfTwo(Window.Gfx->Width) * 2;
+		u32  GlobalShadowHeight = PreviousPowerOfTwo(Window.Gfx->Width) * 2;
 
 		if(!IsCameraLocked)
 		{
@@ -57,8 +60,10 @@ struct world_update_system : entity_system
 		WorldUpdate.Proj			= CameraProj;
 		WorldUpdate.CameraPos		= vec4(ViewPos, 1);
 		WorldUpdate.CameraDir		= vec4(ViewDir, 0);
-		//WorldUpdate.GlobalLightPos	= vec4(LightPos, 1);
+		WorldUpdate.GlobalLightPos	= vec4(GlobalLightPos, 1);
 		WorldUpdate.GlobalLightSize = 1;
+		WorldUpdate.ScreenWidth		= Window.Gfx->Width;
+		WorldUpdate.ScreenHeight	= Window.Gfx->Height;
 		WorldUpdate.NearZ			= NearZ;
 		WorldUpdate.FarZ			= FarZ;
 		WorldUpdate.DebugColors		= IsDebugColors;
@@ -134,17 +139,17 @@ struct world_update_system : entity_system
 				float Dist = Length(V - FrustumCenter);
 				Radius = Max(Radius, Dist);
 			}
-			WorldUpdate.LightView[CascadeIdx - 1];// = LookAtRH(FrustumCenter - LightDir * Radius, FrustumCenter, vec3(0, 1, 0));
-			WorldUpdate.LightProj[CascadeIdx - 1];// = OrthoRH(-Radius, Radius, Radius, -Radius, 0.0f, 2.0f * Radius);
+			WorldUpdate.LightView[CascadeIdx - 1] = LookAtRH(FrustumCenter - GlobalLightDir * Radius, FrustumCenter, vec3(0, 1, 0));
+			WorldUpdate.LightProj[CascadeIdx - 1] = OrthoRH(-Radius, Radius, Radius, -Radius, 0.0f, 2.0f * Radius);
 
 			vec4 ShadowOrigin = vec4(0, 0, 0, 1);
 			mat4 ShadowMatrix = WorldUpdate.LightView[CascadeIdx - 1] * WorldUpdate.LightProj[CascadeIdx - 1];
 			ShadowOrigin = ShadowMatrix * ShadowOrigin;
-			ShadowOrigin;// = ShadowOrigin * GlobalShadow[CascadeIdx - 1].Width / 2.0f;
+			ShadowOrigin = ShadowOrigin * GlobalShadowWidth / 2.0f;
 
 			vec4 RoundedOrigin = vec4(round(ShadowOrigin.x), round(ShadowOrigin.y), round(ShadowOrigin.z), round(ShadowOrigin.w));
 			vec4 RoundOffset = RoundedOrigin - ShadowOrigin;
-			RoundOffset;// = RoundOffset * 2.0f / GlobalShadow[CascadeIdx - 1].Width;
+			RoundOffset = RoundOffset * 2.0f / GlobalShadowWidth;
 			RoundOffset.z = 0.0f;
 			RoundOffset.w = 0.0f;
 			WorldUpdate.LightProj[CascadeIdx - 1].Line3 += RoundOffset;

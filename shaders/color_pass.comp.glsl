@@ -1,6 +1,7 @@
 #version 450
 
 #extension GL_EXT_scalar_block_layout: require
+#extension GL_EXT_nonuniform_qualifier: require
 
 #define SAMPLES_COUNT 64
 #define light_type_none 0
@@ -22,7 +23,6 @@ struct global_world_data
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
 	float GlobalLightSize;
-	uint  DirectionalLightSourceCount;
 	uint  PointLightSourceCount;
 	uint  SpotLightSourceCount;
 	float CascadeSplits[DEPTH_CASCADES_COUNT + 1];
@@ -50,8 +50,8 @@ layout(set = 0, binding = 4) uniform sampler2D GBuffer[GBUFFER_COUNT];
 layout(set = 0, binding = 5) uniform sampler2D AmbientOcclusionBuffer;
 layout(set = 0, binding = 6) uniform writeonly image2D ColorTarget;
 layout(set = 0, binding = 7) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
-layout(set = 1, binding = 0) uniform sampler2D ShadowMaps[LIGHT_SOURCES_MAX_COUNT];
-layout(set = 1, binding = 1) uniform samplerCube PointShadowMaps[LIGHT_SOURCES_MAX_COUNT];
+layout(set = 1, binding = 0) uniform sampler2D ShadowMaps[];
+layout(set = 1, binding = 1) uniform samplerCube PointShadowMaps[];
 
 float GetRandomValue(vec2 Seed)
 {
@@ -298,8 +298,7 @@ void main()
 
 	vec3 LightDiffuse   = vec3(0);
 	vec3 LightSpecular  = vec3(0);
-	uint TotalLightSourceCount = WorldUpdate.DirectionalLightSourceCount + 
-								 WorldUpdate.PointLightSourceCount + 
+	uint TotalLightSourceCount = WorldUpdate.PointLightSourceCount + 
 								 WorldUpdate.SpotLightSourceCount;
 	float LightShadow = 0.0;
 	uint  DirLightShadowMapIdx = 0;
@@ -316,12 +315,7 @@ void main()
 		float Intensity       = LightSources[LightIdx].Col.w;
 		float Radius          = LightSources[LightIdx].Pos.w;
 
-		if(LightSources[LightIdx].Type == light_type_directional)
-		{
-			DirectionalLight(LightDiffuse, LightSpecular, FragmentNormalVS, ViewDirVS, LightSourceDirVS, LightSourceCol, Intensity, Diffuse.xyz, Specular);
-			DirLightShadowMapIdx++;
-		}
-		else if(LightSources[LightIdx].Type == light_type_point)
+		if(LightSources[LightIdx].Type == light_type_point)
 		{
 			PointLight(LightDiffuse, LightSpecular, CoordVS.xyz, VertexNormalVS, ViewDirVS, LightSourcePosVS, Radius, LightSourceCol, Intensity, Diffuse.xyz, Specular);
 			if(WorldUpdate.LightSourceShadowsEnabled != 0)
@@ -341,21 +335,20 @@ void main()
 	uint  Layer = 0;
 	float GlobalShadow = 0.0;
 	vec3  CascadeCol;
-#if 0
 	for(uint CascadeIdx = 1;
 		CascadeIdx <= DEPTH_CASCADES_COUNT;
 		++CascadeIdx)
 	{
-		if(abs(CoordVS.z) < CascadeSplits[CascadeIdx])
+		if(abs(CoordVS.z) < WorldUpdate.CascadeSplits[CascadeIdx])
 		{
 			Layer  = CascadeIdx - 1;
-			GlobalShadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation2D, CascadeSplits[CascadeIdx - 1], VertexNormalWS, GlobalLightPos.xyz, CameraPosLS[Layer]);
+			GlobalShadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation2D, WorldUpdate.CascadeSplits[CascadeIdx - 1], VertexNormalWS, GlobalLightPos.xyz, CameraPosLS[Layer]);
 			CascadeCol = CascadeColors[Layer];
 
-			float Fade = clamp((1.0 - (CoordVS.z * CoordVS.z) / (CascadeSplits[CascadeIdx] * CascadeSplits[CascadeIdx])) / 0.2, 0.0, 1.0);
+			float Fade = clamp((1.0 - (CoordVS.z * CoordVS.z) / (WorldUpdate.CascadeSplits[CascadeIdx] * WorldUpdate.CascadeSplits[CascadeIdx])) / 0.2, 0.0, 1.0);
 			if(Fade > 0.0 && Fade < 1.0)
 			{
-				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation2D, CascadeSplits[CascadeIdx], VertexNormalWS, GlobalLightPos.xyz, CameraPosLS[CascadeIdx]);
+				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation2D, WorldUpdate.CascadeSplits[CascadeIdx], VertexNormalWS, GlobalLightPos.xyz, CameraPosLS[CascadeIdx]);
 				vec3  NextCascadeCol = CascadeColors[Layer + 1];
 				GlobalShadow = mix(NextShadow, GlobalShadow, Fade);
 				CascadeCol = mix(NextCascadeCol, CascadeCol, Fade);
@@ -364,10 +357,10 @@ void main()
 			break;
 		}
 	}
-#endif
 
 	vec3  ShadowCol = vec3(0.00001);
 	float Shadow = (GlobalShadow + LightShadow) / 2.0;
+	//DirectionalLight(LightDiffuse, LightSpecular, FragmentNormalVS, ViewDirVS, LightSourceDirVS, LightSourceCol, Intensity, Diffuse.xyz, Specular);
 #if DEBUG_COLOR_BLEND
 	imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(vec4(Diffuse.xyz, 1), vec4(1.0 / 2.0)));
 #else
@@ -379,7 +372,7 @@ void main()
 	else
 	{
 		vec3 FinalLight = (Diffuse.xyz*0.2 + LightDiffuse + LightSpecular) * AmbientOcclusion;
-		//FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
+		FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(pow(FinalLight, vec3(1.0 / 2.0)), 1));
 	}
 #endif

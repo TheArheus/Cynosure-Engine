@@ -13,8 +13,7 @@ struct light_sources_system : public entity_system
 
 	void Update(global_world_data& WorldUpdate, alloc_vector<light_source>& GlobalLightSources)
 	{
-		//WorldUpdate.LightSourceShadowsEnabled = false;
-		WorldUpdate.DirectionalLightSourceCount = 0;
+		WorldUpdate.LightSourceShadowsEnabled = true;
 		WorldUpdate.PointLightSourceCount = 0;
 		WorldUpdate.SpotLightSourceCount = 0;
 
@@ -24,7 +23,6 @@ struct light_sources_system : public entity_system
 
 			if(Light->Type == light_type_directional)
 			{
-				WorldUpdate.DirectionalLightSourceCount++;
 			}
 			if(Light->Type == light_type_point)
 			{

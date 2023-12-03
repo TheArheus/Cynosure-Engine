@@ -56,6 +56,7 @@ struct render_system : public entity_system
 	shader_input PointShadowSignature;
 	shader_input ColorPassRootSignature;
 	shader_input AmbientOcclusionRootSignature;
+	shader_input ShadowComputeRootSignature;
 	shader_input CmpIndirectFrustRootSignature;
 	shader_input CmpIndirectOcclRootSignature;
 	shader_input CmpReduceRootSignature;
@@ -71,6 +72,7 @@ struct render_system : public entity_system
 
 	compute_context ColorPassContext;
 	compute_context AmbientOcclusionContext;
+	compute_context ShadowComputeContext;
 	compute_context FrustCullingContext;
 	compute_context OcclCullingContext;
 	compute_context DepthReduceContext;
@@ -304,7 +306,7 @@ struct render_system : public entity_system
 		TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_2D;
 		NoiseTexture = GlobalHeap.PushTexture(Window.Gfx, (void*)RandomRotations, 4, 4, 1, TextureInputData, VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VK_SAMPLER_ADDRESS_MODE_REPEAT);
 
-		vec3 RandomSamples[64] = {};
+		vec4 RandomSamples[64] = {};
 		for(u32 RotIdx = 0; RotIdx < 64; ++RotIdx)
 		{
 			vec3 Sample = vec3(float(rand()) / RAND_MAX * 2.0f - 1.0,
@@ -313,9 +315,9 @@ struct render_system : public entity_system
 			Sample = Sample *  float(rand());
 			float Scale = RotIdx / 64.0;
 			Scale = Lerp(0.1, Scale, 1.0);
-			RandomSamples[RotIdx] = Sample * Scale;
+			RandomSamples[RotIdx] = vec4(Sample * Scale, 0);
 		}
-		RandomSamplesBuffer = GlobalHeap.PushBuffer(Window.Gfx, (void*)RandomSamples, sizeof(vec3) * 64, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		RandomSamplesBuffer = GlobalHeap.PushBuffer(Window.Gfx, (void*)RandomSamples, sizeof(vec4) * 64, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 		TextureInputData.Format    = VK_FORMAT_D32_SFLOAT;
 		TextureInputData.Usage     = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -414,12 +416,19 @@ struct render_system : public entity_system
 						 PushStorageBuffer()->				// Draw Command Visibility
 						 PushStorageBuffer()->				// Indirect Draw Indexed Command
 						 PushStorageBuffer()->				// Indirect Draw Indexed Command Counter
-						 PushStorageBuffer()->				// Shadow Indirect Draw Indexed Command
-						 PushStorageBuffer()->				// Shadow Indirect Draw Indexed Command Counter
 						 PushStorageBuffer()->				// Mesh Draw Command Data
-						 PushStorageBuffer()->				// Mesh Draw Shadow Command Data
 						 Build(Window.Gfx, 0, true)->
 						 BuildAll(Window.Gfx);
+
+		ShadowComputeRootSignature.PushUniformBuffer()->	// Mesh Common Culling Input
+								  PushStorageBuffer()->		// Mesh Offsets
+								  PushStorageBuffer()->		// Draw Command Input
+								  PushStorageBuffer()->		// Draw Command Visibility
+								  PushStorageBuffer()->		// Indirect Draw Indexed Command
+								  PushStorageBuffer()->		// Indirect Draw Indexed Command Counter
+								  PushStorageBuffer()->		// Draw Commands
+								  Build(Window.Gfx, 0, true)->
+								  BuildAll(Window.Gfx);
 
 		CmpIndirectOcclRootSignature.
 						 PushUniformBuffer()->				// Mesh Common Culling Input Buffer
@@ -465,23 +474,23 @@ struct render_system : public entity_system
 		DebugCameraViewContext = render_context(Window.Gfx, ShadowSignature, {"..\\build\\shaders\\mesh.sdw.vert.spv", "..\\build\\shaders\\mesh.sdw.frag.spv"}, {}, RendererInputData);
 
 		ColorPassContext = compute_context (Window.Gfx, ColorPassRootSignature, "..\\build\\shaders\\color_pass.comp.spv");
-		AmbientOcclusionContext = compute_context (Window.Gfx, AmbientOcclusionRootSignature, "..\\build\\shaders\\screen_space_ambient_occlusion.comp.spv"); // 10a
-		FrustCullingContext = compute_context (Window.Gfx, CmpIndirectFrustRootSignature, "..\\build\\shaders\\indirect_cull_frust.comp.spv");
-		OcclCullingContext = compute_context (Window.Gfx, CmpIndirectOcclRootSignature, "..\\build\\shaders\\indirect_cull_occl.comp.spv");
-		DepthReduceContext = compute_context (Window.Gfx, CmpReduceRootSignature, "..\\build\\shaders\\depth_reduce.comp.spv");
+		AmbientOcclusionContext = compute_context (Window.Gfx, AmbientOcclusionRootSignature, "..\\build\\shaders\\screen_space_ambient_occlusion.comp.spv");
+		ShadowComputeContext = compute_context(Window.Gfx, ShadowComputeRootSignature, "..\\build\\shaders\\mesh.dbg.comp.spv");
+		FrustCullingContext  = compute_context(Window.Gfx, CmpIndirectFrustRootSignature, "..\\build\\shaders\\indirect_cull_frust.comp.spv");
+		OcclCullingContext   = compute_context(Window.Gfx, CmpIndirectOcclRootSignature, "..\\build\\shaders\\indirect_cull_occl.comp.spv");
+		DepthReduceContext   = compute_context(Window.Gfx, CmpReduceRootSignature, "..\\build\\shaders\\depth_reduce.comp.spv");
 		BlurContext = compute_context (Window.Gfx, BlurRootSignature, "..\\build\\shaders\\blur.comp.spv");
 	}
 
 	// TODO: This will be an event
-	void UpdateResources()
+	void UpdateResources(window& Window, alloc_vector<light_source>& GlobalLightSources, global_world_data& WorldUpdate)
 	{
-#if 0
+		u32 PointLightSourceCount = 0;
+		u32 SpotLightSourceCount = 0;
+
+		texture::input_data TextureInputData = {};
 		if((LightShadows.size() + PointLightShadows.size()) != GlobalLightSources.size())
 		{
-			DirectionalLightSourceCount = 0;
-			PointLightSourceCount = 0;
-			SpotLightSourceCount = 0;
-
 			LightShadows.clear();
 			PointLightShadows.clear();
 
@@ -489,7 +498,7 @@ struct render_system : public entity_system
 			TextureInputData.Usage  = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 			for(const light_source& LightSource : GlobalLightSources)
 			{
-				if(LightSource.LightType == light_type_point)
+				if(LightSource.Type == light_type_point)
 				{
 					TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_CUBE;
 					TextureInputData.MipLevels = 1;
@@ -498,7 +507,7 @@ struct render_system : public entity_system
 						PointLightShadows.push_back(texture(Window.Gfx, nullptr, Window.Width, Window.Height, 1, TextureInputData));
 					PointLightSourceCount++;
 				}
-				else if(LightSource.LightType == light_type_spot)
+				else if(LightSource.Type == light_type_spot)
 				{
 					TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_2D;
 					TextureInputData.MipLevels = 1;
@@ -507,22 +516,12 @@ struct render_system : public entity_system
 						LightShadows.push_back(texture(Window.Gfx, nullptr, Window.Width, Window.Height, 1, TextureInputData));
 					SpotLightSourceCount++;
 				}
-				else if(LightSource.LightType == light_type_directional)
-				{
-					TextureInputData.ViewType  = VK_IMAGE_VIEW_TYPE_2D;
-					TextureInputData.MipLevels = 1;
-					TextureInputData.Layers    = 1;
-					if(WorldUpdate.LightSourceShadowsEnabled)
-						LightShadows.push_back(texture(Window.Gfx, nullptr, Window.Width, Window.Height, 1, TextureInputData));
-					DirectionalLightSourceCount++;
-				}
 			}
 
 			ColorPassContext.SetImageSampler(LightShadows, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, 1);
 			ColorPassContext.SetImageSampler(PointLightShadows, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, 1);
 			ColorPassContext.StaticUpdate();
 		}
-#endif
 
 		// TODO: Update only when needed (The ammount of objects was changed)
 		GfxContext.SetImageSampler(DiffuseTextures, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, 1);
@@ -571,13 +570,26 @@ struct render_system : public entity_system
 			FrustCullingContext.SetStorageBufferView(MeshDrawCommandDataBuffer);
 			FrustCullingContext.SetStorageBufferView(MeshDrawVisibilityDataBuffer);
 			FrustCullingContext.SetStorageBufferView(IndirectDrawIndexedCommands);
-			FrustCullingContext.SetStorageBufferView(ShadowIndirectDrawIndexedCommands);
 			FrustCullingContext.SetStorageBufferView(MeshDrawCommandBuffer);
-			FrustCullingContext.SetStorageBufferView(MeshDrawShadowCommandBuffer);
 
 			FrustCullingContext.Execute(StaticMeshInstances.size());
 
 			FrustCullingContext.End();
+		}
+
+		{
+			ShadowComputeContext.Begin(PipelineContext);
+
+			ShadowComputeContext.SetUniformBufferView(MeshCommonCullingInputBuffer);
+			ShadowComputeContext.SetStorageBufferView(GeometryOffsets);
+			ShadowComputeContext.SetStorageBufferView(MeshDrawCommandDataBuffer);
+			ShadowComputeContext.SetStorageBufferView(MeshDrawVisibilityDataBuffer);
+			ShadowComputeContext.SetStorageBufferView(ShadowIndirectDrawIndexedCommands);
+			ShadowComputeContext.SetStorageBufferView(MeshDrawShadowCommandBuffer);
+
+			ShadowComputeContext.Execute(StaticMeshInstances.size());
+
+			ShadowComputeContext.End();
 		}
 
 		// TODO: this should be moved to directional light calculations I guess
@@ -591,6 +603,9 @@ struct render_system : public entity_system
 			};
 			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
 
+			PipelineContext.SetBufferBarriers({{MeshDrawShadowCommandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+			PipelineContext.SetBufferBarriers({{ShadowIndirectDrawIndexedCommands, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
+
 			CascadeShadowContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, GlobalShadow[CascadeIdx].Width, GlobalShadow[CascadeIdx].Height, GlobalShadow[CascadeIdx], {1, 0});
 			CascadeShadowContext.Begin(Window.Gfx, PipelineContext, GlobalShadow[CascadeIdx].Width, GlobalShadow[CascadeIdx].Height);
 
@@ -602,41 +617,16 @@ struct render_system : public entity_system
 			CascadeShadowContext.End();
 		}
 
-#if 0
 		// TODO: something better or/and efficient here
 		// TODO: render only when the actual light source have been changed
-		u32 DirectionalSourceIdx = 0;
+#if 1
 		u32 PointLightSourceIdx  = 0;
 		u32 SpotLightSourceIdx   = 0;
 		if(WorldUpdate.LightSourceShadowsEnabled)
 		{
 			for(const light_source& LightSource : GlobalLightSources)
 			{
-				if(LightSource.LightType == light_type_directional)
-				{
-					const texture& ShadowMapTexture = LightShadows[DirectionalSourceIdx + SpotLightSourceIdx];
-					std::vector<VkImageMemoryBarrier> ShadowBarrier = 
-					{
-						CreateImageBarrier(ShadowMapTexture.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
-					};
-					ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
-
-					mat4 ShadowMapProj = PerspRH(FOV, ShadowMapTexture.Width, ShadowMapTexture.Height, WorldUpdate.NearZ, WorldUpdate.FarZ);
-					mat4 ShadowMapView = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + vec3(LightSource.Dir), vec3(0, 1, 0));
-					mat4 Shadow = ShadowMapView * ShadowMapProj;
-
-					ShadowContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, ShadowMapTexture.Width, ShadowMapTexture.Height, ShadowMapTexture, {1, 0});
-					ShadowContext.Begin(Window.Gfx, PipelineContext, ShadowMapTexture.Width, ShadowMapTexture.Height);
-
-					ShadowContext.SetStorageBufferView(VertexBuffer);
-					ShadowContext.SetStorageBufferView(MeshDrawShadowCommandBuffer);
-					ShadowContext.SetConstant((void*)&Shadow, sizeof(mat4));
-					ShadowContext.DrawIndirect<indirect_draw_indexed_command>(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands);
-
-					ShadowContext.End();
-					DirectionalSourceIdx++;
-				}
-				else if(LightSource.LightType == light_type_point)
+				if(LightSource.Type == light_type_point)
 				{
 					const texture& ShadowMapTexture = PointLightShadows[PointLightSourceIdx];
 					std::vector<VkImageMemoryBarrier> ShadowBarrier = 
@@ -647,15 +637,15 @@ struct render_system : public entity_system
 
 					for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
 					{
-						vec3 CubeMapFaceDir = CubeDirections[CubeMapFaceIdx];
+						vec3 CubeMapFaceDir = CubeMapDirections[CubeMapFaceIdx];
 						vec3 CubeMapUpVect  = CubeMapUpVectors[CubeMapFaceIdx];
 						mat4 ShadowMapProj  = PerspRH(90.0f, ShadowMapTexture.Width, ShadowMapTexture.Height, WorldUpdate.NearZ, WorldUpdate.FarZ);
 						mat4 ShadowMapView  = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + CubeMapFaceDir, CubeMapUpVect);
 						mat4 Shadow = ShadowMapView * ShadowMapProj;
 						point_shadow_input PointShadowInput = {};
-						PointShadowInput.LightPos = GlobalLightSources[DirectionalSourceIdx + PointLightSourceIdx + SpotLightSourceIdx].Pos;
+						PointShadowInput.LightPos = GlobalLightSources[PointLightSourceIdx + SpotLightSourceIdx].Pos;
 						PointShadowInput.LightMat = Shadow;
-						PointShadowInput.FarZ = FarZ;
+						PointShadowInput.FarZ = WorldUpdate.FarZ;
 
 						CubeMapShadowContexts[CubeMapFaceIdx].SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, ShadowMapTexture.Width, ShadowMapTexture.Height, ShadowMapTexture, {1, 0}, CubeMapFaceIdx, true);
 						CubeMapShadowContexts[CubeMapFaceIdx].Begin(Window.Gfx, PipelineContext, ShadowMapTexture.Width, ShadowMapTexture.Height);
@@ -669,9 +659,9 @@ struct render_system : public entity_system
 					}
 					PointLightSourceIdx++;
 				}
-				else if(LightSource.LightType == light_type_spot)
+				else if(LightSource.Type == light_type_spot)
 				{
-					const texture& ShadowMapTexture = LightShadows[DirectionalSourceIdx + SpotLightSourceIdx];
+					const texture& ShadowMapTexture = LightShadows[SpotLightSourceIdx];
 					std::vector<VkImageMemoryBarrier> ShadowBarrier = 
 					{
 						CreateImageBarrier(ShadowMapTexture.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
@@ -698,7 +688,7 @@ struct render_system : public entity_system
 
 		// NOTE: This is only for debug. Maybe not compile on release mode???
 		{
-			mat4 Shadow; // = DebugCameraView * CameraProj;
+			mat4 Shadow = WorldUpdate.DebugView * WorldUpdate.Proj;
 			std::vector<VkImageMemoryBarrier> ShadowBarrier = 
 			{
 				CreateImageBarrier(DebugCameraViewDepthTarget.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),

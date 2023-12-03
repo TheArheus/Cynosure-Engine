@@ -28,11 +28,11 @@ struct global_world_data
 	bool  LightSourceShadowsEnabled;
 };
 
-layout(binding = 0, std430) uniform block0 { global_world_data WorldUpdate; };
-layout(binding = 1) buffer  block1 { vec3 HemisphereSamples[SAMPLES_COUNT]; };
+layout(binding = 0, std430) uniform b0 { global_world_data WorldUpdate; };
+layout(binding = 1) buffer  b1 { vec4 HemisphereSamples[SAMPLES_COUNT]; };
 layout(binding = 2) uniform sampler2D NoiseTexture;
 layout(binding = 3) uniform sampler2D GBuffer[GBUFFER_COUNT];
-layout(binding = 4) uniform writeonly image2D OcclusionTarget;
+layout(binding = 4, r32f) uniform writeonly image2D OcclusionTarget;
 
 
 void main()
@@ -58,7 +58,7 @@ void main()
 	float OcclusionResult = 0.0;
 	for(uint SampleIdx = 0; SampleIdx < SAMPLES_COUNT; ++SampleIdx)
 	{
-		vec3 SamplePosVS = TBNVS * HemisphereSamples[SampleIdx];
+		vec3 SamplePosVS = TBNVS * HemisphereSamples[SampleIdx].xyz;
 		SamplePosVS = CoordVS + SamplePosVS * Radius;
 
 		vec4 Offset = vec4(SamplePosVS, 1.0);
@@ -73,5 +73,5 @@ void main()
 	}
 
 	OcclusionResult = 1.0 - (OcclusionResult / SAMPLES_COUNT);
-	imageStore(OcclusionTarget, ivec2(gl_GlobalInvocationID.xy), vec4(OcclusionResult));
+	imageStore(OcclusionTarget, ivec2(gl_GlobalInvocationID.xy), vec4(OcclusionResult, 0, 0, 0));
 }

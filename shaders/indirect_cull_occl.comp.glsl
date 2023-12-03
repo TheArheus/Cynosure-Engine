@@ -140,7 +140,7 @@ void main()
 		float c = textureLod(DepthPyramid, vec2(BoxMax.x, BoxMin.y), Lod).x;
 		float d = textureLod(DepthPyramid, BoxMax.xy, Lod).x;
 
-		IsVisible = IsVisible && (NewMin.z < (max(max(max(a, b), c), d) + 0.03));
+		IsVisible = IsVisible && (NewMin.z < (min(min(min(a, b), c), d) + 0.03));
 	}
 
 	MeshDrawVisibilityData[DrawIndex] = IsVisible ? 1 : 0;

@@ -50,6 +50,7 @@ private:
 typedef std::list<std::unique_ptr<base_event_handler>> handler_list;
 struct event_bus
 {
+	// TODO: multimap?
 	std::unordered_map<std::type_index, std::unique_ptr<handler_list>> EventList;
 	std::vector<std::function<void()>> EventsQueue;
 
@@ -67,8 +68,7 @@ struct event_bus
 			EventList[std::type_index(typeid(event_type))] = std::make_unique<handler_list>();
 		}
 
-		std::unique_ptr<event_handler<owner, event_type>> Subscriber(new event_handler<owner, event_type>(Owner, CallbackFunction));
-		EventList[std::type_index(typeid(event_type))]->push_back(std::move(Subscriber));
+		EventList[std::type_index(typeid(event_type))]->push_back(std::make_unique<event_handler<owner, event_type>>(Owner, CallbackFunction));
 	}
 
 	template<typename event_type, typename... args>
@@ -78,10 +78,10 @@ struct event_bus
 		if(Handlers)
 		{
 			event_type Event(std::forward<args>(Args)...);
-			for(auto It = Handlers->begin(); It != Handlers->end(); It++)
+			for(std::unique_ptr<base_event_handler>& Handler : *Handlers)
 			{
-				base_event_handler* Handler = It->get();
-				EventsQueue.push_back([=](){Handler->Execute(const_cast<event_type&>(Event));});
+				base_event_handler* Handle = Handler.get();
+				EventsQueue.push_back([=](){Handle->Execute(const_cast<event_type&>(Event));});
 			}
 		}
 	}

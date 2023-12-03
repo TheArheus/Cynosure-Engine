@@ -3,6 +3,8 @@
 #include "..\core\mesh_loader\mesh.cpp"
 #include "..\core\entity_component_system\entity_systems.cpp"
 
+
+// TODO: RequireSystem<system_type>() function so that I could add them later in other parts of the application
 struct cube_scene : scene
 {
 	~cube_scene() override {}
@@ -11,21 +13,21 @@ struct cube_scene : scene
 	{
 		IsInitialized = true;
 
-		// TODO: RequireSystem<system_type>() function so that I could add them later in other parts of the application
+		GlobalLightPos = vec3(-4, 4, 2);
 
 		entity CubeObject = Registry.CreateEntity();
 		CubeObject.AddComponent<mesh_component>("..\\assets\\cube.obj", generate_aabb | generate_sphere);
 		CubeObject.AddComponent<static_instances_component>();
-		CubeObject.AddComponent<debug_component>();
+		//CubeObject.AddComponent<debug_component>();
 		CubeObject.AddComponent<diffuse_component>("..\\assets\\bricks4\\brick-wall.diff.tga");
 		CubeObject.AddComponent<normal_map_component>("..\\assets\\bricks4\\brick-wall.norm.tga");
 		CubeObject.AddComponent<specular_map_component>("..\\assets\\bricks4\\brick-wall.spec.tga");
 		CubeObject.AddComponent<height_map_component>("..\\assets\\bricks4\\brick-wall.disp.png");
 
-		entity PlaneObject = Registry.CreateEntity();
-		PlaneObject.AddComponent<mesh_component>("..\\assets\\f22.obj", generate_aabb | generate_sphere);
-		PlaneObject.AddComponent<static_instances_component>();
-		PlaneObject.AddComponent<debug_component>();
+		//entity PlaneObject = Registry.CreateEntity();
+		//PlaneObject.AddComponent<mesh_component>("..\\assets\\f22.obj", generate_aabb | generate_sphere);
+		//PlaneObject.AddComponent<static_instances_component>();
+		//PlaneObject.AddComponent<debug_component>();
 
 		entity CameraObject = Registry.CreateEntity();
 		CameraObject.AddComponent<camera_component>(45.0f, 0.01f, 100.0f, false);
@@ -45,10 +47,10 @@ struct cube_scene : scene
 								    (float(rand()) / RAND_MAX) * 2 * SceneRadius - SceneRadius, 
 								    (float(rand()) / RAND_MAX) * 2 * SceneRadius - SceneRadius, 0.0f);
 
-			if(DataIdx & 1)
+			//if(DataIdx & 1)
 				CubeObject.GetComponent<static_instances_component>()->AddInstance(CubeObject, Translation, Scaling, true);
-			else
-				PlaneObject.GetComponent<static_instances_component>()->AddInstance(PlaneObject, Translation, Scaling, true);
+			//else
+				//PlaneObject.GetComponent<static_instances_component>()->AddInstance(PlaneObject, Translation, Scaling, true);
 		}
 	}
 

@@ -161,12 +161,12 @@ UpdateScene(window& Window,
 
 		if(!Window.IsGfxPaused)
 		{
-			Scenes[CurrentScene]->Registry.GetSystem<render_system>()->UpdateResources();
+			Scenes[CurrentScene]->Registry.GetSystem<light_sources_system>()->Update(WorldUpdate, GlobalLightSources);
+			Scenes[CurrentScene]->Registry.GetSystem<render_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate);
 
 			PipelineContext.Begin(Window.Gfx);
 
-			Scenes[CurrentScene]->Registry.GetSystem<light_sources_system>()->Update(WorldUpdate, GlobalLightSources);
-			Scenes[CurrentScene]->Registry.GetSystem<world_update_system>()->Update(Window, WorldUpdate, MeshCompCullingCommonData);
+			Scenes[CurrentScene]->Registry.GetSystem<world_update_system>()->Update(Window, WorldUpdate, MeshCompCullingCommonData, Scenes[CurrentScene]->GlobalLightPos);
 			Scenes[CurrentScene]->Registry.GetSystem<render_system>()->Render(Window, PipelineContext, GfxColorTarget, GfxDepthTarget, DebugCameraViewDepthTarget, WorldUpdate, MeshCompCullingCommonData, DynamicMeshInstances, DynamicMeshVisibility, GlobalLightSources);
 			Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Render(Window, PipelineContext, GfxColorTarget, GfxDepthTarget, WorldUpdate, MeshCompCullingCommonData, DynamicDebugInstances, DynamicDebugVisibility);
 

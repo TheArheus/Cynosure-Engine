@@ -8,6 +8,14 @@
 #include <Volk/volk.c>
 #include "core/vendor/vk_mem_alloc.h"
 
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "core/vendor/imgui/imgui.h"
+#include "core/vendor/imgui/imgui.cpp"
+#include "core/vendor/imgui/imgui_demo.cpp"
+#include "core/vendor/imgui/imgui_draw.cpp"
+#include "core/vendor/imgui/imgui_tables.cpp"
+#include "core/vendor/imgui/imgui_widgets.cpp"
+
 u32 GetImageMipLevels(u32 Width, u32 Height)
 {
 	u32 Result = 1;

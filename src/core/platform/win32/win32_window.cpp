@@ -51,9 +51,6 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 	{
 		switch(Message)
 		{
-#if 0
-			// TODO: Consider to do in the future
-			// correct window resizing
 			case WM_ENTERSIZEMOVE:
 			{
 				IsGfxPaused = true;
@@ -62,10 +59,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 			case WM_EXITSIZEMOVE:
 			{
 				IsGfxPaused = false;
-				if (Gfx)
-				{
-					Gfx->RecreateSwapchain(Width, Height);
-				}
+				EventsDispatcher.Emit<resize_event>(Width, Height);
 				return 0;
 			} break;
 			case WM_SIZE:
@@ -75,7 +69,6 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 
 				return 0;
 			} break;
-#endif
 			case WM_SYSKEYDOWN:
 			case WM_SYSKEYUP:
 			case WM_KEYDOWN:
@@ -105,8 +98,9 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 
 			case WM_MOUSEMOVE:
 			{
-				MouseX = GET_X_LPARAM(lParam);
-				MouseY = GET_Y_LPARAM(lParam);
+				s32 MouseX = GET_X_LPARAM(lParam);
+				s32 MouseY = GET_Y_LPARAM(lParam);
+				EventsDispatcher.Emit<mouse_move_event>(float(MouseX) / Width, float(MouseY) / Height);
 			} break;
 
 			case WM_MOUSEWHEEL:
@@ -115,39 +109,40 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 				if(WheelDelta != 0)
 				{
 					WheelDelta = WheelDelta < 0 ? -1 : 1;
+					EventsDispatcher.Emit<mouse_wheel_event>(WheelDelta);
 				}
 			} break;
 
 			case WM_LBUTTONDOWN:
-			case WM_MBUTTONDOWN:
-			case WM_RBUTTONDOWN:
 			case WM_LBUTTONUP:
-			case WM_MBUTTONUP:
+			case WM_RBUTTONDOWN:
 			case WM_RBUTTONUP:
+			case WM_MBUTTONDOWN:
+			case WM_MBUTTONUP:
 			{
-				bool IsPressed = Message == WM_LBUTTONDOWN || Message == WM_RBUTTONDOWN || Message == WM_MBUTTONDOWN;
+				bool IsPressed = (Message == WM_LBUTTONDOWN || Message == WM_RBUTTONDOWN || Message == WM_MBUTTONDOWN);
 				u16 RepeatCount = LOWORD(lParam);
 
-				switch(Message)
+				u16 ButtonCode = 0;
+				switch (Message)
 				{
 					case WM_LBUTTONDOWN:
 					case WM_LBUTTONUP:
-					{
-						Buttons[EC_LBUTTON] = {IsPressed, false, RepeatCount};
-					} break;
+						ButtonCode = EC_LBUTTON;
+						break;
 
 					case WM_RBUTTONDOWN:
 					case WM_RBUTTONUP:
-					{
-						Buttons[EC_RBUTTON] = {IsPressed, false, RepeatCount};
-					} break;
+						ButtonCode = EC_RBUTTON;
+						break;
 
 					case WM_MBUTTONDOWN:
 					case WM_MBUTTONUP:
-					{
-						Buttons[EC_MBUTTON] = {IsPressed, false, RepeatCount};
-					}break;
+						ButtonCode = EC_MBUTTON;
+						break;
 				}
+
+				Buttons[ButtonCode] = {IsPressed, false, RepeatCount};
 			} break;
 
 			case WM_CLOSE:
@@ -161,6 +156,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 	return DefWindowProc(hWindow, Message, wParam, lParam);
 }
 
+// TODO: Better event handling here if possible
 void window::EmitEvents()
 {
 	for(u16 Code = 0; Code < 256; ++Code)

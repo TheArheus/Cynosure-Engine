@@ -28,7 +28,7 @@ struct render_debug_system : public entity_system
 	shader_input DebugRootSignature;
 	shader_input DebugComputeRootSignature;
 
-	render_context DebugContext;
+	render_context  DebugContext;
 	compute_context DebugComputeContext;
 
 	system_constructor(render_debug_system)

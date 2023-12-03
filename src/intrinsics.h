@@ -280,7 +280,6 @@ struct alignas(16) global_world_data
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
 	float GlobalLightSize;
-	u32   DirectionalLightSourceCount;
 	u32   PointLightSourceCount;
 	u32   SpotLightSourceCount;
 	float CascadeSplits[DEPTH_CASCADES_COUNT + 1];
@@ -303,6 +302,7 @@ struct alignas(16) global_world_data
 struct scene
 {
 	registry Registry;
+	vec3 GlobalLightPos;
 
 	bool IsInitialized = false;
 

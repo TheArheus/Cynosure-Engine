@@ -72,10 +72,7 @@ layout(binding = 2) buffer readonly b2 { mesh_draw_command MeshDrawCommandData[]
 layout(binding = 3) buffer readonly b3 { uint MeshDrawVisibilityData[]; };
 layout(binding = 4) buffer b4 { indirect_draw_indexed_command IndirectDrawIndexedCommands[]; };
 layout(binding = 5) buffer c0 { uint IndirectDrawIndexedCommandsCounter; };
-layout(binding = 6) buffer b5 { indirect_draw_indexed_command ShadowIndirectDrawIndexedCommands[]; };
-layout(binding = 7) buffer c1 { uint ShadowIndirectDrawIndexedCommandsCounter; };
-layout(binding = 8) buffer b6 { mesh_draw_command MeshDrawCommands[]; };
-layout(binding = 9) buffer b7 { mesh_draw_command MeshDrawShadowCommands[]; };
+layout(binding = 6) buffer b6 { mesh_draw_command MeshDrawCommands[]; };
 
 void main()
 {
@@ -88,24 +85,8 @@ void main()
 		for(uint MI = 0; MI < MeshCullingCommonInput.MeshCount; ++MI)
 		{
 			IndirectDrawIndexedCommands[MI].InstanceCount = 0;
-			ShadowIndirectDrawIndexedCommands[MI].InstanceCount = 0;
 		}
 		IndirectDrawIndexedCommandsCounter = MeshCullingCommonInput.MeshCount;
-		ShadowIndirectDrawIndexedCommandsCounter = MeshCullingCommonInput.MeshCount;
-	}
-
-	{
-		uint InstanceIdx = atomicAdd(ShadowIndirectDrawIndexedCommands[CommandIdx].InstanceCount, 1);
-
-		ShadowIndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[CommandIdx].IndexCount;
-		ShadowIndirectDrawIndexedCommands[CommandIdx].FirstIndex    = MeshOffsets[CommandIdx].IndexOffset;
-		ShadowIndirectDrawIndexedCommands[CommandIdx].VertexOffset  = int(MeshOffsets[CommandIdx].VertexOffset);
-		ShadowIndirectDrawIndexedCommands[CommandIdx].FirstInstance = CommandIdx == 0 ? 0 : ShadowIndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + ShadowIndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
-
-		InstanceIdx += ShadowIndirectDrawIndexedCommands[CommandIdx].FirstInstance;
-		MeshDrawShadowCommands[InstanceIdx].MeshIndex = CommandIdx;
-		MeshDrawShadowCommands[InstanceIdx].Translate = MeshDrawCommandData[DrawIndex].Translate;
-		MeshDrawShadowCommands[InstanceIdx].Scale     = MeshDrawCommandData[DrawIndex].Scale;
 	}
 
 	if(MeshDrawVisibilityData[DrawIndex] == 0)
@@ -145,6 +126,6 @@ void main()
 		MeshDrawCommands[InstanceIdx].MeshIndex	= CommandIdx;
 		MeshDrawCommands[InstanceIdx].Translate = MeshDrawCommandData[DrawIndex].Translate;
 		MeshDrawCommands[InstanceIdx].Scale     = MeshDrawCommandData[DrawIndex].Scale;
+		MeshDrawCommands[InstanceIdx].Rotate    = MeshDrawCommandData[DrawIndex].Rotate;
 	}
 }
-

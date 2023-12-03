@@ -41,7 +41,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	u32 GlobalMemorySize = MiB(128);
 	void* MemoryBlock = malloc(GlobalMemorySize);
 
-	double TargetFrameRate = 1.0 / 60 * 1000.0; // Frames Per Milliseconds
+	double TargetFrameRate = 1.0 / 60.0 * 1000.0; // Frames Per Milliseconds
 
 	double TimeLast = window::GetTimestamp();
 	double TimeElapsed = 0.0;

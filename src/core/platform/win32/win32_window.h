@@ -55,9 +55,6 @@ public:
 	void SetTitle(std::string& Title);
 	bool IsRunning(){return WindowClass.IsRunning;}
 
-	r32 GetMousePosX(){ return MouseX / Width;  }
-	r32 GetMousePosY(){ return MouseY / Height; }
-
 	static std::optional<int> ProcessMessages();
 	static double GetTimestamp();
 
@@ -90,9 +87,6 @@ private:
 	LRESULT DispatchMessages(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam);
 
 	static LARGE_INTEGER TimerFrequency;
-
-	s32 MouseX;
-	s32 MouseY;
 };
 
 #define WIN32_WINDOWS_H_
