@@ -111,7 +111,6 @@ struct mesh
 	u32  Load(const std::vector<vertex>& NewVertices, const std::vector<u32>& NewIndices, const std::vector<offset>& NewDataOffsets);
 	void Load(mesh& NewMesh);
 	void LoadDebug(mesh& NewMesh);
-	u32  Load() { MeshCount++; return MeshIndex++; };
 
 	void GenerateMeshlets();
 

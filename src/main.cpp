@@ -6,27 +6,22 @@
 #include "core/mesh_loader/mesh.cpp"
 #include "core/gfx/vulkan/renderer_vulkan.cpp"
 #include "core/platform/win32/win32_window.cpp"
+//#include "core/platform/window.cpp"
 
 #include <random>
 
 
-// TODO: Handle multiple buttons being pressed
-// TODO: Proper light source shadows
-//
 // TODO: Handle dynamic entities that updates every frame
 //
 // TODO: Implement reflections using cube maps
-// 
-// TODO: Minecraft like world rendering?
-//			Voxels?
 //
 // TODO: Application abstraction
 // TODO: Mesh animation component
 //
 // TODO: Only one scene at a time
 // TODO: Implement sound system with openal???
-//			sound component???
 //
+// TODO: Better memory allocation. Reallocation of the GlobalMemoryBlock when needed?
 // TODO: Use only one staging buffer instead of many (a lot of memory usage here, current solution is totally not optimal)
 // TODO: Implement mesh shading pipeline in the future
 // TODO: Implement ray  tracing pipeline in the future
@@ -34,7 +29,7 @@
 
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {
-	window Window("3D Renderer");
+	window Window(1280, 720, "3D Renderer");
 	Window.InitGraphics();
 	scene_manager SceneManager(Window);
 
@@ -71,10 +66,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		SceneManager.StartScene(Window);
 		SceneManager.UpdateScene(Window, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
-		Window.EmitEvents();
-
 		auto Result = Window.ProcessMessages();
 		if(Result) return *Result;
+
+		Window.EmitEvents();
 
 		Window.EventsDispatcher.DispatchEvents();
 

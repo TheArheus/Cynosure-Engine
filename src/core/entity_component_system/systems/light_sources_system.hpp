@@ -2,6 +2,11 @@
 
 struct light_sources_system : public entity_system
 {
+	u32 PointLightSourceCount = 0;
+	u32 SpotLightSourceCount  = 0;
+
+	std::vector<light_source> StaticLightSources;
+
 	system_constructor(light_sources_system)
 	{
 		RequireComponent<light_component>();
@@ -14,8 +19,8 @@ struct light_sources_system : public entity_system
 	void Update(global_world_data& WorldUpdate, alloc_vector<light_source>& GlobalLightSources)
 	{
 		WorldUpdate.LightSourceShadowsEnabled = true;
-		WorldUpdate.PointLightSourceCount = 0;
-		WorldUpdate.SpotLightSourceCount = 0;
+		WorldUpdate.PointLightSourceCount = PointLightSourceCount;
+		WorldUpdate.SpotLightSourceCount  = SpotLightSourceCount;
 
 		for(entity& Entity : Entities)
 		{

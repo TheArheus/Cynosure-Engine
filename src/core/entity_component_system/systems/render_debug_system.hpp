@@ -79,6 +79,8 @@ struct render_debug_system : public entity_system
 		MeshCommonCullingInput.DebugDrawCount = StaticMeshInstances.size();
 		MeshCommonCullingInput.DebugMeshCount = Geometries.MeshCount;
 
+		if (!Geometries.MeshCount) return;
+
 		GeometryDebugOffsets = GlobalHeap.PushBuffer(Window.Gfx, Geometries.Offsets.data(), Geometries.Offsets.size() * sizeof(mesh::offset), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
 		DebugMeshDrawCommandDataBuffer = GlobalHeap.PushBuffer(Window.Gfx, StaticMeshInstances.data(), sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -126,17 +128,8 @@ struct render_debug_system : public entity_system
 				global_world_data& WorldData, mesh_comp_culling_common_input& MeshCommonCullingInput,
 				alloc_vector<mesh_draw_command>& DynamicMeshInstances, alloc_vector<u32>& DynamicMeshVisibility)
 	{
-		{
-			std::vector<std::tuple<buffer&, VkAccessFlags, VkAccessFlags>> SetupBufferBarrier = 
-			{
-				{WorldUpdateBuffer, 0, VK_ACCESS_TRANSFER_WRITE_BIT},
-				{MeshCommonCullingInputBuffer, 0, VK_ACCESS_TRANSFER_WRITE_BIT},
-			};
-			PipelineContext.SetBufferBarriers(SetupBufferBarrier, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		if (!Geometries.MeshCount) return;
 
-			WorldUpdateBuffer.UpdateSize(Window.Gfx, &WorldData, sizeof(global_world_data), PipelineContext);
-			MeshCommonCullingInputBuffer.UpdateSize(Window.Gfx, &MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), PipelineContext);
-		}
 #if 0
 		for(entity& Entity : Entities)
 		{
@@ -162,10 +155,22 @@ struct render_debug_system : public entity_system
 		}
 #endif
 
+#if 0
+		{
+			PipelineContext.SetBufferBarriers({
+												{WorldUpdateBuffer, VK_ACCESS_TRANSFER_WRITE_BIT},
+												{MeshCommonCullingInputBuffer, VK_ACCESS_TRANSFER_WRITE_BIT},
+											  }, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+			WorldUpdateBuffer.UpdateSize(Window.Gfx, &WorldData, sizeof(global_world_data), PipelineContext);
+			MeshCommonCullingInputBuffer.UpdateSize(Window.Gfx, &MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), PipelineContext);
+		}
+#endif
+
 		{
 			DebugComputeContext.Begin(PipelineContext);
 
-			PipelineContext.SetBufferBarrier({MeshCommonCullingInputBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			PipelineContext.SetBufferBarrier({MeshCommonCullingInputBuffer, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 			DebugComputeContext.SetUniformBufferView(MeshCommonCullingInputBuffer);
 			DebugComputeContext.SetStorageBufferView(GeometryDebugOffsets);
@@ -180,25 +185,12 @@ struct render_debug_system : public entity_system
 		}
 
 		{
-			VkAccessFlags ColorSrcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			VkAccessFlags DepthSrcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			PipelineContext.SetImageBarrier({{GfxColorTarget}, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+			PipelineContext.SetImageBarrier({{GfxDepthTarget}, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
 
-			VkImageLayout ColorOldLayout = VK_IMAGE_LAYOUT_GENERAL;
-			VkImageLayout DepthOldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-			VkPipelineStageFlags SrcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-			VkPipelineStageFlags DstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-
-			std::vector<VkImageMemoryBarrier> ImageBeginRenderBarriers = 
-			{
-				CreateImageBarrier(GfxColorTarget.Handle, ColorSrcAccessMask, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, ColorOldLayout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-				CreateImageBarrier(GfxDepthTarget.Handle, DepthSrcAccessMask, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, DepthOldLayout, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
-			};
-			ImageBarrier(*PipelineContext.CommandList, SrcStageMask, DstStageMask, ImageBeginRenderBarriers);
-
-			PipelineContext.SetBufferBarrier({WorldUpdateBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-			PipelineContext.SetBufferBarriers({{MeshDrawDebugCommandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
-			PipelineContext.SetBufferBarriers({{DebugIndirectDrawIndexedCommands, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
+			PipelineContext.SetBufferBarrier({WorldUpdateBuffer, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+			PipelineContext.SetBufferBarrier({MeshDrawDebugCommandBuffer, VK_ACCESS_SHADER_READ_BIT}, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+			PipelineContext.SetBufferBarrier({DebugIndirectDrawIndexedCommands, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 
 			DebugContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, Window.Gfx->Width, Window.Gfx->Height, {GfxColorTarget}, {0, 0, 0, 1});
 			DebugContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, Window.Gfx->Width, Window.Gfx->Height, GfxDepthTarget, {1, 0});

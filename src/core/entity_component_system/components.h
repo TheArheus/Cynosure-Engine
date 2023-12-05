@@ -70,13 +70,11 @@ struct static_instances_component
 	std::vector<u32> Visibility;
 	std::vector<mesh_draw_command> Data;
 
-	// TODO: Have only this one
-	void AddInstance(entity Entity, vec4 Translate, vec4 Scale, bool IsVisible)
+	void AddInstance(vec4 Translate, vec4 Scale, bool IsVisible)
 	{
 		mesh_draw_command Command = {};
 		Command.Translate = Translate;
 		Command.Scale = Scale;
-		Command.MeshIndex = Entity.Handle;
 		Data.push_back(Command);
 		Visibility.push_back(IsVisible);
 	}
@@ -89,12 +87,11 @@ struct dynamic_instances_component
 	std::vector<mesh_draw_command> Data;
 
 	// TODO: Have only this one
-	void AddInstance(entity Entity, vec4 Translate, vec4 Scale, bool IsVisible)
+	void AddInstance(vec4 Translate, vec4 Scale, bool IsVisible)
 	{
 		mesh_draw_command Command = {};
 		Command.Translate = Translate;
 		Command.Scale = Scale;
-		Command.MeshIndex = Entity.Handle;
 		Data.push_back(Command);
 		Visibility.push_back(IsVisible);
 	}

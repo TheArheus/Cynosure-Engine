@@ -23,10 +23,6 @@ if not exist ..\build\ mkdir ..\build\
 if not exist ..\build\scenes\ mkdir ..\build\scenes\
 if not exist ..\build\shaders\ mkdir ..\build\shaders\
 
-for /f "tokens=1-3 delims=:" %%a in ("%time%") do (
-	set /a "StartTime=%%a*3600 + %%b*60 + %%c"
-)
-
 rem goto shader_build_skip
 glslangValidator ..\shaders\mesh.vert.glsl %DepthCascades% -o ..\build\shaders\mesh.vert.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\mesh.frag.glsl -gVS -g %DepthCascades% %UseDebugColorBlend% -o ..\build\shaders\mesh.frag.spv -e main --target-env vulkan1.3
@@ -73,16 +69,8 @@ popd
 
 pushd ..\build\
 del *.pdb > NUL 2> NUL
-cl %CommonCompFlags% /I%VulkanInc% user32.lib kernel32.lib vulkan-1.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
+cl %CommonCompFlags% /I%VulkanInc% user32.lib kernel32.lib vulkan-1.lib ..\libs\glfw3.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
 popd
-
-for /f "tokens=1-3 delims=:" %%a in ("%time%") do (
-	set /a "EndTime=%%a*3600 + %%b*60 + %%c"
-)
-
-set /a ElapsedTime=%EndTime%-%StartTime%
-
-echo Compilation took %ElapsedTime% seconds.
 
 goto :eof
 

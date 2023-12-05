@@ -17,7 +17,33 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	AdjustWindowRect(&AdjustRect, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), 0);
 
 	Handle = CreateWindow(WindowClass.Name, Name, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), CW_USEDEFAULT, CW_USEDEFAULT, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
+	//ImGui_ImplWin32_Init(Handle);
+
 	ShowWindow(Handle, SW_SHOWNORMAL);
+
+	QueryPerformanceFrequency(&TimerFrequency);
+}
+
+window::window(const char* _Name)
+	: Width(GetSystemMetrics(SM_CXSCREEN)), Height(GetSystemMetrics(SM_CYSCREEN)), Name(_Name)
+{
+	WindowClass.IsRunning = true;
+	WindowClass.WindowNames.push_back(_Name);
+
+	RECT AdjustRect = {};
+	AdjustRect.left   = 0;
+	AdjustRect.top    = 0;
+	AdjustRect.right  = AdjustRect.left + Width;
+	AdjustRect.bottom = AdjustRect.top + Height;
+
+	AdjustWindowRect(&AdjustRect, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), 0);
+
+	Handle = CreateWindow(WindowClass.Name, Name, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), AdjustRect.left, AdjustRect.right, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
+
+	DWORD Style = GetWindowLong(Handle, GWL_STYLE);
+	SetWindowLong(Handle, GWL_STYLE, Style & ~WS_OVERLAPPEDWINDOW);
+
+	ShowWindow(Handle, SW_MAXIMIZE);
 
 	QueryPerformanceFrequency(&TimerFrequency);
 }
@@ -42,6 +68,8 @@ LRESULT window::InitWindowProc(HWND hWindow, UINT Message, WPARAM wParam, LPARAM
 LRESULT window::WindowProc(HWND hWindow, UINT Message, WPARAM wParam, LPARAM lParam)
 {
 	window* Window = reinterpret_cast<window*>(GetWindowLongPtr(hWindow, GWLP_USERDATA));
+
+	//ImGui_ImplWin32_WndProcHandler(hWindow, Message, wParam, lParam);
 	return Window->DispatchMessages(hWindow, Message, wParam, lParam);
 }
 
@@ -74,7 +102,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 			case WM_KEYDOWN:
 			case WM_KEYUP:
 			{
-				u16 VkCode = LOWORD(wParam);
+				u16 VkCode = wParam;
 				u16 Flags  = HIWORD(lParam);
 				u16 RepeatCount = LOWORD(lParam);
 
@@ -94,6 +122,19 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 				}
 
 				Buttons[VkCode] = {IsPressed, WasDown, RepeatCount};
+			} break;
+
+			case WM_CHAR:
+			{
+				u16 VkCode = wParam;
+				u16 Flags  = HIWORD(lParam);
+				u16 RepeatCount = LOWORD(lParam);
+
+				bool WasDown    = (Flags & KF_REPEAT) == KF_REPEAT;
+				bool IsReleased = (Flags & KF_UP) == KF_UP;
+
+				Buttons[VkCode] = {true, WasDown, RepeatCount};
+				return 0;
 			} break;
 
 			case WM_MOUSEMOVE:
@@ -161,11 +202,11 @@ void window::EmitEvents()
 {
 	for(u16 Code = 0; Code < 256; ++Code)
 	{
-		if(Buttons[Code].IsDown && !Buttons[Code].WasDown)
+		if(Buttons[Code].IsDown)
 		{
 			EventsDispatcher.Emit<key_down_event>(Code, Buttons[Code].RepeatCount);
 		}
-		else if(!Buttons[Code].IsDown && Buttons[Code].WasDown)
+		else if(Buttons[Code].WasDown)
 		{
 			EventsDispatcher.Emit<key_up_event>(Code, Buttons[Code].RepeatCount);
 		}

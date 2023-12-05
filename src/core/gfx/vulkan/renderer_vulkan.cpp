@@ -177,10 +177,14 @@ renderer_backend(window* Window)
 
 	vkCreateDevice(PhysicalDevice, &DeviceCreateInfo, nullptr, &Device);
 
+#if 1
 	VkWin32SurfaceCreateInfoKHR SurfaceCreateInfo = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
 	SurfaceCreateInfo.hinstance = Window->WindowClass.Inst;
 	SurfaceCreateInfo.hwnd = Window->Handle;
 	vkCreateWin32SurfaceKHR(Instance, &SurfaceCreateInfo, 0, &Surface);
+#else
+	glfwCreateWindowSurface(Instance, Window->Handle, nullptr, &Surface);
+#endif
 
 	SurfaceFormat = GetSwapchainFormat(PhysicalDevice, Surface);
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(PhysicalDevice, Surface, &SurfaceCapabilities);
@@ -218,6 +222,19 @@ renderer_backend(window* Window)
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, SwapchainImages.data());
 
 	CommandQueue.Init(this);
+
+#if 0
+	ImGui_ImplVulkan_InitInfo InitInfo = {};
+	InitInfo.Instance = Instance;
+	InitInfo.PhysicalDevice PhysicalDevice;
+	InitInfo.Device = Device;
+	InitInfo.QueueFamily = FamilyIndex;
+	InitInfo.Queue = CommandQueue.Handle;
+	InitInfo.MinImageCount = 2;
+	InitInfo.ImageCount = SwapchainImageCount;
+	InitInfo.MSAASamples = MsaaQuality;
+	ImGui_ImplVulkan_Init(Device, RenderPass, DescriptorPool, InitInfo);
+#endif
 }
 
 void renderer_backend::
@@ -288,7 +305,7 @@ CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipel
 	DynamicState.dynamicStateCount = 2;
 
 	VkPipelineMultisampleStateCreateInfo MultisampleState = {VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-	MultisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	MultisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT; //MsaaQuality;
 
 	VkPipelineTessellationStateCreateInfo TessellationState = {VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO};
 

@@ -4,6 +4,8 @@ struct resource_layout
 {
 	VkAccessFlags Access;
 	VkImageLayout ImageLayout;
+	VkImageAspectFlags ImageAspect;
+	VkPipelineStageFlags StageMask;
 };
 
 // TODO: make UpdateSize() function to do a resource recreation if update size is bigger than current one()
@@ -234,7 +236,7 @@ struct buffer
 	VkDeviceMemory Memory;
 	VmaAllocation Allocation;
 
-	resource_layout Layout;
+	resource_layout Layout = {0, VK_IMAGE_LAYOUT_UNDEFINED, 0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
 
 private:
 	VkDevice Device;
@@ -296,6 +298,7 @@ struct texture
 		Info = InputData;
 		Device = App->Device;
 		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
+		Layout.ImageAspect = (Info.Format == VK_FORMAT_D32_SFLOAT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 
 		CreateResource(App->MemoryProperties, Heap, NewWidth, NewHeight, DepthOrArraySize, InputData);
 		if(Data || Info.UseStagingBuffer)
@@ -325,6 +328,7 @@ struct texture
 		Info = InputData;
 		Device = App->Device;
 		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
+		Layout.ImageAspect = (Info.Format == VK_FORMAT_D32_SFLOAT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 
 		CreateResource(App->MemoryProperties, NewWidth, NewHeight, DepthOrArraySize, InputData);
 		if(Data || Info.UseStagingBuffer)
@@ -469,12 +473,11 @@ struct texture
 
 	void CreateView(VkImageViewType Type, u32 MipLevel, u32 LevelCount)
 	{
-		VkImageAspectFlags Aspect = (Info.Format == VK_FORMAT_D32_SFLOAT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 		VkImageViewCreateInfo ViewCreateInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
 		ViewCreateInfo.format = Info.Format;
 		ViewCreateInfo.viewType = Type;
 		ViewCreateInfo.image = Handle;
-		ViewCreateInfo.subresourceRange.aspectMask = Aspect;
+		ViewCreateInfo.subresourceRange.aspectMask = Layout.ImageAspect;
 		ViewCreateInfo.subresourceRange.baseMipLevel = MipLevel;
 		ViewCreateInfo.subresourceRange.layerCount = Info.Layers;
 		ViewCreateInfo.subresourceRange.levelCount = LevelCount;
@@ -541,7 +544,7 @@ struct texture
 	std::vector<VkImageView> Views;
 
 	sampler Sampler;
-	resource_layout Layout;
+	resource_layout Layout = {0, VK_IMAGE_LAYOUT_UNDEFINED, 0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
 
 private:
 	VkDevice Device;

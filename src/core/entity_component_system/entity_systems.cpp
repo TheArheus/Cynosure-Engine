@@ -33,11 +33,13 @@ AddEntity(entity& Entity)
 {
 	Entities.push_back(Entity);
 }
+
 void entity_system::
 RemoveEntity(entity& Entity)
 {
 	Entities.erase(std::remove_if(Entities.begin(), Entities.end(), [&Entity](entity& Other){return Entity == Other;}), Entities.end());
 }
+
 template<typename component_type>
 void entity_system::
 RequireComponent()
@@ -49,7 +51,7 @@ RequireComponent()
 		ComponentID = FindIt->second;
 	else
 	{
-		ComponentID = component<component_type>::GetNextID();
+		ComponentID = ComponentCount++; //component<component_type>::GetNextID();
 		TypeMap[std::type_index(typeid(component_type))] = ComponentID;
 	}
 
@@ -113,7 +115,7 @@ AddComponent(entity& Object, args&&... Args)
 		ComponentID = FindIt->second;
 	else
 	{
-		ComponentID = component<component_type>::GetNextID();
+		ComponentID = ComponentCount++; //component<component_type>::GetNextID();
 		TypeMap[std::type_index(typeid(component_type))] = ComponentID;
 	}
 
@@ -194,7 +196,7 @@ template<typename system_type, typename ...args>
 std::shared_ptr<system_type> registry::
 AddSystem(args&&... Args)
 {
-	std::shared_ptr<system_type> NewSystem(new system_type(TypeMap, std::forward<args>(Args)...));
+	std::shared_ptr<system_type> NewSystem(new system_type(TypeMap, ComponentCount, std::forward<args>(Args)...));
 	Systems.insert(std::make_pair(std::type_index(typeid(system_type)), NewSystem));
 	return NewSystem;
 }

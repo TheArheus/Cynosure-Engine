@@ -36,8 +36,8 @@ struct global_world_data
 	float ScreenHeight;
 	float NearZ;
 	float FarZ;
-	uint  DebugColors;
-	uint  LightSourceShadowsEnabled;
+	bool  DebugColors;
+	bool  LightSourceShadowsEnabled;
 };
 
 struct material

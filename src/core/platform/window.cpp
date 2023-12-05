@@ -1,10 +1,10 @@
 
-bool window::IsRunning = false;
+bool window::IsWindowRunning = false;
 
 window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	: Width(_Width), Height(_Height), Name(_Name)
 {
-	window::IsRunning = true;
+	window::IsWindowRunning = true;
 	glfwInit();
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -23,10 +23,78 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
     QueryPerformanceFrequency(&TimerFrequency);
 }
 
+window::window(const char* _Name)
+{
+	window::IsWindowRunning = true;
+	glfwInit();
+
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+	GLFWmonitor* Monitor = glfwGetPrimaryMonitor();
+	const GLFWvidmode* Mode = glfwGetVideoMode(Monitor);
+
+	Width  = Mode->width;
+	Height = Mode->height;
+
+	Handle = glfwCreateWindow(Width, Height, Name, nullptr, nullptr);
+	if(!Handle) glfwTerminate();
+
+    glfwMakeContextCurrent(Handle);
+
+	glfwSetWindowMonitor(Handle, glfwGetPrimaryMonitor(), 0, 0, Width, Height, GLFW_DONT_CARE);
+
+    glfwSetKeyCallback(Handle, KeyCallback);
+    glfwSetMouseButtonCallback(Handle, MouseButtonCallback);
+    glfwSetWindowSizeCallback(Handle, WindowSizeCallback);
+    glfwSetCursorPosCallback(Handle, CursorPosCallback);
+    glfwSetScrollCallback(Handle, ScrollCallback);
+
+    QueryPerformanceFrequency(&TimerFrequency);
+}
+
 window::~window()
 {
 	glfwDestroyWindow(Handle);
 	glfwTerminate();
+}
+
+void window::
+KeyCallback(GLFWwindow* Window, int Key, int Code, int Action, int Mods)
+{
+	if(Action == GLFW_PRESS || Action == GLFW_REPEAT)
+		EventsDispatcher.Emit<key_down_event>(GetECCode(Key), 1);
+	else if(Action == GLFW_RELEASE)
+		EventsDispatcher.Emit<key_up_event>(GetECCode(Key), 1);
+}
+
+void window::
+MouseButtonCallback(GLFWwindow* Window, int Button, int Action, int Mods)
+{
+	if(Action == GLFW_PRESS || Action == GLFW_REPEAT)
+		EventsDispatcher.Emit<key_down_event>(GetECCode(Button), 1);
+	else if(Action == GLFW_RELEASE)
+		EventsDispatcher.Emit<key_up_event>(GetECCode(Button), 1);
+}
+
+void window::
+CursorPosCallback(GLFWwindow* Window, double NewX, double NewY)
+{
+	EventsDispatcher.Emit<mouse_move_event>(NewX, NewY);
+}
+
+void window::
+ScrollCallback(GLFWwindow* Window, double OffsetX, double OffsetY)
+{
+	if(OffsetY != 0)
+	{
+		EventsDispatcher.Emit<mouse_wheel_event>(OffsetY < 0 ? -1 : 1);
+	}
+}
+
+void window::
+WindowSizeCallback(GLFWwindow* Window, int Width, int Height)
+{
+	EventsDispatcher.Emit<resize_event>(Width, Height);
 }
 
 std::optional<int> window::ProcessMessages()
@@ -35,7 +103,7 @@ std::optional<int> window::ProcessMessages()
 
     if (glfwWindowShouldClose(Handle))
     {
-		window::IsRunning = false;
+		window::IsWindowRunning = false;
         return 0;
     }
 

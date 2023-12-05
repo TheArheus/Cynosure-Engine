@@ -70,7 +70,7 @@ struct indirect_draw_indexed_command
 layout(binding = 0, std430) uniform readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };
 layout(binding = 1) buffer readonly b1 { offset MeshOffsets[]; };
 layout(binding = 2) buffer b2 { mesh_draw_command MeshDrawCommandData[]; };
-layout(binding = 3) buffer b3 { uint MeshDrawVisibilityData[]; };
+layout(binding = 3) buffer b3 { bool MeshDrawVisibilityData[]; };
 layout(binding = 4) uniform sampler2D DepthPyramid;
 
 
@@ -140,9 +140,9 @@ void main()
 		float c = textureLod(DepthPyramid, vec2(BoxMax.x, BoxMin.y), Lod).x;
 		float d = textureLod(DepthPyramid, BoxMax.xy, Lod).x;
 
-		IsVisible = IsVisible && (NewMin.z < (min(min(min(a, b), c), d) + 0.03));
+		IsVisible = IsVisible && (NewMin.z > (max(max(max(a, b), c), d)));
 	}
 
-	MeshDrawVisibilityData[DrawIndex] = IsVisible ? 1 : 0;
+	MeshDrawVisibilityData[DrawIndex] = IsVisible;
 }
 

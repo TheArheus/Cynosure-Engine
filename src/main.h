@@ -7,6 +7,8 @@
 #include <Volk/volk.h>
 #include <Volk/volk.c>
 #include "core/vendor/vk_mem_alloc.h"
+#include "core/vendor/glfw/glfw3native.h"
+#include "core/vendor/glfw/glfw3.h"
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "core/vendor/imgui/imgui.h"
@@ -74,4 +76,5 @@ struct alignas(16) mesh_comp_culling_common_input
 #include "core/gfx/vulkan/pipeline_context.hpp"
 #include "core/gfx/vulkan/renderer_vulkan.h"
 #include "core/platform/win32/win32_window.h"
+//#include "core/platform/window.h"
 #include "core/scene_manager/scene_manager.h"

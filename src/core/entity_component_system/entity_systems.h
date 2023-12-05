@@ -1,6 +1,6 @@
 #pragma once
 
-#define system_constructor(name, ...) name(type_map& NewTypeMap, ##__VA_ARGS__) : entity_system(NewTypeMap)
+#define system_constructor(name, ...) name(type_map& NewTypeMap, size_t& NewComponentCount, ##__VA_ARGS__) : entity_system(NewTypeMap, NewComponentCount)
 
 typedef u64 entity_handle;
 typedef std::bitset<32> signature;
@@ -53,8 +53,9 @@ struct entity_system
 	signature Signature;
 	std::vector<entity> Entities;
 	type_map& TypeMap;
+	size_t& ComponentCount;
 
-	entity_system(type_map& NewTypeMap) : TypeMap(NewTypeMap) {};
+	entity_system(type_map& NewTypeMap, size_t& NewComponentCount) : TypeMap(NewTypeMap), ComponentCount(NewComponentCount) {};
 	~entity_system() = default;
 
 	void AddEntity(entity& Entity);
@@ -110,7 +111,8 @@ struct component_pool : public base_pool
 typedef std::unordered_map<std::type_index, std::shared_ptr<entity_system>> system_pool;
 struct registry
 {
-	size_t EntitiesCount = 0;
+	size_t EntitiesCount  = 0;
+	size_t ComponentCount = 0;
 
 	std::vector<entity> Entities;
 
