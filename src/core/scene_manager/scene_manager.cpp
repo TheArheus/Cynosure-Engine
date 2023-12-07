@@ -138,6 +138,7 @@ StartScene(window& Window)
 		Scenes[CurrentScene]->Registry.AddSystem<world_update_system>();
 		Scenes[CurrentScene]->Registry.AddSystem<render_system>();
 		Scenes[CurrentScene]->Registry.AddSystem<render_debug_system>();
+		Scenes[CurrentScene]->Registry.AddSystem<ui_debug_system>();
 
 		Scenes[CurrentScene]->Registry.UpdateSystems();
 
@@ -169,6 +170,7 @@ UpdateScene(window& Window,
 			Scenes[CurrentScene]->Registry.GetSystem<world_update_system>()->Update(Window, WorldUpdate, MeshCompCullingCommonData, Scenes[CurrentScene]->GlobalLightPos);
 			Scenes[CurrentScene]->Registry.GetSystem<render_system>()->Render(Window, PipelineContext, GfxColorTarget, GfxDepthTarget, DebugCameraViewDepthTarget, WorldUpdate, MeshCompCullingCommonData, DynamicMeshInstances, DynamicMeshVisibility, GlobalLightSources);
 			Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Render(Window, PipelineContext, GfxColorTarget, GfxDepthTarget, WorldUpdate, MeshCompCullingCommonData, DynamicDebugInstances, DynamicDebugVisibility);
+			Scenes[CurrentScene]->Registry.GetSystem<ui_debug_system>()->Update(PipelineContext, GfxColorTarget, WorldUpdate, MeshCompCullingCommonData);
 
 			PipelineContext.EmplaceColorTarget(Window.Gfx, GfxColorTarget);
 			PipelineContext.Present(Window.Gfx);

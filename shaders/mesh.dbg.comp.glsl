@@ -90,7 +90,7 @@ void main()
 		IndirectDrawIndexedCommandsCounter = MeshCullingCommonInput.DebugMeshCount;
 	}
 
-	if(MeshDrawVisibilityData[DrawIndex]) return;
+	if(!MeshDrawVisibilityData[DrawIndex]) return;
 
 	uint InstanceIdx = atomicAdd(IndirectDrawIndexedCommands[CommandIdx].InstanceCount, 1);
 

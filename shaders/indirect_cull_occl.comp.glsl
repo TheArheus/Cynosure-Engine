@@ -133,14 +133,14 @@ void main()
 	if(IsVisible && MeshCullingCommonInput.OcclusionCullingEnabled)
 	{
 		vec2  BoxSize = (NewMax.xy - NewMin.xy) * HiZSize;
-		float Lod = floor(log2(max(BoxSize.x, BoxSize.y)));
+		float Lod = ceil(log2(max(BoxSize.x, BoxSize.y)));
 
 		float a = textureLod(DepthPyramid, BoxMin.xy, Lod).x;
 		float b = textureLod(DepthPyramid, vec2(BoxMin.x, BoxMax.y), Lod).x;
 		float c = textureLod(DepthPyramid, vec2(BoxMax.x, BoxMin.y), Lod).x;
 		float d = textureLod(DepthPyramid, BoxMax.xy, Lod).x;
 
-		IsVisible = IsVisible && (NewMin.z > (max(max(max(a, b), c), d)));
+		IsVisible = IsVisible && (NewMin.z < (max(max(max(a, b), c), d) + 0.025));
 	}
 
 	MeshDrawVisibilityData[DrawIndex] = IsVisible;

@@ -1,7 +1,7 @@
 
 #ifndef WIN32_WINDOWS_H_
 
-#include <windowsx.h>
+#include "..\..\vendor\imgui\backends\imgui_impl_win32.h"
 
 #define ProcFunc(name) LRESULT name(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)
 
@@ -41,6 +41,7 @@ public:
 	window& operator=(window&& rhs) = default;
 	~window()
 	{
+		ImGui::DestroyContext();
 		DestroyWindow(Handle);
 		WindowClass.WindowNames.erase(std::remove(WindowClass.WindowNames.begin(), WindowClass.WindowNames.end(), Name), WindowClass.WindowNames.end());
 		if(WindowClass.WindowNames.size() == 0)
@@ -49,6 +50,7 @@ public:
 		}
 	}
 
+	void NewFrame() {ImGui_ImplWin32_NewFrame();};
 	void EmitEvents();
 	void InitGraphics();
 
@@ -61,7 +63,7 @@ public:
 	static void* GetProcAddr(HMODULE& Library, const char* SourceName, const char* FuncName);
 	static void  FreeLoadedLibrary(HMODULE& Library);
 
-	event_bus EventsDispatcher;
+	static event_bus EventsDispatcher;
 	button Buttons[256] = {};
 
 	HWND Handle;

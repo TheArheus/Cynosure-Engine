@@ -61,12 +61,10 @@ struct render_system : public entity_system
 	shader_input CmpReduceRootSignature;
 	shader_input BlurRootSignature;
 
-	render_context GfxContext;
-
 	std::vector<render_context> CubeMapShadowContexts;
+	render_context GfxContext;
 	render_context CascadeShadowContext;
 	render_context ShadowContext;
-
 	render_context DebugCameraViewContext;
 
 	compute_context ColorPassContext;
@@ -548,11 +546,13 @@ struct render_system : public entity_system
 		}
 #endif
 		{
-			PipelineContext.SetBufferBarriers({
-												{WorldUpdateBuffer, VK_ACCESS_TRANSFER_WRITE_BIT},
-												{MeshCommonCullingInputBuffer, VK_ACCESS_TRANSFER_WRITE_BIT},
-												{LightSourcesBuffer, VK_ACCESS_TRANSFER_WRITE_BIT},
-											  }, VK_PIPELINE_STAGE_TRANSFER_BIT);
+			std::vector<std::tuple<buffer&, VkAccessFlags, VkAccessFlags>> SetupBufferBarrier = 
+			{
+				{WorldUpdateBuffer, 0, VK_ACCESS_TRANSFER_WRITE_BIT},
+				{MeshCommonCullingInputBuffer, 0, VK_ACCESS_TRANSFER_WRITE_BIT},
+				{LightSourcesBuffer, 0, VK_ACCESS_TRANSFER_WRITE_BIT},
+			};
+			PipelineContext.SetBufferBarriers(SetupBufferBarrier, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 			WorldUpdateBuffer.UpdateSize(Window.Gfx, &WorldUpdate, sizeof(global_world_data), PipelineContext);
 			MeshCommonCullingInputBuffer.UpdateSize(Window.Gfx, &MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), PipelineContext);
@@ -563,7 +563,8 @@ struct render_system : public entity_system
 		{
 			FrustCullingContext.Begin(PipelineContext);
 
-			PipelineContext.SetBufferBarrier({MeshCommonCullingInputBuffer, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			PipelineContext.SetBufferBarrier({MeshCommonCullingInputBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_UNIFORM_READ_BIT}, 
+											  VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 			FrustCullingContext.SetUniformBufferView(MeshCommonCullingInputBuffer);
 			FrustCullingContext.SetStorageBufferView(GeometryOffsets);
@@ -598,10 +599,16 @@ struct render_system : public entity_system
 		{
 			mat4 Shadow = WorldUpdate.LightView[CascadeIdx] * WorldUpdate.LightProj[CascadeIdx];
 
-			PipelineContext.SetImageBarrier({GlobalShadow, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+			std::vector<VkImageMemoryBarrier> ShadowBarrier = 
+			{
+				CreateImageBarrier(GlobalShadow[CascadeIdx].Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+			};
+			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
 
-			PipelineContext.SetBufferBarrier({MeshDrawShadowCommandBuffer, VK_ACCESS_SHADER_READ_BIT}, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
-			PipelineContext.SetBufferBarrier({ShadowIndirectDrawIndexedCommands, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
+			PipelineContext.SetBufferBarriers({{MeshDrawShadowCommandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}}, 
+											  VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+			PipelineContext.SetBufferBarriers({{ShadowIndirectDrawIndexedCommands, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}}, 
+											  VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 
 			CascadeShadowContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, GlobalShadow[CascadeIdx].Width, GlobalShadow[CascadeIdx].Height, GlobalShadow[CascadeIdx], {1, 0});
 			CascadeShadowContext.Begin(Window.Gfx, PipelineContext, GlobalShadow[CascadeIdx].Width, GlobalShadow[CascadeIdx].Height);
@@ -625,7 +632,11 @@ struct render_system : public entity_system
 				if(LightSource.Type == light_type_point)
 				{
 					texture& ShadowMapTexture = PointLightShadows[PointLightSourceIdx];
-					PipelineContext.SetImageBarrier({{ShadowMapTexture}, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+					std::vector<VkImageMemoryBarrier> ShadowBarrier = 
+					{
+						CreateImageBarrier(ShadowMapTexture.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+					};
+					ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
 
 					for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
 					{
@@ -655,7 +666,11 @@ struct render_system : public entity_system
 				{
 					texture& ShadowMapTexture = LightShadows[SpotLightSourceIdx];
 
-					PipelineContext.SetImageBarrier({{ShadowMapTexture}, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+					std::vector<VkImageMemoryBarrier> ShadowBarrier = 
+					{
+						CreateImageBarrier(ShadowMapTexture.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+					};
+					ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
 
 					mat4 ShadowMapProj = PerspRH(LightSource.Pos.w, ShadowMapTexture.Width, ShadowMapTexture.Height, WorldUpdate.NearZ, WorldUpdate.FarZ);
 					mat4 ShadowMapView = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + vec3(LightSource.Dir), vec3(0, 1, 0));
@@ -679,10 +694,14 @@ struct render_system : public entity_system
 		{
 			mat4 Shadow = WorldUpdate.DebugView * WorldUpdate.Proj;
 
-			PipelineContext.SetImageBarrier({{DebugCameraViewDepthTarget}, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+			std::vector<VkImageMemoryBarrier> ShadowBarrier = 
+			{
+				CreateImageBarrier(DebugCameraViewDepthTarget.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+			};
+			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ShadowBarrier);
 
-			PipelineContext.SetBufferBarrier({IndirectDrawIndexedCommands, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
-			PipelineContext.SetBufferBarrier({MeshDrawCommandBuffer, VK_ACCESS_SHADER_READ_BIT}, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+			PipelineContext.SetBufferBarriers({{MeshDrawCommandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+			PipelineContext.SetBufferBarriers({{IndirectDrawIndexedCommands, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 
 			DebugCameraViewContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, DebugCameraViewDepthTarget.Width, DebugCameraViewDepthTarget.Height, DebugCameraViewDepthTarget, {1, 0});
 			DebugCameraViewContext.Begin(Window.Gfx, PipelineContext, DebugCameraViewDepthTarget.Width, DebugCameraViewDepthTarget.Height);
@@ -696,20 +715,38 @@ struct render_system : public entity_system
 		}
 
 		{
-			PipelineContext.SetImageBarrier({{GfxDepthTarget}, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
-			PipelineContext.SetImageBarrier({GBuffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-			PipelineContext.SetImageBarriers({
-												{DiffuseTextures, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-												{NormalTextures, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 
-												{SpecularTextures, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-												{HeightTextures, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
-											 }, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+			std::vector<VkImageMemoryBarrier> ImageBeginRenderBarriers;
+			for(u32 Idx = 0;
+				Idx < DiffuseTextures.size();
+				++Idx)
+			{
+				ImageBeginRenderBarriers.push_back(CreateImageBarrier(DiffuseTextures[Idx].Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+			}
+			for(u32 Idx = 0;
+				Idx < NormalTextures.size();
+				++Idx)
+			{
+				ImageBeginRenderBarriers.push_back(CreateImageBarrier(NormalTextures[Idx].Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+			}
+			for(u32 Idx = 0;
+				Idx < SpecularTextures.size();
+				++Idx)
+			{
+				ImageBeginRenderBarriers.push_back(CreateImageBarrier(SpecularTextures[Idx].Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+			}
+			for(u32 Idx = 0;
+				Idx < HeightTextures.size();
+				++Idx)
+			{
+				ImageBeginRenderBarriers.push_back(CreateImageBarrier(HeightTextures[Idx].Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+			}
+			for(texture& ColorTarget : GBuffer)
+				ImageBeginRenderBarriers.push_back(CreateImageBarrier(ColorTarget.Handle, 0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+			ImageBeginRenderBarriers.push_back(CreateImageBarrier(GfxDepthTarget.Handle, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
+			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, ImageBeginRenderBarriers);
 
-
-			PipelineContext.SetBufferBarriers({
-												{WorldUpdateBuffer, VK_ACCESS_UNIFORM_READ_BIT}, 
-												{MeshMaterialsBuffer, VK_ACCESS_SHADER_READ_BIT}
-											  }, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+			PipelineContext.SetBufferBarrier({WorldUpdateBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+			PipelineContext.SetBufferBarrier({MeshMaterialsBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 			GfxContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, Window.Gfx->Width, Window.Gfx->Height, GBuffer, {0, 0, 0, 0});
 			GfxContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, Window.Gfx->Width, Window.Gfx->Height, GfxDepthTarget, {1, 0});
@@ -727,12 +764,17 @@ struct render_system : public entity_system
 		{
 			AmbientOcclusionContext.Begin(PipelineContext);
 
-			PipelineContext.SetImageBarriers({
-												{GBuffer, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 
-												{{NoiseTexture}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 
-												{{AmbientOcclusionData}, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL}, 
-												{{GfxDepthTarget}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
-											 }, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			std::vector<VkImageMemoryBarrier> AmbientOcclusionPassBarrier = 
+			{
+				CreateImageBarrier(NoiseTexture.Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+				CreateImageBarrier(AmbientOcclusionData.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
+				CreateImageBarrier(GfxDepthTarget.Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+			};
+			for(u32 Idx = 0; Idx < GBUFFER_COUNT; Idx++)
+			{
+				AmbientOcclusionPassBarrier.push_back(CreateImageBarrier(GBuffer[Idx].Handle, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+			}
+			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, AmbientOcclusionPassBarrier);
 
 			AmbientOcclusionContext.SetUniformBufferView(WorldUpdateBuffer);
 			AmbientOcclusionContext.SetStorageBufferView(RandomSamplesBuffer);
@@ -749,7 +791,11 @@ struct render_system : public entity_system
 		{
 			BlurContext.Begin(PipelineContext);
 
-			PipelineContext.SetImageBarrier({{AmbientOcclusionData}, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			std::vector<VkImageMemoryBarrier> BlurPassBarrier = 
+			{
+				CreateImageBarrier(AmbientOcclusionData.Handle, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL),
+			};
+			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, BlurPassBarrier);
 
 			vec3 BlurInput(Window.Gfx->Width, Window.Gfx->Height, 1.0);
 			BlurContext.SetImageSampler({AmbientOcclusionData}, VK_IMAGE_LAYOUT_GENERAL);
@@ -764,7 +810,11 @@ struct render_system : public entity_system
 		{
 			BlurContext.Begin(PipelineContext);
 
-			PipelineContext.SetImageBarrier({{AmbientOcclusionData}, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			std::vector<VkImageMemoryBarrier> BlurPassBarrier = 
+			{
+				CreateImageBarrier(AmbientOcclusionData.Handle, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL),
+			};
+			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, BlurPassBarrier);
 
 			vec3 BlurInput(Window.Gfx->Width, Window.Gfx->Height, 0.0);
 			BlurContext.SetImageSampler({AmbientOcclusionData}, VK_IMAGE_LAYOUT_GENERAL);
@@ -778,16 +828,29 @@ struct render_system : public entity_system
 		{
 			ColorPassContext.Begin(PipelineContext);
 
-			PipelineContext.SetImageBarriers({
-												{{GfxColorTarget}, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL}, 
-												{{AmbientOcclusionData}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 
-												{{RandomAnglesTexture}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 
-												{GlobalShadow, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 
-												{PointLightShadows, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}, 
-												{LightShadows, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
-											 }, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			std::vector<VkImageMemoryBarrier> ColorPassBarrier = 
+			{
+				CreateImageBarrier(GfxColorTarget.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
+				CreateImageBarrier(AmbientOcclusionData.Handle, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+				CreateImageBarrier(RandomAnglesTexture.Handle, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+			};
+			for(u32 CascadeIdx = 0;
+				CascadeIdx < DEPTH_CASCADES_COUNT;
+				++CascadeIdx)
+			{
+				ColorPassBarrier.push_back(CreateImageBarrier(GlobalShadow[CascadeIdx].Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
+			}
+			for(u32 ShadowMapIdx = 0; ShadowMapIdx < PointLightShadows.size(); ShadowMapIdx++)
+			{
+				ColorPassBarrier.push_back(CreateImageBarrier(PointLightShadows[ShadowMapIdx].Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
+			}
+			for(u32 ShadowMapIdx = 0; ShadowMapIdx < LightShadows.size(); ShadowMapIdx++)
+			{
+				ColorPassBarrier.push_back(CreateImageBarrier(LightShadows[ShadowMapIdx].Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT));
+			}
+			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, ColorPassBarrier);
 
-			PipelineContext.SetBufferBarrier({LightSourcesBuffer, VK_ACCESS_SHADER_READ_BIT}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			PipelineContext.SetBufferBarrier({LightSourcesBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 			ColorPassContext.SetUniformBufferView(WorldUpdateBuffer);
 			ColorPassContext.SetUniformBufferView(LightSourcesBuffer);
@@ -806,10 +869,12 @@ struct render_system : public entity_system
 		{
 			DepthReduceContext.Begin(PipelineContext);
 
-			PipelineContext.SetImageBarriers({
-												{{DebugCameraViewDepthTarget}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-												{{DepthPyramid}, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL}
-											 }, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			std::vector<VkImageMemoryBarrier> DepthReadBarriers = 
+			{
+				CreateImageBarrier(DebugCameraViewDepthTarget.Handle, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+				CreateImageBarrier(DepthPyramid.Handle, 0, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL),
+			};
+			ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, DepthReadBarriers);
 
 			for(u32 MipIdx = 0;
 				MipIdx < DepthPyramid.Info.MipLevels;
@@ -824,7 +889,11 @@ struct render_system : public entity_system
 
 				DepthReduceContext.Execute(VecDims.x, VecDims.y);
 
-				PipelineContext.SetImageBarrier({{DepthPyramid}, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+				std::vector<VkImageMemoryBarrier> DepthPyramidBarrier = 
+				{
+					CreateImageBarrier(DepthPyramid.Handle, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL),
+				};
+				ImageBarrier(*PipelineContext.CommandList, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, DepthPyramidBarrier);
 			}
 			DepthReduceContext.End();
 		}

@@ -18,7 +18,6 @@ struct light_sources_system : public entity_system
 
 	void Update(global_world_data& WorldUpdate, alloc_vector<light_source>& GlobalLightSources)
 	{
-		WorldUpdate.LightSourceShadowsEnabled = true;
 		WorldUpdate.PointLightSourceCount = PointLightSourceCount;
 		WorldUpdate.SpotLightSourceCount  = SpotLightSourceCount;
 

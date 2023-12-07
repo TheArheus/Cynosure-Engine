@@ -9,7 +9,7 @@ set VulkanInc="%VULKAN_SDK%\Include"
 set VulkanLib="%VULKAN_SDK%\Lib"
 
 set CommonCompFlags=/std:c++latest /Zc:__cplusplus -fp:fast -nologo -MTd -EHsc -Od -Oi -WX- -W4 -GR -Gm- -GS -FC -Zi -D_MBCS -wd4005 -wd4100 -wd4127 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267 -wd4324 -wd4505
-set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console /NODEFAULTLIB:MSVCRT
+set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console /NODEFAULTLIB:MSVCRT /NODEFAULTLIB:LIBCMT
 
 set PlatformCppFiles="..\src\main.cpp"
 set GameCppFiles="..\src\game_main.cpp"
@@ -36,7 +36,7 @@ glslangValidator ..\shaders\mesh.pnt.sdw.frag.glsl -o ..\build\shaders\mesh.pnt.
 glslangValidator ..\shaders\color_pass.comp.glsl %GBufferCount% %LightSourcesMax% %UseDebugColorBlend% %DepthCascades% -gVS -g -o ..\build\shaders\color_pass.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\screen_space_ambient_occlusion.comp.glsl %GBufferCount% %DepthCascades% -gVS -g -o ..\build\shaders\screen_space_ambient_occlusion.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\indirect_cull_frust.comp.glsl -o ..\build\shaders\indirect_cull_frust.comp.spv -e main --target-env vulkan1.3
-glslangValidator ..\shaders\indirect_cull_occl.comp.glsl -o ..\build\shaders\indirect_cull_occl.comp.spv -e main --target-env vulkan1.3
+glslangValidator ..\shaders\indirect_cull_occl.comp.glsl -gVS -g -o ..\build\shaders\indirect_cull_occl.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\depth_reduce.comp.glsl -o ..\build\shaders\depth_reduce.comp.spv -e main --target-env vulkan1.3
 glslangValidator ..\shaders\blur.comp.glsl -o ..\build\shaders\blur.comp.spv -e main --target-env vulkan1.3
 :shader_build_skip
@@ -63,13 +63,13 @@ for %%f in ("..\..\src\game_scenes\*.cpp") do (
     )
     
     set ExportName=!ExportName!Create
-	cl %CommonCompFlags% "!FileName!" /LD /Fe"!BaseName!" %DepthCascades% -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName% -PDB:ce_!BaseName!_%random%.pdb
+	cl %CommonCompFlags% /I"..\..\src" "!FileName!" /LD /Fe"!BaseName!" %DepthCascades% -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName% -PDB:ce_!BaseName!_%random%.pdb
 )
 popd
 
 pushd ..\build\
 del *.pdb > NUL 2> NUL
-cl %CommonCompFlags% /I%VulkanInc% user32.lib kernel32.lib vulkan-1.lib ..\libs\glfw3.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
+cl %CommonCompFlags% /I%VulkanInc% /I"..\src" user32.lib kernel32.lib gdi32.lib shell32.lib vulkan-1.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
 popd
 
 goto :eof

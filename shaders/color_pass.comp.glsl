@@ -360,7 +360,7 @@ void main()
 		}
 	}
 
-	float GlobalLightIntensity = max(dot(vec3(0, 1, 0), normalize(GlobalLightPosWS)), 0.00001);
+	float GlobalLightIntensity = 0.2; //max(dot(vec3(0, 1, 0), normalize(GlobalLightPosWS)), 0.00001);
 
 	vec3  ShadowCol = vec3(0.00001);
 	float Shadow = (GlobalShadow + LightShadow) / 2.0;
@@ -374,8 +374,8 @@ void main()
 	}
 	else
 	{
-		vec3 FinalLight = (Diffuse.xyz*GlobalLightIntensity + LightDiffuse + LightSpecular) * AmbientOcclusion;
-		FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
+		vec3 FinalLight = (Diffuse.xyz*GlobalLightIntensity + (1.0 - Shadow) * (LightDiffuse + LightSpecular)) * AmbientOcclusion;
+		//FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(pow(FinalLight, vec3(1.0 / 2.0)), 1));
 	}
 #endif

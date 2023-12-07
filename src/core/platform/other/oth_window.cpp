@@ -1,5 +1,10 @@
 
+#include "..\..\vendor\imgui\backends\imgui_impl_glfw.cpp"
+
+button window::Buttons[0xF] = {};
 bool window::IsWindowRunning = false;
+GLFWwindow* window::Handle = nullptr;
+event_bus window::EventsDispatcher;
 
 window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	: Width(_Width), Height(_Height), Name(_Name)
@@ -19,8 +24,6 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
     glfwSetWindowSizeCallback(Handle, WindowSizeCallback);
     glfwSetCursorPosCallback(Handle, CursorPosCallback);
     glfwSetScrollCallback(Handle, ScrollCallback);
-
-    QueryPerformanceFrequency(&TimerFrequency);
 }
 
 window::window(const char* _Name)
@@ -48,38 +51,69 @@ window::window(const char* _Name)
     glfwSetWindowSizeCallback(Handle, WindowSizeCallback);
     glfwSetCursorPosCallback(Handle, CursorPosCallback);
     glfwSetScrollCallback(Handle, ScrollCallback);
-
-    QueryPerformanceFrequency(&TimerFrequency);
 }
 
 window::~window()
 {
+	ImGui::DestroyContext();
 	glfwDestroyWindow(Handle);
 	glfwTerminate();
+}
+
+// TODO: Better event handling here if possible
+void window::EmitEvents()
+{
+	for(u16 Code = 0; Code < 256; ++Code)
+	{
+		if(Buttons[Code].IsDown)
+		{
+			EventsDispatcher.Emit<key_down_event>(Code, Buttons[Code].RepeatCount);
+		}
+		else if(Buttons[Code].WasDown)
+		{
+			EventsDispatcher.Emit<key_up_event>(Code, Buttons[Code].RepeatCount);
+		}
+	}
 }
 
 void window::
 KeyCallback(GLFWwindow* Window, int Key, int Code, int Action, int Mods)
 {
 	if(Action == GLFW_PRESS || Action == GLFW_REPEAT)
-		EventsDispatcher.Emit<key_down_event>(GetECCode(Key), 1);
+	{
+		window::Buttons[GetECCode(Key)].IsDown  = true;
+		window::Buttons[GetECCode(Key)].WasDown = 1 * Action == GLFW_REPEAT;
+		window::Buttons[GetECCode(Key)].RepeatCount++;
+	}
 	else if(Action == GLFW_RELEASE)
-		EventsDispatcher.Emit<key_up_event>(GetECCode(Key), 1);
+	{
+		window::Buttons[GetECCode(Key)].IsDown  = false;
+		window::Buttons[GetECCode(Key)].WasDown = 1 * Action == GLFW_REPEAT;
+		window::Buttons[GetECCode(Key)].RepeatCount = 0;
+	}
 }
 
 void window::
 MouseButtonCallback(GLFWwindow* Window, int Button, int Action, int Mods)
 {
 	if(Action == GLFW_PRESS || Action == GLFW_REPEAT)
-		EventsDispatcher.Emit<key_down_event>(GetECCode(Button), 1);
+	{
+		window::Buttons[GetECCode(Button)].IsDown  = true;
+		window::Buttons[GetECCode(Button)].WasDown = 1 * Action == GLFW_REPEAT;
+		window::Buttons[GetECCode(Button)].RepeatCount++;
+	}
 	else if(Action == GLFW_RELEASE)
-		EventsDispatcher.Emit<key_up_event>(GetECCode(Button), 1);
+	{
+		window::Buttons[GetECCode(Button)].IsDown  = false;
+		window::Buttons[GetECCode(Button)].WasDown = 1 * Action == GLFW_REPEAT;
+		window::Buttons[GetECCode(Button)].RepeatCount = 0;
+	}
 }
 
 void window::
 CursorPosCallback(GLFWwindow* Window, double NewX, double NewY)
 {
-	EventsDispatcher.Emit<mouse_move_event>(NewX, NewY);
+	window::EventsDispatcher.Emit<mouse_move_event>(NewX, NewY);
 }
 
 void window::
@@ -87,14 +121,14 @@ ScrollCallback(GLFWwindow* Window, double OffsetX, double OffsetY)
 {
 	if(OffsetY != 0)
 	{
-		EventsDispatcher.Emit<mouse_wheel_event>(OffsetY < 0 ? -1 : 1);
+		window::EventsDispatcher.Emit<mouse_wheel_event>(OffsetY < 0 ? -1 : 1);
 	}
 }
 
 void window::
 WindowSizeCallback(GLFWwindow* Window, int Width, int Height)
 {
-	EventsDispatcher.Emit<resize_event>(Width, Height);
+	window::EventsDispatcher.Emit<resize_event>(Width, Height);
 }
 
 std::optional<int> window::ProcessMessages()
@@ -139,8 +173,8 @@ FreeLoadedLibrary(HMODULE& Library)
 // Returns time in milliseconds
 double window::GetTimestamp()
 {
-	LARGE_INTEGER Time;
-	QueryPerformanceCounter(&Time);
+	timespec ResultTime;
+	clock_gettime(CLOCK_MONOTONIC, &ResultTime);
 
-	return double(Time.QuadPart) / double(TimerFrequency.QuadPart) * 1000.0;
+	return (double)ResultTime->tv_sec * 1000.0 + (double)ResultTime->tv_nsec / 1e6;
 }

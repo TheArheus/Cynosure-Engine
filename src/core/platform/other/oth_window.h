@@ -1,5 +1,10 @@
 #pragma once
 
+// TODO: Finish this one for linux. FIXES
+#include <time.h>
+
+#include "..\..\vendor\imgui\backends\imgui_impl_glfw.h"
+
 class window
 {
 public:
@@ -11,8 +16,10 @@ public:
 	window& operator=(window&& rhs) = default;
 	~window();
 
+	void NewFrame() {ImGui_ImplGlfw_NewFrame();};
+	void EmitEvents();
 	void InitGraphics();
-	void EmitEvents(){};
+
 	static std::optional<int> ProcessMessages();
 	static double GetTimestamp();
 
@@ -24,7 +31,9 @@ public:
 	static void  FreeLoadedLibrary(HMODULE& Library);
 
 	std::unique_ptr<renderer_backend> Gfx;
-	event_bus EventsDispatcher;
+
+	static button Buttons[0xF];
+	static event_bus EventsDispatcher;
 
 	static bool IsWindowRunning;
 
@@ -42,16 +51,15 @@ private:
 	window(const window& rhs) = delete;
 	window& operator=(const window& rhs) = delete;
 
-	void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-    void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
-    void WindowSizeCallback(GLFWwindow* window, int width, int height);
-    void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
-    void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-
-	static LARGE_INTEGER TimerFrequency;
+	static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+    static void WindowSizeCallback(GLFWwindow* window, int width, int height);
+    static void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
+    static void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 };
 
 
+// TODO: Better button handling
 u16 GetECCode(s32 KeyCode)
 {
     switch (KeyCode) {

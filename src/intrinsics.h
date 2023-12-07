@@ -18,6 +18,7 @@
 #include <vector>
 #include <map>
 #include <array>
+#include <set>
 #include <bitset>
 #include <unordered_map>
 #include <initializer_list>
@@ -29,6 +30,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "core/vendor/stb_image.h"
 
+// TODO: Better gamepad handling
+// TODO: Uniform button symbols and mapping
+// TODO: More than 1 controller
 enum button_symbol
 {
 	EC_LBUTTON        = 0x01,

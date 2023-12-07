@@ -69,8 +69,6 @@ struct world_update_system : entity_system
 		WorldUpdate.DebugColors		= IsDebugColors;
 
 		// TODO: UI
-		MeshCompCullingCommonData.FrustrumCullingEnabled  = false;
-		MeshCompCullingCommonData.OcclusionCullingEnabled = false;
 		MeshCompCullingCommonData.NearZ = NearZ;
 
 		MeshCompCullingCommonData.Proj = CameraProj;

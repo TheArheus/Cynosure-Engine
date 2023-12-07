@@ -1,16 +1,14 @@
 #pragma once
 
-struct resource_layout
-{
-	VkAccessFlags Access;
-	VkImageLayout ImageLayout;
-	VkImageAspectFlags ImageAspect;
-	VkPipelineStageFlags StageMask;
-};
-
 // TODO: make UpdateSize() function to do a resource recreation if update size is bigger than current one()
 struct buffer
 {
+	struct resource_layout
+	{
+		VkAccessFlags Access;
+		VkPipelineStageFlags StageMask;
+	};
+
 	buffer() = default;
 
 	template<class T, class heap>
@@ -236,7 +234,7 @@ struct buffer
 	VkDeviceMemory Memory;
 	VmaAllocation Allocation;
 
-	resource_layout Layout = {0, VK_IMAGE_LAYOUT_UNDEFINED, 0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
+	resource_layout Layout = {0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
 
 private:
 	VkDevice Device;
@@ -246,6 +244,14 @@ private:
 
 struct texture
 {
+	struct resource_layout
+	{
+		VkAccessFlags Access;
+		VkImageLayout ImageLayout;
+		VkImageAspectFlags ImageAspect;
+		VkPipelineStageFlags StageMask;
+	};
+
 	struct sampler
 	{
 		sampler() = default;
@@ -292,8 +298,8 @@ struct texture
 	{
 		if(InputData.Layers == 6)
 		{
-			Width = max(NewWidth, NewHeight);
-			Height = max(NewWidth, NewHeight);
+			Width  = Max(NewWidth, NewHeight);
+			Height = Max(NewWidth, NewHeight);
 		}
 		Info = InputData;
 		Device = App->Device;
@@ -322,8 +328,8 @@ struct texture
 	{
 		if(InputData.Layers == 6)
 		{
-			Width = max(NewWidth, NewHeight);
-			Height = max(NewWidth, NewHeight);
+			Width  = Max(NewWidth, NewHeight);
+			Height = Max(NewWidth, NewHeight);
 		}
 		Info = InputData;
 		Device = App->Device;
@@ -414,8 +420,8 @@ struct texture
 		CreateInfo.flags = Info.Layers == 6 ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
 		CreateInfo.imageType = Info.ImageType;
 		CreateInfo.format = Info.Format;
-		CreateInfo.extent.width  = Info.Layers == 6 ? max((u32)NewWidth, (u32)NewHeight) : (u32)NewWidth;
-		CreateInfo.extent.height = Info.Layers == 6 ? max((u32)NewWidth, (u32)NewHeight) : (u32)NewHeight;
+		CreateInfo.extent.width  = Info.Layers == 6 ? Max((u32)NewWidth, (u32)NewHeight) : (u32)NewWidth;
+		CreateInfo.extent.height = Info.Layers == 6 ? Max((u32)NewWidth, (u32)NewHeight) : (u32)NewHeight;
 		CreateInfo.extent.depth  = (u32)DepthOrArraySize;
 		CreateInfo.mipLevels = InputData.MipLevels;
 		CreateInfo.arrayLayers = Info.Layers;
@@ -443,8 +449,8 @@ struct texture
 		CreateInfo.flags = Info.Layers == 6 ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
 		CreateInfo.imageType = Info.ImageType;
 		CreateInfo.format = Info.Format;
-		CreateInfo.extent.width  = Info.Layers == 6 ? max((u32)NewWidth, (u32)NewHeight) : (u32)NewWidth;
-		CreateInfo.extent.height = Info.Layers == 6 ? max((u32)NewWidth, (u32)NewHeight) : (u32)NewHeight;
+		CreateInfo.extent.width  = Info.Layers == 6 ? Max((u32)NewWidth, (u32)NewHeight) : (u32)NewWidth;
+		CreateInfo.extent.height = Info.Layers == 6 ? Max((u32)NewWidth, (u32)NewHeight) : (u32)NewHeight;
 		CreateInfo.extent.depth  = (u32)DepthOrArraySize;
 		CreateInfo.mipLevels = Info.MipLevels;
 		CreateInfo.arrayLayers = Info.Layers;

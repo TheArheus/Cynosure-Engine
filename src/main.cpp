@@ -5,8 +5,6 @@
 #include "core/scene_manager/scene_manager.cpp"
 #include "core/mesh_loader/mesh.cpp"
 #include "core/gfx/vulkan/renderer_vulkan.cpp"
-#include "core/platform/win32/win32_window.cpp"
-//#include "core/platform/window.cpp"
 
 #include <random>
 
@@ -29,7 +27,7 @@
 
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {
-	window Window(1280, 720, "3D Renderer");
+	window Window("3D Renderer");
 	Window.InitGraphics();
 	scene_manager SceneManager(Window);
 
@@ -58,6 +56,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 		alloc_vector<light_source> GlobalLightSources(LightSourcesAlloc);
 
+		Window.NewFrame();
 		Window.EventsDispatcher.Reset();
 
 		SceneManager.UpdateScenes();

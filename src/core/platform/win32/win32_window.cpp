@@ -1,6 +1,9 @@
 
+#include "..\..\vendor\imgui\backends\imgui_impl_win32.cpp"
+
 window::window_class window::WindowClass;
 LARGE_INTEGER window::TimerFrequency;
+event_bus window::EventsDispatcher;
 
 window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	: Width(_Width), Height(_Height), Name(_Name)
@@ -17,7 +20,9 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	AdjustWindowRect(&AdjustRect, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), 0);
 
 	Handle = CreateWindow(WindowClass.Name, Name, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), CW_USEDEFAULT, CW_USEDEFAULT, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
-	//ImGui_ImplWin32_Init(Handle);
+
+	ImGui::CreateContext();
+	ImGui_ImplWin32_Init(Handle);
 
 	ShowWindow(Handle, SW_SHOWNORMAL);
 
@@ -42,6 +47,9 @@ window::window(const char* _Name)
 
 	DWORD Style = GetWindowLong(Handle, GWL_STYLE);
 	SetWindowLong(Handle, GWL_STYLE, Style & ~WS_OVERLAPPEDWINDOW);
+
+	ImGui::CreateContext();
+	ImGui_ImplWin32_Init(Handle);
 
 	ShowWindow(Handle, SW_MAXIMIZE);
 
@@ -69,7 +77,7 @@ LRESULT window::WindowProc(HWND hWindow, UINT Message, WPARAM wParam, LPARAM lPa
 {
 	window* Window = reinterpret_cast<window*>(GetWindowLongPtr(hWindow, GWLP_USERDATA));
 
-	//ImGui_ImplWin32_WndProcHandler(hWindow, Message, wParam, lParam);
+	ImGui_ImplWin32_WndProcHandler(hWindow, Message, wParam, lParam);
 	return Window->DispatchMessages(hWindow, Message, wParam, lParam);
 }
 
@@ -87,7 +95,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 			case WM_EXITSIZEMOVE:
 			{
 				IsGfxPaused = false;
-				EventsDispatcher.Emit<resize_event>(Width, Height);
+				window::EventsDispatcher.Emit<resize_event>(Width, Height);
 				return 0;
 			} break;
 			case WM_SIZE:
@@ -141,7 +149,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 			{
 				s32 MouseX = GET_X_LPARAM(lParam);
 				s32 MouseY = GET_Y_LPARAM(lParam);
-				EventsDispatcher.Emit<mouse_move_event>(float(MouseX) / Width, float(MouseY) / Height);
+				window::EventsDispatcher.Emit<mouse_move_event>(float(MouseX) / Width, float(MouseY) / Height);
 			} break;
 
 			case WM_MOUSEWHEEL:
@@ -150,7 +158,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 				if(WheelDelta != 0)
 				{
 					WheelDelta = WheelDelta < 0 ? -1 : 1;
-					EventsDispatcher.Emit<mouse_wheel_event>(WheelDelta);
+					window::EventsDispatcher.Emit<mouse_wheel_event>(WheelDelta);
 				}
 			} break;
 
@@ -204,11 +212,11 @@ void window::EmitEvents()
 	{
 		if(Buttons[Code].IsDown)
 		{
-			EventsDispatcher.Emit<key_down_event>(Code, Buttons[Code].RepeatCount);
+			window::EventsDispatcher.Emit<key_down_event>(Code, Buttons[Code].RepeatCount);
 		}
 		else if(Buttons[Code].WasDown)
 		{
-			EventsDispatcher.Emit<key_up_event>(Code, Buttons[Code].RepeatCount);
+			window::EventsDispatcher.Emit<key_up_event>(Code, Buttons[Code].RepeatCount);
 		}
 	}
 }

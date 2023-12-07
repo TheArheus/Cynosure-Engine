@@ -1,14 +1,19 @@
-#include <windows.h>
-
 #define  VK_NO_PROTOTYPES
 #define  VMA_IMPLEMENTATION
 #include <vulkan/vulkan.h>
-#include <vulkan/vulkan_win32.h>
+
+#if _WIN32
+	#include <windows.h>
+	#include <windowsx.h>
+	#include <vulkan/vulkan_win32.h>
+#else
+	#include "core/vendor/glfw/glfw3native.h"
+	#include "core/vendor/glfw/glfw3.h"
+#endif
+
 #include <Volk/volk.h>
 #include <Volk/volk.c>
 #include "core/vendor/vk_mem_alloc.h"
-#include "core/vendor/glfw/glfw3native.h"
-#include "core/vendor/glfw/glfw3.h"
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "core/vendor/imgui/imgui.h"
@@ -17,6 +22,7 @@
 #include "core/vendor/imgui/imgui_draw.cpp"
 #include "core/vendor/imgui/imgui_tables.cpp"
 #include "core/vendor/imgui/imgui_widgets.cpp"
+
 
 u32 GetImageMipLevels(u32 Width, u32 Height)
 {
@@ -75,6 +81,5 @@ struct alignas(16) mesh_comp_culling_common_input
 #include "core/gfx/vulkan/shader_input_signature.hpp"
 #include "core/gfx/vulkan/pipeline_context.hpp"
 #include "core/gfx/vulkan/renderer_vulkan.h"
-#include "core/platform/win32/win32_window.h"
-//#include "core/platform/window.h"
+#include "core/platform/window.hpp"
 #include "core/scene_manager/scene_manager.h"

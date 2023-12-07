@@ -2,14 +2,13 @@
 
 #define system_constructor(name, ...) name(type_map& NewTypeMap, size_t& NewComponentCount, ##__VA_ARGS__) : entity_system(NewTypeMap, NewComponentCount)
 
-typedef u64 entity_handle;
 typedef std::bitset<32> signature;
 typedef std::unordered_map<std::type_index, u32> type_map;
 
 struct registry;
 struct entity
 {
-	entity_handle Handle;
+	u64 Handle;
 	registry* Registry;
 
 	entity(u64 NewHandle, registry* NewRegistry) : Handle(NewHandle), Registry(NewRegistry) {};
@@ -27,10 +26,23 @@ struct entity
 	template<typename component_type>
 	component_type* GetComponent();
 
-	bool operator==(entity& Oth) const {return Handle == Oth.Handle;}
-	bool operator!=(entity& Oth) const {return Handle != Oth.Handle;}
-	bool operator> (entity& Oth) const {return Handle >  Oth.Handle;}
-	bool operator< (entity& Oth) const {return Handle <  Oth.Handle;}
+	bool operator==(const entity& Oth) const {return Handle == Oth.Handle;}
+	bool operator!=(const entity& Oth) const {return Handle != Oth.Handle;}
+	bool operator> (const entity& Oth) const {return Handle >  Oth.Handle;}
+	bool operator< (const entity& Oth) const {return Handle <  Oth.Handle;}
+};
+
+namespace std
+{
+	template<>
+    struct hash<entity>
+    {
+        size_t operator()(const entity& Entity) const
+        {
+            size_t Result = hash<uint64_t>{}(*(uint64_t*)&Entity.Handle);
+            return Result;
+        }
+    };
 };
 
 struct base_component
@@ -120,12 +132,58 @@ struct registry
 	std::vector<signature> EntitiesComponentSignatures;
 	std::vector<std::shared_ptr<base_pool>> ComponentPools;
 
+	std::unordered_map<std::string, entity> TagToEntity;
+	std::unordered_map<entity, std::string> EntityToTag;
+
+	std::unordered_map<std::string, std::vector<entity>> EntitiesPerGroup;
+	std::unordered_map<entity, std::string> GroupPerEntity;
+
 	system_pool Systems;
 
 	entity CreateEntity();
 	void AddEntity(entity NewEntity);
 
 	void UpdateSystems();
+
+	void AddTagToEntity(entity Handle, std::string Tag)
+	{
+		TagToEntity.insert({Tag, Handle});
+		EntityToTag.insert({Handle, Tag});
+	}
+
+	entity GetEntityByTag(std::string Tag)
+	{
+		return TagToEntity.at(Tag);
+	}
+
+	void GroupEntity(entity Entity, std::string Group)
+	{
+		EntitiesPerGroup[Group].push_back(Entity);
+		GroupPerEntity.emplace(Entity, Group);
+	}
+
+	std::vector<entity> GetEntitiesByGroup(std::string Group)
+	{
+		return EntitiesPerGroup[Group];
+	}
+
+	void RemoveEntityFromGroup(entity Handle)
+	{
+		auto FoundGroup = GroupPerEntity.find(Handle);
+		if(FoundGroup != GroupPerEntity.end())
+		{
+			auto FoundGroupEntities = EntitiesPerGroup.find(FoundGroup->second);
+			if(FoundGroupEntities != EntitiesPerGroup.end())
+			{
+				auto EntityInGroup = std::find(FoundGroupEntities->second.begin(), FoundGroupEntities->second.end(), Handle);
+				if(EntityInGroup != FoundGroupEntities->second.end())
+				{
+					FoundGroupEntities->second.erase(EntityInGroup);
+				}
+			}
+			GroupPerEntity.erase(FoundGroup);
+		}
+	}
 
 	template<typename component_type, typename ...args>
 	component_type* AddComponent(entity& Object, args&&... Args);

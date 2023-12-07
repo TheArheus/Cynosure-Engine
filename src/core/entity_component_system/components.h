@@ -1,5 +1,29 @@
 #pragma once
 
+
+struct child_entities_component
+{
+	std::vector<entity> Data;
+
+	child_entities_component() = default;
+
+	void AddChild(entity& Entity)
+	{
+		Data.push_back(Entity);
+	}
+};
+
+struct transform_component
+{
+	vec4 Translate;
+	vec4 Scale;
+	vec4 Rotate;
+
+	transform_component(vec4 NewTranslate = vec4(0), vec4 NewScale = vec4(0), vec4 NewRotate = vec4(0)) : 
+		Translate(NewTranslate), Scale(NewScale), Rotate(NewRotate)
+	{}
+};
+
 struct color_component
 {
 	vec3 Data;
@@ -135,11 +159,9 @@ struct alignas(16) light_component
 
 struct particle_component
 {
-	vec3  Position;
 	vec3  Velocity;
 	vec3  Acceleration;
 	float Time;
-	float TimeMax;
 };
 
 struct diffuse_component

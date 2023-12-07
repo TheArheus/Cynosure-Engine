@@ -17,10 +17,21 @@ renderer_backend(window* Window)
 	};
 	std::vector<const char*> Extensions = 
 	{
+#if _WIN32
 		VK_KHR_SURFACE_EXTENSION_NAME,
 		VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#endif
 		VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
 	};
+
+#if __linux__
+	u32 RequiredInstanceExtensionCount;
+	const char** RequiredExtensions = glfwGetRequiredInstanceExtensions(&RequiredInstanceExtensionCount);
+	for(u32 ExtIdx = 0; ExtIdx < RequiredInstanceExtensionCount; ++ExtIdx)
+	{
+		Extensions.push_back(RequiredExtensions[ExtIdx]);
+	}
+#endif
 
 #if _DEBUG
 	u32 AvailableInstanceLayerCount = 0;
@@ -177,7 +188,7 @@ renderer_backend(window* Window)
 
 	vkCreateDevice(PhysicalDevice, &DeviceCreateInfo, nullptr, &Device);
 
-#if 1
+#if _WIN32
 	VkWin32SurfaceCreateInfoKHR SurfaceCreateInfo = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
 	SurfaceCreateInfo.hinstance = Window->WindowClass.Inst;
 	SurfaceCreateInfo.hwnd = Window->Handle;
@@ -223,29 +234,85 @@ renderer_backend(window* Window)
 
 	CommandQueue.Init(this);
 
-#if 0
+	VkDescriptorPoolSize ImGuiPoolSizes[] = 
+	{
+		{VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+		{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+		{VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+		{VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+		{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000},
+	};
+
+	VkDescriptorPoolCreateInfo ImGuiPoolInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+	ImGuiPoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	ImGuiPoolInfo.maxSets = 1000;
+	ImGuiPoolInfo.poolSizeCount = std::size(ImGuiPoolSizes);
+	ImGuiPoolInfo.pPoolSizes = ImGuiPoolSizes;
+
+	VK_CHECK(vkCreateDescriptorPool(Device, &ImGuiPoolInfo, nullptr, &ImGuiPool));
+
 	ImGui_ImplVulkan_InitInfo InitInfo = {};
 	InitInfo.Instance = Instance;
-	InitInfo.PhysicalDevice PhysicalDevice;
+	InitInfo.PhysicalDevice = PhysicalDevice;
 	InitInfo.Device = Device;
+	InitInfo.DescriptorPool = ImGuiPool;
 	InitInfo.QueueFamily = FamilyIndex;
 	InitInfo.Queue = CommandQueue.Handle;
 	InitInfo.MinImageCount = 2;
 	InitInfo.ImageCount = SwapchainImageCount;
-	InitInfo.MSAASamples = MsaaQuality;
-	ImGui_ImplVulkan_Init(Device, RenderPass, DescriptorPool, InitInfo);
-#endif
+	InitInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT; //MsaaQuality;
+	InitInfo.UseDynamicRendering = true;
+	InitInfo.ColorAttachmentFormat = SurfaceFormat.format;
+	ImGui_ImplVulkan_Init(&InitInfo, VK_NULL_HANDLE);
+
+	ImGui_ImplVulkan_CreateFontsTexture();
 }
 
 void renderer_backend::
 DestroyObject()
 {
+	vkDestroyDescriptorPool(Device, ImGuiPool, nullptr);
 	vkDestroySwapchainKHR(Device, Swapchain, nullptr);
 	CommandQueue.DestroyObject();
 	vkDestroyDevice(Device, nullptr);
 	vkDestroySurfaceKHR(Instance, Surface, nullptr);
 	vkDestroyDebugReportCallbackEXT(Instance, DebugCallback, nullptr);
 	vkDestroyInstance(Instance, nullptr);
+}
+
+VkShaderModule renderer_backend::
+LoadShaderModule(const char* Path)
+{
+	VkShaderModule Result = 0;
+	FILE* File = fopen(Path, "rb");
+	if(File)
+	{
+		fseek(File, 0, SEEK_END);
+		long FileLength = ftell(File);
+		fseek(File, 0, SEEK_SET);
+
+		char* Buffer = (char*)malloc(FileLength);
+		assert(Buffer);
+
+		size_t ReadSize = fread(Buffer, 1, FileLength, File);
+		assert(ReadSize == size_t(FileLength));
+		assert(FileLength % 4 == 0);
+
+		VkShaderModuleCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+		CreateInfo.codeSize = FileLength;
+		CreateInfo.pCode = reinterpret_cast<const u32*>(Buffer);
+
+		VK_CHECK(vkCreateShaderModule(Device, &CreateInfo, 0, &Result));
+
+		fclose(File);
+	}
+	return Result;
 }
 
 VkPipeline renderer_backend::

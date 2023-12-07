@@ -16,35 +16,6 @@ union descriptor_info
 	};
 };
 
-static VkShaderModule
-LoadShaderModule(VkDevice Device, const char* Path)
-{
-	VkShaderModule Result = 0;
-	FILE* File = fopen(Path, "rb");
-	if(File)
-	{
-		fseek(File, 0, SEEK_END);
-		long FileLength = ftell(File);
-		fseek(File, 0, SEEK_SET);
-
-		char* Buffer = (char*)malloc(FileLength);
-		assert(Buffer);
-
-		size_t ReadSize = fread(Buffer, 1, FileLength, File);
-		assert(ReadSize == size_t(FileLength));
-		assert(FileLength % 4 == 0);
-
-		VkShaderModuleCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-		CreateInfo.codeSize = FileLength;
-		CreateInfo.pCode = reinterpret_cast<const u32*>(Buffer);
-
-		VK_CHECK(vkCreateShaderModule(Device, &CreateInfo, 0, &Result));
-
-		fclose(File);
-	}
-	return Result;
-}
-
 struct global_pipeline_context
 {
 	global_pipeline_context() = default;
@@ -182,174 +153,42 @@ struct global_pipeline_context
 		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, VK_DEPENDENCY_BY_REGION_BIT, 1, &Barrier, 0, 0, 0, 0);
 	}
 
-	void SetBufferBarrier(std::tuple<buffer&, VkAccessFlags>&& BarrierData, 
-						  VkPipelineStageFlags DstStageMask)
+	void SetBufferBarrier(const std::tuple<buffer&, VkAccessFlags, VkAccessFlags>& BarrierData, 
+						  VkPipelineStageFlags SrcStageMask, VkPipelineStageFlags DstStageMask)
 	{
 		VkBufferMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		Barrier.buffer = std::get<0>(BarrierData).Handle;
-		Barrier.srcAccessMask = std::get<0>(BarrierData).Layout.Access;
-		Barrier.dstAccessMask = std::get<1>(BarrierData);
+		Barrier.srcAccessMask = std::get<1>(BarrierData);
+		Barrier.dstAccessMask = std::get<2>(BarrierData);
 		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.offset = 0;
 		Barrier.size = std::get<0>(BarrierData).Size;
 
-		VkPipelineStageFlags SrcStageMask = std::get<0>(BarrierData).Layout.StageMask;
-
-		std::get<0>(BarrierData).Layout.Access    = std::get<1>(BarrierData);
-		std::get<0>(BarrierData).Layout.StageMask = DstStageMask;
-
-		if((DstStageMask & VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) == VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) std::get<0>(BarrierData).Layout = {0, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
-
 		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &Barrier, 0, 0);
 	}
 
-	void SetBufferBarriers(std::vector<std::tuple<buffer&, VkAccessFlags>>&& BarrierData, 
-						   VkPipelineStageFlags DstStageMask)
+	void SetBufferBarriers(const std::vector<std::tuple<buffer&, VkAccessFlags, VkAccessFlags>>& BarrierData, 
+						   VkPipelineStageFlags SrcStageMask, VkPipelineStageFlags DstStageMask)
 	{
-		VkPipelineStageFlags SrcStageMask = 0;
 		std::vector<VkBufferMemoryBarrier> Barriers;
-		for(std::tuple<buffer&, VkAccessFlags>& Data : BarrierData)
+		for(const std::tuple<buffer&, VkAccessFlags, VkAccessFlags>& Data : BarrierData)
 		{
 			VkBufferMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 			Barrier.buffer = std::get<0>(Data).Handle;
-			Barrier.srcAccessMask = std::get<0>(Data).Layout.Access;
-			Barrier.dstAccessMask = std::get<1>(Data);
+			Barrier.srcAccessMask = std::get<1>(Data);
+			Barrier.dstAccessMask = std::get<2>(Data);
 			Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			Barrier.offset = 0;
 			Barrier.size = std::get<0>(Data).Size;
 
-			SrcStageMask |= std::get<0>(Data).Layout.StageMask;
-
-			std::get<0>(Data).Layout.Access    = std::get<1>(Data);
-			std::get<0>(Data).Layout.StageMask = DstStageMask;
-
-			if((DstStageMask & VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) == VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) std::get<0>(Data).Layout = {0, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
+			std::get<0>(Data).Layout.Access = std::get<1>(Data);
 
 			Barriers.push_back(Barrier);
 		}
 
 		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
-	}
-
-	void SetImageBarrier(std::tuple<std::vector<texture>, VkAccessFlags, VkImageLayout>&& BarrierData, 
-						 VkPipelineStageFlags DstStageMask)
-	{
-		VkPipelineStageFlags SrcStageMask = 0;
-		std::vector<VkImageMemoryBarrier> Barriers;
-		for(texture& Texture : std::get<0>(BarrierData))
-		{
-			VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-			Barrier.image = Texture.Handle;
-			Barrier.srcAccessMask = Texture.Layout.Access;
-			Barrier.dstAccessMask = std::get<1>(BarrierData);
-			Barrier.oldLayout = Texture.Layout.ImageLayout;
-			Barrier.newLayout = std::get<2>(BarrierData);
-			Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			Barrier.subresourceRange.aspectMask = Texture.Layout.ImageAspect;
-			Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-			Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-
-			SrcStageMask |= Texture.Layout.StageMask;
-
-			Texture.Layout.Access      = std::get<1>(BarrierData);
-			Texture.Layout.ImageLayout = std::get<2>(BarrierData);
-			Texture.Layout.StageMask   = DstStageMask;
-
-			if((DstStageMask & VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) == VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) Texture.Layout = {0, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
-
-			Barriers.push_back(Barrier);
-		}
-
-		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, 
-							 VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 
-							 Barriers.size(), Barriers.data());
-	}
-
-	void SetImageBarrier(std::tuple<VkImage&, VkAccessFlags, VkAccessFlags, VkImageLayout, VkImageLayout, VkImageAspectFlags>&& BarrierData,
-						 VkPipelineStageFlags SrcStageMask, VkPipelineStageFlags DstStageMask)
-	{
-		VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-		Barrier.image = std::get<0>(BarrierData);
-		Barrier.srcAccessMask = std::get<1>(BarrierData);
-		Barrier.dstAccessMask = std::get<2>(BarrierData);
-		Barrier.oldLayout = std::get<3>(BarrierData);
-		Barrier.newLayout = std::get<4>(BarrierData);
-		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		Barrier.subresourceRange.aspectMask = std::get<5>(BarrierData);
-		Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-		Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-
-		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, 
-							 VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 
-							 1, &Barrier);
-	}
-
-	void SetImageBarriers(std::vector<std::tuple<std::vector<texture>, VkAccessFlags, VkImageLayout>>&& TextureBarrierData, 
-						  VkPipelineStageFlags DstStageMask)
-	{
-		VkPipelineStageFlags SrcStageMask = 0;
-		std::vector<VkImageMemoryBarrier> Barriers;
-		for(std::tuple<std::vector<texture>, VkAccessFlags, VkImageLayout>& Data : TextureBarrierData)
-		{
-			for(texture& Texture : std::get<0>(Data))
-			{
-				VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-				Barrier.image = Texture.Handle;
-				Barrier.srcAccessMask = Texture.Layout.Access;
-				Barrier.dstAccessMask = std::get<1>(Data);
-				Barrier.oldLayout = Texture.Layout.ImageLayout;
-				Barrier.newLayout = std::get<2>(Data);
-				Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				Barrier.subresourceRange.aspectMask = Texture.Layout.ImageAspect;
-				Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-				Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-
-				SrcStageMask |= Texture.Layout.StageMask;
-
-				Texture.Layout.Access      = std::get<1>(Data);
-				Texture.Layout.ImageLayout = std::get<2>(Data);
-				Texture.Layout.StageMask   = DstStageMask;
-
-				if((DstStageMask & VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) == VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) Texture.Layout = {0, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
-
-				Barriers.push_back(Barrier);
-			}
-		}
-
-		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, 
-							 VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 
-							 (u32)Barriers.size(), Barriers.data());
-	}
-
-	void SetImageBarriers(std::vector<std::tuple<VkImage&, VkAccessFlags, VkAccessFlags, VkImageLayout, VkImageLayout, VkImageAspectFlags>>&& ImageBarrierData,
-						  VkPipelineStageFlags SrcStageMask, VkPipelineStageFlags DstStageMask)
-	{
-		std::vector<VkImageMemoryBarrier> Barriers;
-		for(std::tuple<VkImage&, VkAccessFlags, VkAccessFlags, VkImageLayout, VkImageLayout, VkImageAspectFlags>& Data : ImageBarrierData)
-		{
-			VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-			Barrier.image = std::get<0>(Data);
-			Barrier.srcAccessMask = std::get<1>(Data);
-			Barrier.dstAccessMask = std::get<2>(Data);
-			Barrier.oldLayout = std::get<3>(Data);
-			Barrier.newLayout = std::get<4>(Data);
-			Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			Barrier.subresourceRange.aspectMask = std::get<5>(Data);
-			Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-			Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-
-			Barriers.push_back(Barrier);
-		}
-
-		vkCmdPipelineBarrier(*CommandList, SrcStageMask, DstStageMask, 
-							 VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 
-							 (u32)Barriers.size(), Barriers.data());
 	}
 
 	VkDevice Device;
@@ -388,42 +227,30 @@ public:
 		for(const std::string Shader : ShaderList)
 		{
 			VkPipelineShaderStageCreateInfo Stage = {};
-			Stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			Stage.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			Stage.module = Context->LoadShaderModule(Shader.c_str());
+			Stage.pName  = "main";
 			if(Shader.find(".vert.") != std::string::npos)
 			{
-				Stage.module = LoadShaderModule(Device, Shader.c_str());
 				Stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-				Stage.pName = "main";
-				ShaderStages.push_back(Stage);
 			}
 			if(Shader.find(".doma.") != std::string::npos)
 			{
-				Stage.module = LoadShaderModule(Device, Shader.c_str());
 				Stage.stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-				Stage.pName = "main";
-				ShaderStages.push_back(Stage);
 			}
 			if(Shader.find(".hull.") != std::string::npos)
 			{
-				Stage.module = LoadShaderModule(Device, Shader.c_str());
 				Stage.stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-				Stage.pName = "main";
-				ShaderStages.push_back(Stage);
 			}
 			if (Shader.find(".geom.") != std::string::npos)
 			{
-				Stage.module = LoadShaderModule(Device, Shader.c_str());
 				Stage.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
-				Stage.pName = "main";
-				ShaderStages.push_back(Stage);
 			}
 			if(Shader.find(".frag.") != std::string::npos)
 			{
-				Stage.module = LoadShaderModule(Device, Shader.c_str());
 				Stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-				Stage.pName = "main";
-				ShaderStages.push_back(Stage);
 			}
+			ShaderStages.push_back(Stage);
 		}
 
 		Pipeline = Context->CreateGraphicsPipeline(Signature.Handle, ShaderStages, ColorTargetFormats, InputData.UseColor, InputData.UseDepth, InputData.UseBackFace, InputData.UseOutline, InputData.ViewMask, InputData.UseMultiview);
@@ -879,7 +706,7 @@ public:
 
 		ComputeStage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
 		ComputeStage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
-		ComputeStage.module = LoadShaderModule(Device, Shader.c_str());
+		ComputeStage.module = Context->LoadShaderModule(Shader.c_str());
 		ComputeStage.pName  = "main";
 
 		Pipeline = Context->CreateComputePipeline(Signature.Handle, ComputeStage);
