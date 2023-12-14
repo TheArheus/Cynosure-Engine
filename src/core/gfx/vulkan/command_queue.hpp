@@ -2,19 +2,18 @@
 
 class command_queue
 {
-	VkDevice Device;
 	std::vector<VkCommandBuffer*> CommandLists;
 
 public:
 	VkQueue Handle;
 	VkCommandPool CommandAlloc;
+	VkDevice Device;
 
 	command_queue() = default;
 
-	template<class T>
-	command_queue(T* Gfx)
+	command_queue(renderer_backend* Backend)
 	{
-		Init(Gfx);
+		Init(Backend);
 	}
 
 	void DestroyObject()
@@ -38,9 +37,10 @@ public:
 	}
 
 
-	template<class T>
-	void Init(T* Gfx)
+	void Init(renderer_backend* Backend)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+
 		Device = Gfx->Device;
 
 		VkCommandPoolCreateInfo CommandPoolCreateInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};

@@ -34,57 +34,53 @@ struct global_pipeline_context
 		}
 	}
 
-	template<typename T>
-	global_pipeline_context(std::unique_ptr<T>& Context)
+	global_pipeline_context(command_queue& CommandQueue)
 	{
-		CreateResource(Context);
+		CreateResource(CommandQueue);
 	}
 
-	template<typename T>
-	void CreateResource(std::unique_ptr<T>& Context)
+	void CreateResource(command_queue& CommandQueue)
 	{
-		Device = Context->Device;
+		Device = CommandQueue.Device;
 
 		VkSemaphoreCreateInfo SemaphoreCreateInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-		VK_CHECK(vkCreateSemaphore(Context->Device, &SemaphoreCreateInfo, nullptr, &AcquireSemaphore));
-		VK_CHECK(vkCreateSemaphore(Context->Device, &SemaphoreCreateInfo, nullptr, &ReleaseSemaphore));
+		VK_CHECK(vkCreateSemaphore(Device, &SemaphoreCreateInfo, nullptr, &AcquireSemaphore));
+		VK_CHECK(vkCreateSemaphore(Device, &SemaphoreCreateInfo, nullptr, &ReleaseSemaphore));
 
-		CommandList = Context->CommandQueue.AllocateCommandList();
+		CommandList = CommandQueue.AllocateCommandList();
 	}
 
-	template<typename T>
-	void Begin(std::unique_ptr<T>& Context)
+	void Begin(renderer_backend* Backend, command_queue& CommandQueue)
 	{
-		Context->CommandQueue.Reset(CommandList);
+		CommandQueue.Reset(CommandList);
 
-		vkAcquireNextImageKHR(Context->Device, Context->Swapchain, ~0ull, AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		vkAcquireNextImageKHR(Device, Gfx->Swapchain, ~0ull, AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
 	}
 
-	template<typename T>
-	void End(std::unique_ptr<T>& Context)
+	void End(command_queue& CommandQueue)
 	{
-		Context->CommandQueue.Execute(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
+		CommandQueue.Execute(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 	}
 
-	template<typename T>
-	void DeviceWaitIdle(std::unique_ptr<T>& Context)
+	void DeviceWaitIdle()
 	{
-		vkDeviceWaitIdle(Context->Device);
+		vkDeviceWaitIdle(Device);
 	}
 
-	template<typename T>
-	void EndOneTime(std::unique_ptr<T>& Context)
+	void EndOneTime(command_queue& CommandQueue)
 	{
-		Context->CommandQueue.ExecuteAndRemove(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
+		CommandQueue.ExecuteAndRemove(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 	}
 
-	template<typename T>
-	void EmplaceColorTarget(std::unique_ptr<T>& Context, texture& Texture)
+	void EmplaceColorTarget(renderer_backend* Backend, texture& Texture)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+
 		std::vector<VkImageMemoryBarrier> ImageCopyBarriers = 
 		{
 			CreateImageBarrier(Texture.Handle, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
-			CreateImageBarrier(Context->SwapchainImages[BackBufferIndex], 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL),
+			CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL),
 		};
 		ImageBarrier(*CommandList, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, ImageCopyBarriers);
 
@@ -95,28 +91,29 @@ struct global_pipeline_context
 		ImageCopyRegion.dstSubresource.layerCount = 1;
 		ImageCopyRegion.extent = {u32(Texture.Width), u32(Texture.Height), u32(Texture.Depth)};
 
-		vkCmdCopyImage(*CommandList, Texture.Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Context->SwapchainImages[BackBufferIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &ImageCopyRegion);
+		vkCmdCopyImage(*CommandList, Texture.Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Gfx->SwapchainImages[BackBufferIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &ImageCopyRegion);
 	}
 
-	template<typename T>
-	void Present(std::unique_ptr<T>& Context)
+	void Present(renderer_backend* Backend, command_queue& CommandQueue)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+
 		std::vector<VkImageMemoryBarrier> ImageEndRenderBarriers = 
 		{
-			CreateImageBarrier(Context->SwapchainImages[BackBufferIndex], VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+			CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
 		};
 		ImageBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, ImageEndRenderBarriers);
 
-		Context->CommandQueue.Execute(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
+		CommandQueue.Execute(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 
 		// NOTE: It shouldn't be there
 		VkPresentInfoKHR PresentInfo = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
 		PresentInfo.waitSemaphoreCount = 1;
 		PresentInfo.pWaitSemaphores = &ReleaseSemaphore;
 		PresentInfo.swapchainCount = 1;
-		PresentInfo.pSwapchains = &Context->Swapchain;
+		PresentInfo.pSwapchains = &Gfx->Swapchain;
 		PresentInfo.pImageIndices = &BackBufferIndex;
-		vkQueuePresentKHR(Context->CommandQueue.Handle, &PresentInfo);
+		vkQueuePresentKHR(CommandQueue.Handle, &PresentInfo);
 	}
 
 	void FillBuffer(buffer& Buffer, u32 Value)
@@ -215,20 +212,20 @@ public:
 
 	render_context() = default;
 
-	template<typename T>
-	render_context(std::unique_ptr<T>& Context,
-				   const shader_input& Signature,
+	render_context(renderer_backend* Backend,
+				   shader_input* Signature,
 				   std::initializer_list<const std::string> ShaderList, const std::vector<VkFormat>& ColorTargetFormats, const input_data& InputData = {true, true, true, false, false, 0}) 
-				 : InputSignature(&Signature), UseColorTarget(InputData.UseColor), UseDepthTarget(InputData.UseDepth)
-	{		
+				 : InputSignature(Signature)
+	{
 		RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
-		Device = Context->Device;
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		Device = Gfx->Device;
 
 		for(const std::string Shader : ShaderList)
 		{
 			VkPipelineShaderStageCreateInfo Stage = {};
 			Stage.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			Stage.module = Context->LoadShaderModule(Shader.c_str());
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str());
 			Stage.pName  = "main";
 			if(Shader.find(".vert.") != std::string::npos)
 			{
@@ -253,7 +250,76 @@ public:
 			ShaderStages.push_back(Stage);
 		}
 
-		Pipeline = Context->CreateGraphicsPipeline(Signature.Handle, ShaderStages, ColorTargetFormats, InputData.UseColor, InputData.UseDepth, InputData.UseBackFace, InputData.UseOutline, InputData.ViewMask, InputData.UseMultiview);
+		VkGraphicsPipelineCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+
+		CreateInfo.layout = Signature->Handle;
+		CreateInfo.pStages = ShaderStages.data();
+		CreateInfo.stageCount = ShaderStages.size();
+
+		VkPipelineRenderingCreateInfoKHR PipelineRenderingCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR};
+		PipelineRenderingCreateInfo.colorAttachmentCount    = ColorTargetFormats.size();
+		PipelineRenderingCreateInfo.pColorAttachmentFormats = InputData.UseColor ? ColorTargetFormats.data() : nullptr;
+		PipelineRenderingCreateInfo.depthAttachmentFormat   = InputData.UseDepth ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED;
+		PipelineRenderingCreateInfo.viewMask = InputData.UseMultiview * InputData.ViewMask;
+
+		VkPipelineVertexInputStateCreateInfo VertexInputState = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+
+		VkPipelineInputAssemblyStateCreateInfo InputAssemblyState = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+		InputAssemblyState.topology = InputData.UseOutline ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+		std::vector<VkPipelineColorBlendAttachmentState> ColorAttachmentState(ColorTargetFormats.size());
+		for(u32 Idx = 0; Idx < ColorTargetFormats.size(); ++Idx)
+		{
+			ColorAttachmentState[Idx].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+#if DEBUG_COLOR_BLEND
+			ColorAttachmentState[Idx].blendEnable = true;
+			ColorAttachmentState[Idx].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+			ColorAttachmentState[Idx].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+#endif
+		}
+
+		VkPipelineColorBlendStateCreateInfo ColorBlendState = {VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+		ColorBlendState.pAttachments = ColorAttachmentState.data();
+		ColorBlendState.attachmentCount = ColorAttachmentState.size();
+
+		VkPipelineDepthStencilStateCreateInfo DepthStencilState = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+		DepthStencilState.depthTestEnable = true;
+		DepthStencilState.depthWriteEnable = true;
+		DepthStencilState.minDepthBounds = 0.0f;
+		DepthStencilState.maxDepthBounds = 1.0f;
+		DepthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+
+		VkPipelineViewportStateCreateInfo ViewportState = {VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+		ViewportState.viewportCount = 1;
+		ViewportState.scissorCount = 1;
+
+		VkPipelineRasterizationStateCreateInfo RasterizationState = {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+		RasterizationState.lineWidth = 1.0f;
+		RasterizationState.cullMode  = InputData.UseBackFace ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_FRONT_BIT;
+		RasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+		VkPipelineDynamicStateCreateInfo DynamicState = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+		VkDynamicState DynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+		DynamicState.pDynamicStates = DynamicStates;
+		DynamicState.dynamicStateCount = 2;
+
+		VkPipelineMultisampleStateCreateInfo MultisampleState = {VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+		MultisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT; //MsaaQuality;
+
+		VkPipelineTessellationStateCreateInfo TessellationState = {VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO};
+
+		CreateInfo.pColorBlendState = &ColorBlendState;
+		CreateInfo.pDepthStencilState = &DepthStencilState;
+		CreateInfo.pDynamicState = &DynamicState;
+		CreateInfo.pInputAssemblyState = &InputAssemblyState;
+		CreateInfo.pMultisampleState = &MultisampleState;
+		CreateInfo.pRasterizationState = &RasterizationState;
+		CreateInfo.pTessellationState = &TessellationState;
+		CreateInfo.pVertexInputState = &VertexInputState;
+		CreateInfo.pViewportState = &ViewportState;
+		CreateInfo.pNext = &PipelineRenderingCreateInfo;
+
+		VK_CHECK(vkCreateGraphicsPipelines(Device, nullptr, 1, &CreateInfo, 0, &Pipeline));
 	}
 
 	render_context(const render_context&) = delete;
@@ -262,8 +328,6 @@ public:
     render_context(render_context&& other) noexcept : 
 		ColorTargets(std::move(other.ColorTargets)),
 		DepthTarget(std::move(other.DepthTarget)),
-		UseColorTarget(std::move(other.UseColorTarget)),
-		UseDepthTarget(std::move(other.UseDepthTarget)),
 		GlobalOffset(std::move(other.GlobalOffset)),
 		PushConstantIdx(std::move(other.PushConstantIdx)),
 		RenderingInfo(std::move(other.RenderingInfo)),
@@ -286,25 +350,26 @@ public:
 	{
         if (this != &other) 
 		{
-			ColorTargets = std::move(other.ColorTargets);
-			DepthTarget = std::move(other.DepthTarget);
-			UseColorTarget = std::move(other.UseColorTarget);
-			UseDepthTarget = std::move(other.UseDepthTarget);
-			GlobalOffset = std::move(other.GlobalOffset);
-			PushConstantIdx = std::move(other.PushConstantIdx);
-			RenderingInfo = std::move(other.RenderingInfo);
-			SetIndices = std::move(other.SetIndices);
-			ShaderStages = std::move(other.ShaderStages);
-			PushDescriptorBindings = std::move(other.PushDescriptorBindings);
-			StaticDescriptorBindings = std::move(other.StaticDescriptorBindings);
-			BufferInfos = std::move(other.BufferInfos);
-			BufferArrayInfos = std::move(other.BufferArrayInfos);
-			RenderingAttachmentInfos = std::move(other.RenderingAttachmentInfos);
-			RenderingAttachmentInfoArrays = std::move(other.RenderingAttachmentInfoArrays);
+			std::swap(ColorTargets, other.ColorTargets);
+			std::swap(DepthTarget, other.DepthTarget);
+			std::swap(GlobalOffset, other.GlobalOffset);
+			std::swap(PushConstantIdx, other.PushConstantIdx);
+			std::swap(RenderingInfo, other.RenderingInfo);
+			std::swap(SetIndices, other.SetIndices);
+			std::swap(ShaderStages, other.ShaderStages);
+			std::swap(PushDescriptorBindings, other.PushDescriptorBindings);
+			std::swap(StaticDescriptorBindings, other.StaticDescriptorBindings);
+			std::swap(BufferInfos, other.BufferInfos);
+			std::swap(BufferArrayInfos, other.BufferArrayInfos);
+			std::swap(RenderingAttachmentInfos, other.RenderingAttachmentInfos);
+			std::swap(RenderingAttachmentInfoArrays, other.RenderingAttachmentInfoArrays);
+
 			InputSignature = other.InputSignature;
-			PipelineContext = std::move(other.PipelineContext);
-			Device = std::move(other.Device);
-			Pipeline = std::move(other.Pipeline);
+			other.InputSignature = nullptr;
+
+			std::swap(PipelineContext, other.PipelineContext);
+			std::swap(Device, other.Device);
+			std::swap(Pipeline, other.Pipeline);
         }
         return *this;
     }
@@ -319,8 +384,7 @@ public:
 		vkDestroyPipeline(Device, Pipeline, nullptr);
 	}
 
-	template<typename T>
-	void Begin(std::unique_ptr<T>& Context, const global_pipeline_context& GlobalPipelineContext, u32 RenderWidth, u32 RenderHeight)
+	void Begin(const global_pipeline_context& GlobalPipelineContext, u32 RenderWidth, u32 RenderHeight)
 	{
 		PipelineContext = GlobalPipelineContext;
 
@@ -669,9 +733,6 @@ private:
 	std::vector<texture> ColorTargets;
 	texture DepthTarget;
 
-	bool UseColorTarget;
-	bool UseDepthTarget;
-
 	u32 GlobalOffset = 0;
 	u32 PushConstantIdx = 0;
 
@@ -698,18 +759,22 @@ class compute_context
 public:
 	compute_context() = default;
 
-	template<class T>
-	compute_context(std::unique_ptr<T>& Context, const shader_input& Signature, const std::string& Shader) :
-		InputSignature(&Signature)
+	compute_context(renderer_backend* Backend, shader_input* Signature, const std::string& Shader) :
+		InputSignature(Signature)
 	{
-		Device = Context->Device;
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		Device = Gfx->Device;
 
 		ComputeStage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
 		ComputeStage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
-		ComputeStage.module = Context->LoadShaderModule(Shader.c_str());
+		ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str());
 		ComputeStage.pName  = "main";
 
-		Pipeline = Context->CreateComputePipeline(Signature.Handle, ComputeStage);
+		VkComputePipelineCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+		CreateInfo.stage  = ComputeStage;
+		CreateInfo.layout = Signature->Handle;
+
+		VK_CHECK(vkCreateComputePipelines(Device, nullptr, 1, &CreateInfo, 0, &Pipeline));
 	}
 
 	compute_context(const compute_context&) = delete;
@@ -736,24 +801,25 @@ public:
 	{
         if (this != &other) 
 		{
-			ComputeStage = std::move(other.ComputeStage);
+			std::swap(ComputeStage, other.ComputeStage);
 
-			GlobalOffset = std::move(other.GlobalOffset);
-			PushConstantIdx = std::move(other.PushConstantIdx);
+			std::swap(GlobalOffset, other.GlobalOffset);
+			std::swap(PushConstantIdx, other.PushConstantIdx);
 
-			PushDescriptorBindings = std::move(other.PushDescriptorBindings);
-			StaticDescriptorBindings = std::move(other.StaticDescriptorBindings);
-			BufferInfos = std::move(other.BufferInfos);
-			BufferArrayInfos = std::move(other.BufferArrayInfos);
+			std::swap(PushDescriptorBindings, other.PushDescriptorBindings);
+			std::swap(StaticDescriptorBindings, other.StaticDescriptorBindings);
+			std::swap(BufferInfos, other.BufferInfos);
+			std::swap(BufferArrayInfos, other.BufferArrayInfos);
 
-			SetIndices = std::move(other.SetIndices);
+			std::swap(SetIndices, other.SetIndices);
 
 			InputSignature = other.InputSignature;
 			other.InputSignature = nullptr;
-			PipelineContext = std::move(other.PipelineContext);
 
-			Device = std::move(other.Device);
-			Pipeline = std::move(other.Pipeline);
+			std::swap(PipelineContext, other.PipelineContext);
+
+			std::swap(Device, other.Device);
+			std::swap(Pipeline, other.Pipeline);
         }
         return *this;
     }

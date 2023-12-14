@@ -9,7 +9,7 @@ set VulkanInc="%VULKAN_SDK%\Include"
 set VulkanLib="%VULKAN_SDK%\Lib"
 
 set CommonCompFlags=/std:c++latest /Zc:__cplusplus -fp:fast -nologo -MTd -EHsc -Od -Oi -WX- -W4 -GR -Gm- -GS -FC -Zi -D_MBCS -wd4005 -wd4100 -wd4127 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267 -wd4324 -wd4505
-set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console /NODEFAULTLIB:MSVCRT /NODEFAULTLIB:LIBCMT
+set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console /NODEFAULTLIB:MSVCRT
 
 set PlatformCppFiles="..\src\main.cpp"
 set GameCppFiles="..\src\game_main.cpp"

@@ -14,6 +14,9 @@ class shader_input
 	VkDevice Device;
 	VkDescriptorPool Pool;
 
+	shader_input(const shader_input&) = delete;
+	shader_input& operator=(const shader_input&) = delete;
+
 public:
 	shader_input() = default;
 	~shader_input()
@@ -21,25 +24,31 @@ public:
 		vkDestroyPipelineLayout(Device, Handle, nullptr);
 	}
 
-	shader_input(const shader_input&) = delete;
-	shader_input& operator=(const shader_input&) = delete;
-
 	shader_input(shader_input&& other) noexcept :
-			Parameters(std::move(other.Parameters)),
-			SetIndices(std::move(other.SetIndices)),
-			Layouts(std::move(other.Layouts)),
-			GlobalOffset(std::move(other.GlobalOffset)),
-			Device(std::move(other.Device)) {}
+		Parameters(std::move(other.Parameters)),
+		SetIndices(std::move(other.SetIndices)),
+		Layouts(std::move(other.Layouts)),
+		GlobalOffset(std::move(other.GlobalOffset)),
+		Device(std::move(other.Device)),
+		Handle(other.Handle),  // Add this line
+		IsSetPush(std::move(other.IsSetPush)),
+		Sets(std::move(other.Sets)),
+		PushConstants(std::move(other.PushConstants))
+	{}
 
 	shader_input& operator=(shader_input&& other) noexcept
 	{
-        if (this != &other) 
+		if (this != &other)
 		{
-			Parameters = std::move(other.Parameters);
-			SetIndices = std::move(other.SetIndices);
-			Layouts = std::move(other.Layouts);
-			GlobalOffset = std::move(other.GlobalOffset);
-			Device = std::move(other.Device);
+			std::swap(Parameters, other.Parameters);
+			std::swap(SetIndices, other.SetIndices);
+			std::swap(Layouts, other.Layouts);
+			std::swap(GlobalOffset, other.GlobalOffset);
+			std::swap(Device, other.Device);
+			std::swap(Handle, other.Handle);
+			std::swap(IsSetPush, other.IsSetPush);
+			std::swap(Sets, other.Sets);
+			std::swap(PushConstants, other.PushConstants);
 		}
 		return *this;
 	}
@@ -146,9 +155,10 @@ public:
 		return this;
 	}
 
-	template<class backend>
-	shader_input* Update(std::unique_ptr<backend>& Gfx, u32 Space, bool IsPush)
+	shader_input* Update(renderer_backend* Backend, u32 Space, bool IsPush)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+
 		Device = Gfx->Device;
 		vkDestroyDescriptorSetLayout(Device, Layouts[Space], nullptr);
 
@@ -164,9 +174,10 @@ public:
 		return this;
 	}
 
-	template<class backend>
-	void UpdateAll(std::unique_ptr<backend>& Gfx)
+	void UpdateAll(renderer_backend* Backend)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+
 		Device = Gfx->Device;
 
 		if (Handle != VK_NULL_HANDLE) 
@@ -184,9 +195,10 @@ public:
 		VK_CHECK(vkCreatePipelineLayout(Device, &CreateInfo, nullptr, &Handle));
 	}
 
-	template<class backend>
-	shader_input* Build(std::unique_ptr<backend>& Gfx, u32 Space = 0, bool IsPush = false)
+	shader_input* Build(renderer_backend* Backend, u32 Space = 0, bool IsPush = false)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+
 		Device = Gfx->Device;
 
 		if(IsPush)
@@ -218,9 +230,10 @@ public:
 		return this;
 	}
 
-	template<class backend>
-	void BuildAll(std::unique_ptr<backend>& Gfx)
+	void BuildAll(renderer_backend* Backend)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+
 		Device = Gfx->Device;
 
 		std::vector<VkDescriptorPoolSize> PoolSizes;

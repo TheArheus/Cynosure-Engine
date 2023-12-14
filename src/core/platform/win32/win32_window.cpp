@@ -243,9 +243,10 @@ void window::SetTitle(std::string& Title)
 	SetWindowTextA(Handle, (std::string(Name) + " - " + Title).c_str());
 }
 
-void window::InitGraphics()
+void window::InitVulkanGraphics()
 {
-	Gfx = std::make_unique<renderer_backend>(this);
+	renderer_backend* NewBackend = new vulkan_backend(this);
+	Gfx = global_graphics_context(NewBackend);
 }
 
 void* window::

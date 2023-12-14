@@ -25,12 +25,6 @@ struct render_debug_system : public entity_system
 
 	buffer MeshDrawDebugCommandBuffer;
 
-	shader_input DebugRootSignature;
-	shader_input DebugComputeRootSignature;
-
-	render_context  DebugContext;
-	compute_context DebugComputeContext;
-
 	system_constructor(render_debug_system)
 	{
 		RequireComponent<mesh_component>();
@@ -42,7 +36,7 @@ struct render_debug_system : public entity_system
 	{
 	}
 
-	void Setup(window& Window, memory_heap& GlobalHeap, mesh_comp_culling_common_input& MeshCommonCullingInput, VkFormat ColorTargetFormat)
+	void Setup(window& Window, mesh_comp_culling_common_input& MeshCommonCullingInput)
 	{
 		for(entity& Entity : Entities)
 		{
@@ -81,50 +75,24 @@ struct render_debug_system : public entity_system
 
 		if (!Geometries.MeshCount) return;
 
-		GeometryDebugOffsets = GlobalHeap.PushBuffer(Window.Gfx, Geometries.Offsets.data(), Geometries.Offsets.size() * sizeof(mesh::offset), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		GeometryDebugOffsets = Window.Gfx.PushBuffer(Geometries.Offsets.data(), Geometries.Offsets.size() * sizeof(mesh::offset), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-		DebugMeshDrawCommandDataBuffer = GlobalHeap.PushBuffer(Window.Gfx, StaticMeshInstances.data(), sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-		DebugMeshDrawVisibilityDataBuffer = GlobalHeap.PushBuffer(Window.Gfx, StaticMeshVisibility.data(), sizeof(u32) * StaticMeshVisibility.size(), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		DebugMeshDrawCommandDataBuffer = Window.Gfx.PushBuffer(StaticMeshInstances.data(), sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		DebugMeshDrawVisibilityDataBuffer = Window.Gfx.PushBuffer(StaticMeshVisibility.data(), sizeof(u32) * StaticMeshVisibility.size(), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-		DebugIndirectDrawIndexedCommands = GlobalHeap.PushBuffer(Window.Gfx, sizeof(indirect_draw_indexed_command) * StaticMeshInstances.size(), true, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		DebugIndirectDrawIndexedCommands = Window.Gfx.PushBuffer(sizeof(indirect_draw_indexed_command) * StaticMeshInstances.size(), true, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-		MeshDebugMaterialsBuffer = GlobalHeap.PushBuffer(Window.Gfx, Materials.data(), Materials.size() * sizeof(mesh::material), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		MeshDebugMaterialsBuffer = Window.Gfx.PushBuffer(Materials.data(), Materials.size() * sizeof(mesh::material), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-		DebugVertexBuffer = GlobalHeap.PushBuffer(Window.Gfx, Geometries.Vertices.data(), Geometries.Vertices.size() * sizeof(vertex), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-		DebugIndexBuffer = GlobalHeap.PushBuffer(Window.Gfx, Geometries.VertexIndices.data(), Geometries.VertexIndices.size() * sizeof(u32), false, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-		MeshDrawDebugCommandBuffer = GlobalHeap.PushBuffer(Window.Gfx, sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		DebugVertexBuffer = Window.Gfx.PushBuffer(Geometries.Vertices.data(), Geometries.Vertices.size() * sizeof(vertex), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		DebugIndexBuffer = Window.Gfx.PushBuffer(Geometries.VertexIndices.data(), Geometries.VertexIndices.size() * sizeof(u32), false, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		MeshDrawDebugCommandBuffer = Window.Gfx.PushBuffer(sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-		WorldUpdateBuffer = GlobalHeap.PushBuffer(Window.Gfx, sizeof(global_world_data), false, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-		MeshCommonCullingInputBuffer = GlobalHeap.PushBuffer(Window.Gfx, sizeof(mesh_comp_culling_common_input), false, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-
-		DebugRootSignature.PushUniformBuffer()-> // Global World Update 
-						   PushStorageBuffer()-> // Vertex Data
-						   PushStorageBuffer()-> // Mesh Draw Commands
-						   PushStorageBuffer()-> // Mesh Materials
-						   Build(Window.Gfx, 0, true)->
-						   BuildAll(Window.Gfx);
-
-		DebugComputeRootSignature.PushUniformBuffer()->		// Mesh Common Culling Input
-								  PushStorageBuffer()->		// Mesh Offsets
-								  PushStorageBuffer()->		// Draw Command Input
-								  PushStorageBuffer()->		// Draw Command Visibility
-								  PushStorageBuffer()->		// Indirect Draw Indexed Command
-								  PushStorageBuffer()->		// Indirect Draw Indexed Command Counter
-								  PushStorageBuffer()->		// Draw Commands
-								  Build(Window.Gfx, 0, true)->
-								  BuildAll(Window.Gfx);
-
-		render_context::input_data RendererInputData = {};
-		RendererInputData.UseColor	  = true;
-		RendererInputData.UseDepth	  = true;
-		RendererInputData.UseBackFace = true;
-		RendererInputData.UseOutline  = true;
-		DebugContext = render_context(Window.Gfx, DebugRootSignature, {"..\\build\\shaders\\mesh.dbg.vert.spv", "..\\build\\shaders\\mesh.dbg.frag.spv"}, {ColorTargetFormat}, RendererInputData);
-		DebugComputeContext = compute_context(Window.Gfx, DebugComputeRootSignature, "..\\build\\shaders\\mesh.dbg.comp.spv");
+		WorldUpdateBuffer = Window.Gfx.PushBuffer(sizeof(global_world_data), false, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer(sizeof(mesh_comp_culling_common_input), false, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	}
 
 	void Render(window& Window, global_pipeline_context& PipelineContext, 
-				texture& GfxColorTarget, texture& GfxDepthTarget, 
 				global_world_data& WorldData, mesh_comp_culling_common_input& MeshCommonCullingInput,
 				alloc_vector<mesh_draw_command>& DynamicMeshInstances, alloc_vector<u32>& DynamicMeshVisibility)
 	{
@@ -168,20 +136,20 @@ struct render_debug_system : public entity_system
 #endif
 
 		{
-			DebugComputeContext.Begin(PipelineContext);
+			Window.Gfx.DebugComputeContext.Begin(PipelineContext);
 
 			PipelineContext.SetBufferBarrier({MeshCommonCullingInputBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_UNIFORM_READ_BIT}, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-			DebugComputeContext.SetUniformBufferView(MeshCommonCullingInputBuffer);
-			DebugComputeContext.SetStorageBufferView(GeometryDebugOffsets);
-			DebugComputeContext.SetStorageBufferView(DebugMeshDrawCommandDataBuffer);
-			DebugComputeContext.SetStorageBufferView(DebugMeshDrawVisibilityDataBuffer);
-			DebugComputeContext.SetStorageBufferView(DebugIndirectDrawIndexedCommands);
-			DebugComputeContext.SetStorageBufferView(MeshDrawDebugCommandBuffer);
+			Window.Gfx.DebugComputeContext.SetUniformBufferView(MeshCommonCullingInputBuffer);
+			Window.Gfx.DebugComputeContext.SetStorageBufferView(GeometryDebugOffsets);
+			Window.Gfx.DebugComputeContext.SetStorageBufferView(DebugMeshDrawCommandDataBuffer);
+			Window.Gfx.DebugComputeContext.SetStorageBufferView(DebugMeshDrawVisibilityDataBuffer);
+			Window.Gfx.DebugComputeContext.SetStorageBufferView(DebugIndirectDrawIndexedCommands);
+			Window.Gfx.DebugComputeContext.SetStorageBufferView(MeshDrawDebugCommandBuffer);
 
-			DebugComputeContext.Execute(StaticMeshInstances.size());
+			Window.Gfx.DebugComputeContext.Execute(StaticMeshInstances.size());
 
-			DebugComputeContext.End();
+			Window.Gfx.DebugComputeContext.End();
 		}
 
 		{
@@ -196,8 +164,8 @@ struct render_debug_system : public entity_system
 
 			std::vector<VkImageMemoryBarrier> ImageBeginRenderBarriers = 
 			{
-				CreateImageBarrier(GfxColorTarget.Handle, ColorSrcAccessMask, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, ColorOldLayout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-				CreateImageBarrier(GfxDepthTarget.Handle, DepthSrcAccessMask, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, DepthOldLayout, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
+				CreateImageBarrier(Window.Gfx.GfxColorTarget.Handle, ColorSrcAccessMask, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, ColorOldLayout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+				CreateImageBarrier(Window.Gfx.GfxDepthTarget.Handle, DepthSrcAccessMask, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, DepthOldLayout, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
 			};
 			ImageBarrier(*PipelineContext.CommandList, SrcStageMask, DstStageMask, ImageBeginRenderBarriers);
 
@@ -205,17 +173,17 @@ struct render_debug_system : public entity_system
 			PipelineContext.SetBufferBarriers({{MeshDrawDebugCommandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
 			PipelineContext.SetBufferBarriers({{DebugIndirectDrawIndexedCommands, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT}}, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 
-			DebugContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, Window.Gfx->Width, Window.Gfx->Height, {GfxColorTarget}, {0, 0, 0, 1});
-			DebugContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, Window.Gfx->Width, Window.Gfx->Height, GfxDepthTarget, {1, 0});
-			DebugContext.Begin(Window.Gfx, PipelineContext, Window.Gfx->Width, Window.Gfx->Height);
+			Window.Gfx.DebugContext.SetColorTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget}, {0, 0, 0, 1});
+			Window.Gfx.DebugContext.SetDepthTarget(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
+			Window.Gfx.DebugContext.Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 
-			DebugContext.SetUniformBufferView(WorldUpdateBuffer);
-			DebugContext.SetStorageBufferView(DebugVertexBuffer);
-			DebugContext.SetStorageBufferView(MeshDrawDebugCommandBuffer);
-			DebugContext.SetStorageBufferView(MeshDebugMaterialsBuffer);
-			DebugContext.DrawIndirect<indirect_draw_indexed_command>(Geometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands);
+			Window.Gfx.DebugContext.SetUniformBufferView(WorldUpdateBuffer);
+			Window.Gfx.DebugContext.SetStorageBufferView(DebugVertexBuffer);
+			Window.Gfx.DebugContext.SetStorageBufferView(MeshDrawDebugCommandBuffer);
+			Window.Gfx.DebugContext.SetStorageBufferView(MeshDebugMaterialsBuffer);
+			Window.Gfx.DebugContext.DrawIndirect<indirect_draw_indexed_command>(Geometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands);
 
-			DebugContext.End();
+			Window.Gfx.DebugContext.End();
 		}
 	}
 };

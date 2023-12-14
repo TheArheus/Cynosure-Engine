@@ -52,7 +52,7 @@ public:
 
 	void NewFrame() {ImGui_ImplWin32_NewFrame();};
 	void EmitEvents();
-	void InitGraphics();
+	void InitVulkanGraphics();
 
 	void SetTitle(std::string& Title);
 	bool IsRunning(){return WindowClass.IsRunning;}
@@ -64,7 +64,6 @@ public:
 	static void  FreeLoadedLibrary(HMODULE& Library);
 
 	static event_bus EventsDispatcher;
-	button Buttons[256] = {};
 
 	HWND Handle;
 	const char* Name;
@@ -78,7 +77,7 @@ public:
 
 	static window_class WindowClass;
 
-	std::unique_ptr<renderer_backend> Gfx;
+	global_graphics_context Gfx;
 
 private:
 	window(const window& rhs) = delete;
@@ -89,6 +88,8 @@ private:
 	LRESULT DispatchMessages(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam);
 
 	static LARGE_INTEGER TimerFrequency;
+
+	button Buttons[256] = {};
 };
 
 #define WIN32_WINDOWS_H_

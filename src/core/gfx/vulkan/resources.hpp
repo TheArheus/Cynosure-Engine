@@ -11,28 +11,29 @@ struct buffer
 
 	buffer() = default;
 
-	template<class T, class heap>
-	buffer(std::unique_ptr<T>& App, heap* Heap, 
+	template<class heap>
+	buffer(renderer_backend* Backend, heap* Heap, command_queue& CommandQueue,
 		   void* Data, u64 NewSize, bool NewWithCounter, VkBufferUsageFlags Flags) : WithCounter(NewWithCounter), Size(NewSize)
 	{
-		Device = App->Device;
-		CreateResource(App, Heap, NewSize, NewWithCounter, Flags);
-		Update(App, Data);
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		Device = Gfx->Device;
+		CreateResource(Backend, Heap, NewSize, NewWithCounter, Flags);
+		Update(CommandQueue, Data);
 	}
 
-	template<class T, class heap>
-	buffer(std::unique_ptr<T>& App, heap* Heap, 
+	template<class heap>
+	buffer(renderer_backend* Backend, heap* Heap, command_queue& CommandQueue,
 		   u64 NewSize, bool NewWithCounter, VkBufferUsageFlags Flags) : WithCounter(NewWithCounter), Size(NewSize)
 	{
-		Device = App->Device;
-		CreateResource(App, Heap, NewSize, NewWithCounter, Flags);
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		Device = Gfx->Device;
+		CreateResource(Backend, Heap, NewSize, NewWithCounter, Flags);
 	}
 
-	template<class T>
-	void Update(std::unique_ptr<T>& App, void* Data)
+	void Update(command_queue& CommandQueue, void* Data)
 	{
-		App->CommandQueue.Reset();
-		VkCommandBuffer* CommandList = App->CommandQueue.AllocateCommandList();
+		CommandQueue.Reset();
+		VkCommandBuffer* CommandList = CommandQueue.AllocateCommandList();
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -53,19 +54,18 @@ struct buffer
 
 		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
 
-		App->CommandQueue.ExecuteAndRemove(CommandList);
+		CommandQueue.ExecuteAndRemove(CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
 
-	template<class T>
-	void UpdateSize(std::unique_ptr<T>& App, void* Data, u32 UpdateByteSize)
+	void UpdateSize(command_queue& CommandQueue, void* Data, u32 UpdateByteSize)
 	{
 		if(UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
 
-		App->CommandQueue.Reset();
-		VkCommandBuffer* CommandList = App->CommandQueue.AllocateCommandList();
+		CommandQueue.Reset();
+		VkCommandBuffer* CommandList = CommandQueue.AllocateCommandList();
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, UpdateByteSize, 0, &CpuPtr);
@@ -86,13 +86,13 @@ struct buffer
 
 		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
 
-		App->CommandQueue.ExecuteAndRemove(CommandList);
+		CommandQueue.ExecuteAndRemove(CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
 
-	template<class T, class global_pipeline_context>
-	void Update(std::unique_ptr<T>& App, void* Data, global_pipeline_context& PipelineContext)
+	template<class global_pipeline_context>
+	void Update(void* Data, global_pipeline_context& PipelineContext)
 	{
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -103,8 +103,8 @@ struct buffer
 		vkCmdCopyBuffer(*PipelineContext.CommandList, Temp, Handle, 1, &Region);
 	}
 
-	template<class T, class global_pipeline_context>
-	void UpdateSize(std::unique_ptr<T>& App, void* Data, u32 UpdateByteSize, global_pipeline_context& PipelineContext)
+	template<class global_pipeline_context>
+	void UpdateSize(void* Data, u32 UpdateByteSize, global_pipeline_context& PipelineContext)
 	{
 		if(UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
@@ -118,14 +118,13 @@ struct buffer
 		vkCmdCopyBuffer(*PipelineContext.CommandList, Temp, Handle, 1, &Region);
 	}
 
-	template<class T>
-	void ReadBackSize(std::unique_ptr<T>& App, void* Data, u32 UpdateByteSize)
+	void ReadBackSize(command_queue& CommandQueue, void* Data, u32 UpdateByteSize)
 	{
 		if (UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
 
-		App->CommandQueue.Reset();
-		VkCommandBuffer* CommandList = App->CommandQueue.AllocateCommandList();
+		CommandQueue.Reset();
+		VkCommandBuffer* CommandList = CommandQueue.AllocateCommandList();
 
 		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
 		vkCmdCopyBuffer(*CommandList, Handle, Temp, 1, &Region);
@@ -141,7 +140,7 @@ struct buffer
 
 		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
 
-		App->CommandQueue.ExecuteAndRemove(CommandList);
+		CommandQueue.ExecuteAndRemove(CommandList);
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -151,8 +150,8 @@ struct buffer
 		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
 
-	template<class T, class global_pipeline_context>
-	void ReadBackSize(std::unique_ptr<T>& App, void* Data, u32 UpdateByteSize, global_pipeline_context& PipelineContext)
+	template<class global_pipeline_context>
+	void ReadBackSize(void* Data, u32 UpdateByteSize, global_pipeline_context& PipelineContext)
 	{
 		if (UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
@@ -177,10 +176,12 @@ struct buffer
 		vkUnmapMemory(Device, TempMemory);
 	}
 
-	template<class T, class heap>
-	void CreateResource(std::unique_ptr<T>& App, heap* Heap, 
+	template<class heap>
+	void CreateResource(renderer_backend* Backend, heap* Heap, 
 		   u64 NewSize, bool NewWithCounter, VkBufferUsageFlags Flags)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+
 		Size = NewSize + WithCounter * sizeof(u32);
 		CounterOffset = NewSize;
 
@@ -200,7 +201,7 @@ struct buffer
 
 		VkMemoryRequirements Requirements;
 		vkGetBufferMemoryRequirements(Device, Temp, &Requirements);
-		u32 MemoryTypeIndex = SelectMemoryType(App->MemoryProperties, Requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		u32 MemoryTypeIndex = SelectMemoryType(Gfx->MemoryProperties, Requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 		assert(MemoryTypeIndex != ~0u);
 
 		VkMemoryAllocateInfo AllocateInfo = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
@@ -293,24 +294,28 @@ struct texture
 
 	texture() = default;
 
-	template<class T, class heap>
-	texture(std::unique_ptr<T>& App, heap* Heap, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
+	template<class heap>
+	texture(renderer_backend* Backend, heap* Heap, command_queue& CommandQueue, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_VIEW_TYPE_2D, 1, 1, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		MemoryProperties = Gfx->MemoryProperties;
+
 		if(InputData.Layers == 6)
 		{
 			Width  = Max(NewWidth, NewHeight);
 			Height = Max(NewWidth, NewHeight);
 		}
+
 		Info = InputData;
-		Device = App->Device;
+		Device = Gfx->Device;
 		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
 		Layout.ImageAspect = (Info.Format == VK_FORMAT_D32_SFLOAT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 
-		CreateResource(App->MemoryProperties, Heap, NewWidth, NewHeight, DepthOrArraySize, InputData);
+		CreateResource(Heap, NewWidth, NewHeight, DepthOrArraySize, InputData);
 		if(Data || Info.UseStagingBuffer)
 		{
 			CreateStagingResource();
-			Update(App, Data);
+			Update(CommandQueue, Data);
 		}
 		if(Data && !Info.UseStagingBuffer)
 			DestroyStagingResource();
@@ -323,24 +328,27 @@ struct texture
 		}
 	}
 
-	template<class T>
-	texture(std::unique_ptr<T>& App, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_VIEW_TYPE_2D, 1, 1, 0, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
+	texture(renderer_backend* Backend, command_queue& CommandQueue, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const input_data& InputData = {VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TYPE_2D, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_VIEW_TYPE_2D, 1, 1, false}, VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE): Width(NewWidth), Height(NewHeight), Depth(DepthOrArraySize), Info(InputData)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		MemoryProperties = Gfx->MemoryProperties;
+
 		if(InputData.Layers == 6)
 		{
 			Width  = Max(NewWidth, NewHeight);
 			Height = Max(NewWidth, NewHeight);
 		}
+
 		Info = InputData;
-		Device = App->Device;
+		Device = Gfx->Device;
 		Sampler = sampler(Device, InputData.MipLevels, ReductionMode, AddressMode);
 		Layout.ImageAspect = (Info.Format == VK_FORMAT_D32_SFLOAT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 
-		CreateResource(App->MemoryProperties, NewWidth, NewHeight, DepthOrArraySize, InputData);
+		CreateResource(NewWidth, NewHeight, DepthOrArraySize, InputData);
 		if(Data || Info.UseStagingBuffer)
 		{
 			CreateStagingResource();
-			Update(App, Data);
+			Update(CommandQueue, Data);
 		}
 		if(Data && !Info.UseStagingBuffer)
 			DestroyStagingResource();
@@ -353,11 +361,10 @@ struct texture
 		}
 	}
 
-	template<class T>
-	void Update(std::unique_ptr<T>& App, void* Data)
+	void Update(command_queue& CommandQueue, void* Data)
 	{
-		App->CommandQueue.Reset();
-		VkCommandBuffer* CommandList = App->CommandQueue.AllocateCommandList();
+		CommandQueue.Reset();
+		VkCommandBuffer* CommandList = CommandQueue.AllocateCommandList();
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -378,13 +385,13 @@ struct texture
 		CopyBarrier = CreateImageBarrier(Handle, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &CopyBarrier);
 
-		App->CommandQueue.ExecuteAndRemove(CommandList);
+		CommandQueue.ExecuteAndRemove(CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
 
-	template<class T, class global_pipeline_context>
-	void Update(std::unique_ptr<T>& App, void* Data, global_pipeline_context& PipelineContext)
+	template<class global_pipeline_context>
+	void Update(void* Data, global_pipeline_context& PipelineContext)
 	{
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -404,16 +411,15 @@ struct texture
 		vkCmdCopyBufferToImage(*PipelineContext.CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
 	}
 
-	template<class T>
-	void ReadBack(std::unique_ptr<T>& App, void* Data)
+	void ReadBack(renderer_backend* Backend, void* Data)
 	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	}
 
 	template<class heap>
-	void CreateResource(const VkPhysicalDeviceMemoryProperties& _MemoryProperties, heap* Heap, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const input_data& InputData)
+	void CreateResource(heap* Heap, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const input_data& InputData)
 	{
 		Info = InputData;
-		MemoryProperties = _MemoryProperties;
 
 		VkImageCreateInfo CreateInfo = {};
 		CreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -425,7 +431,7 @@ struct texture
 		CreateInfo.extent.depth  = (u32)DepthOrArraySize;
 		CreateInfo.mipLevels = InputData.MipLevels;
 		CreateInfo.arrayLayers = Info.Layers;
-		CreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;//App->MsaaQuality;
+		CreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;//Gfx->MsaaQuality;
 		CreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 		CreateInfo.usage = Info.Usage;
 		CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -439,10 +445,9 @@ struct texture
 		Size = AllocationInfo.size;
 	}
 
-	void CreateResource(const VkPhysicalDeviceMemoryProperties& _MemoryProperties, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const input_data& InputData)
+	void CreateResource(u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const input_data& InputData)
 	{
 		Info = InputData;
-		MemoryProperties = _MemoryProperties;
 
 		VkImageCreateInfo CreateInfo = {};
 		CreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -454,7 +459,7 @@ struct texture
 		CreateInfo.extent.depth  = (u32)DepthOrArraySize;
 		CreateInfo.mipLevels = Info.MipLevels;
 		CreateInfo.arrayLayers = Info.Layers;
-		CreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;//App->MsaaQuality;
+		CreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;//Gfx->MsaaQuality;
 		CreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 		CreateInfo.usage = Info.Usage;
 		CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -565,60 +570,55 @@ class memory_heap
 public:
 	memory_heap() = default;
 
-	template<typename T>
-	memory_heap(std::unique_ptr<T>& App)
+	memory_heap(renderer_backend* Backend)
 	{
-		CreateMemoryResource(App);
+		CreateResource(Backend);
 	}
 
-	template<typename T>
-	void CreateResource(std::unique_ptr<T>& App)
+	void CreateResource(renderer_backend* Backend)
 	{
 		VmaVulkanFunctions VulkanFunctions = {};
 		VulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
 		VulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
 
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 		VmaAllocatorCreateInfo AllocatorInfo = {};
 		AllocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2;
-		AllocatorInfo.instance = App->Instance;
-		AllocatorInfo.physicalDevice = App->PhysicalDevice;
-		AllocatorInfo.device = App->Device;
+		AllocatorInfo.instance = Gfx->Instance;
+		AllocatorInfo.physicalDevice = Gfx->PhysicalDevice;
+		AllocatorInfo.device = Gfx->Device;
 		AllocatorInfo.pVulkanFunctions = &VulkanFunctions;
 		vmaCreateAllocator(&AllocatorInfo, &Handle);
 	}
 
-	template<class T>
-	buffer PushBuffer(std::unique_ptr<T>& App, 
-					  u64 DataSize, bool NewWithCounter, VkBufferUsageFlags Flags)
+	buffer PushBuffer(renderer_backend* Backend, command_queue& CommandQueue,
+					   u64 DataSize, bool NewWithCounter, VkBufferUsageFlags Flags)
 	{
-		buffer Buffer(App, this, DataSize, NewWithCounter, Flags);
+		buffer Buffer(Backend, this, CommandQueue, DataSize, NewWithCounter, Flags);
 		return Buffer;
 	}
 
-	template<class T>
-	buffer PushBuffer(std::unique_ptr<T>& App, 
-					  void* Data, u64 DataSize, bool NewWithCounter, VkBufferUsageFlags Flags)
+	buffer PushBuffer(renderer_backend* Backend, command_queue& CommandQueue,
+					   void* Data, u64 DataSize, bool NewWithCounter, VkBufferUsageFlags Flags)
 	{
-		buffer Buffer(App, this, Data, DataSize, NewWithCounter, Flags);
+		buffer Buffer(Backend, this, CommandQueue, Data, DataSize, NewWithCounter, Flags);
 		return Buffer;
 	}
 
-	template<class T>
-	texture PushTexture(std::unique_ptr<T>& App, u32 Width, u32 Height, u32 Depth, const texture::input_data& InputData, 
-			VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, 
-			VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+	texture PushTexture(renderer_backend* Backend, command_queue& CommandQueue, u32 Width, u32 Height, u32 Depth, const texture::input_data& InputData, 
+						 VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, 
+						 VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
 	{
-		texture Texture(App, this, nullptr, Width, Height, Depth, InputData, ReductionMode, AddressMode);
+		texture Texture(Backend, this, CommandQueue, nullptr, Width, Height, Depth, InputData, ReductionMode, AddressMode);
 		return  Texture;
 	}
 
-	template<class T>
-	texture PushTexture(std::unique_ptr<T>& App, 
-					    void* Data, u32 Width, u32 Height, u32 Depth, const texture::input_data& InputData, 
-						VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, 
-						VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+	texture PushTexture(renderer_backend* Backend, command_queue& CommandQueue,
+					     void* Data, u32 Width, u32 Height, u32 Depth, const texture::input_data& InputData, 
+						 VkSamplerReductionMode ReductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE, 
+						 VkSamplerAddressMode AddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
 	{
-		texture Texture(App, this, Data, Width, Height, Depth, InputData, ReductionMode, AddressMode);
+		texture Texture(Backend, this, CommandQueue, Data, Width, Height, Depth, InputData, ReductionMode, AddressMode);
 		return  Texture;
 	}
 

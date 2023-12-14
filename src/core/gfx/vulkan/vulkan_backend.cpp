@@ -1,6 +1,6 @@
 
-renderer_backend::
-renderer_backend(window* Window)
+vulkan_backend::
+vulkan_backend(window* Window)
 {
 	volkInitialize();
 
@@ -33,7 +33,6 @@ renderer_backend(window* Window)
 	}
 #endif
 
-#if _DEBUG
 	u32 AvailableInstanceLayerCount = 0;
 	vkEnumerateInstanceLayerProperties(&AvailableInstanceLayerCount, nullptr);
 	std::vector<VkLayerProperties> AvailableInstanceLayers(AvailableInstanceLayerCount);
@@ -87,7 +86,6 @@ renderer_backend(window* Window)
 			std::cout << "[Extension] " << std::string(Required) << " is not available\n";
 		}
 	}
-#endif
 
 	VkInstanceCreateInfo InstanceCreateInfo = {};
 	InstanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -142,6 +140,33 @@ renderer_backend(window* Window)
 		"VK_KHR_dynamic_rendering",
 		"VK_EXT_descriptor_indexing",
 	};
+
+	u32 DeviceExtensionsCount = 0;
+	vkEnumerateDeviceExtensionProperties(PhysicalDevice, nullptr, &DeviceExtensionsCount, nullptr);
+	std::vector<VkExtensionProperties> AvailableDeviceExtensions(DeviceExtensionsCount);
+	vkEnumerateDeviceExtensionProperties(PhysicalDevice, nullptr, &DeviceExtensionsCount, AvailableDeviceExtensions.data());
+
+	for(const char* Required : DeviceExtensions)
+	{
+		bool Found = false;
+		for(const VkExtensionProperties& Available : AvailableDeviceExtensions)
+		{
+			if(strcmp(Required, Available.extensionName) == 0)
+			{
+				Found = true;
+				break;
+			}
+		}
+
+		if(Found)
+		{
+			std::cout << "[Extension] " << std::string(Required) << " is available\n";
+		}
+		else
+		{
+			std::cout << "[Extension] " << std::string(Required) << " is not available\n";
+		}
+	}
 
 	float QueuePriorities[] = {1.0f};
 	VkDeviceQueueCreateInfo DeviceQueueCreateInfo = {};
@@ -232,8 +257,6 @@ renderer_backend(window* Window)
 	SwapchainImages.resize(SwapchainImageCount);
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, SwapchainImages.data());
 
-	CommandQueue.Init(this);
-
 	VkDescriptorPoolSize ImGuiPoolSizes[] = 
 	{
 		{VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
@@ -256,37 +279,20 @@ renderer_backend(window* Window)
 	ImGuiPoolInfo.pPoolSizes = ImGuiPoolSizes;
 
 	VK_CHECK(vkCreateDescriptorPool(Device, &ImGuiPoolInfo, nullptr, &ImGuiPool));
-
-	ImGui_ImplVulkan_InitInfo InitInfo = {};
-	InitInfo.Instance = Instance;
-	InitInfo.PhysicalDevice = PhysicalDevice;
-	InitInfo.Device = Device;
-	InitInfo.DescriptorPool = ImGuiPool;
-	InitInfo.QueueFamily = FamilyIndex;
-	InitInfo.Queue = CommandQueue.Handle;
-	InitInfo.MinImageCount = 2;
-	InitInfo.ImageCount = SwapchainImageCount;
-	InitInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT; //MsaaQuality;
-	InitInfo.UseDynamicRendering = true;
-	InitInfo.ColorAttachmentFormat = SurfaceFormat.format;
-	ImGui_ImplVulkan_Init(&InitInfo, VK_NULL_HANDLE);
-
-	ImGui_ImplVulkan_CreateFontsTexture();
 }
 
-void renderer_backend::
+void vulkan_backend::
 DestroyObject()
 {
 	vkDestroyDescriptorPool(Device, ImGuiPool, nullptr);
 	vkDestroySwapchainKHR(Device, Swapchain, nullptr);
-	CommandQueue.DestroyObject();
 	vkDestroyDevice(Device, nullptr);
 	vkDestroySurfaceKHR(Instance, Surface, nullptr);
 	vkDestroyDebugReportCallbackEXT(Instance, DebugCallback, nullptr);
 	vkDestroyInstance(Instance, nullptr);
 }
 
-VkShaderModule renderer_backend::
+VkShaderModule vulkan_backend::
 LoadShaderModule(const char* Path)
 {
 	VkShaderModule Result = 0;
@@ -315,92 +321,7 @@ LoadShaderModule(const char* Path)
 	return Result;
 }
 
-VkPipeline renderer_backend::
-CreateGraphicsPipeline(VkPipelineLayout RootSignature, const std::vector<VkPipelineShaderStageCreateInfo>& Stages, const std::vector<VkFormat>& ColorAttachmentFormats, bool UseColor, bool UseDepth, bool BackFaceCull, bool UseOutline, u8 ViewMask, bool UseMultiview)
+void vulkan_backend::
+RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 {
-	VkGraphicsPipelineCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-
-	CreateInfo.layout = RootSignature;
-	CreateInfo.pStages = Stages.data();
-	CreateInfo.stageCount = Stages.size();
-
-	VkPipelineRenderingCreateInfoKHR PipelineRenderingCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR};
-	PipelineRenderingCreateInfo.colorAttachmentCount    = ColorAttachmentFormats.size();
-	PipelineRenderingCreateInfo.pColorAttachmentFormats = UseColor ? ColorAttachmentFormats.data() : nullptr;
-	PipelineRenderingCreateInfo.depthAttachmentFormat   = UseDepth ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED;
-	PipelineRenderingCreateInfo.viewMask = UseMultiview * ViewMask;
-
-	VkPipelineVertexInputStateCreateInfo VertexInputState = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-
-	VkPipelineInputAssemblyStateCreateInfo InputAssemblyState = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-	InputAssemblyState.topology = UseOutline ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-	std::vector<VkPipelineColorBlendAttachmentState> ColorAttachmentState(ColorAttachmentFormats.size());
-	for(u32 Idx = 0; Idx < ColorAttachmentFormats.size(); ++Idx)
-	{
-		ColorAttachmentState[Idx].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-#if DEBUG_COLOR_BLEND
-		ColorAttachmentState[Idx].blendEnable = true;
-		ColorAttachmentState[Idx].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-		ColorAttachmentState[Idx].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-#endif
-	}
-
-	VkPipelineColorBlendStateCreateInfo ColorBlendState = {VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
-	ColorBlendState.pAttachments = ColorAttachmentState.data();
-	ColorBlendState.attachmentCount = ColorAttachmentState.size();
-
-	VkPipelineDepthStencilStateCreateInfo DepthStencilState = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-	DepthStencilState.depthTestEnable = true;
-	DepthStencilState.depthWriteEnable = true;
-	DepthStencilState.minDepthBounds = 0.0f;
-	DepthStencilState.maxDepthBounds = 1.0f;
-	DepthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
-
-	VkPipelineViewportStateCreateInfo ViewportState = {VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-	ViewportState.viewportCount = 1;
-	ViewportState.scissorCount = 1;
-
-	VkPipelineRasterizationStateCreateInfo RasterizationState = {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-	RasterizationState.lineWidth = 1.0f;
-	RasterizationState.cullMode  = BackFaceCull ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_FRONT_BIT;
-	RasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-
-	VkPipelineDynamicStateCreateInfo DynamicState = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-	VkDynamicState DynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-	DynamicState.pDynamicStates = DynamicStates;
-	DynamicState.dynamicStateCount = 2;
-
-	VkPipelineMultisampleStateCreateInfo MultisampleState = {VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-	MultisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT; //MsaaQuality;
-
-	VkPipelineTessellationStateCreateInfo TessellationState = {VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO};
-
-	CreateInfo.pColorBlendState = &ColorBlendState;
-	CreateInfo.pDepthStencilState = &DepthStencilState;
-	CreateInfo.pDynamicState = &DynamicState;
-	CreateInfo.pInputAssemblyState = &InputAssemblyState;
-	CreateInfo.pMultisampleState = &MultisampleState;
-	CreateInfo.pRasterizationState = &RasterizationState;
-	CreateInfo.pTessellationState = &TessellationState;
-	CreateInfo.pVertexInputState = &VertexInputState;
-	CreateInfo.pViewportState = &ViewportState;
-	CreateInfo.pNext = &PipelineRenderingCreateInfo;
-
-	VkPipeline Result = 0;
-	VK_CHECK(vkCreateGraphicsPipelines(Device, nullptr, 1, &CreateInfo, 0, &Result));
-
-	return Result;
-}
-
-VkPipeline renderer_backend::
-CreateComputePipeline(VkPipelineLayout RootSignature, const VkPipelineShaderStageCreateInfo& ComputeShader)
-{
-	VkComputePipelineCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-    CreateInfo.stage  = ComputeShader;
-    CreateInfo.layout = RootSignature;
-
-	VkPipeline Result = 0;
-	VK_CHECK(vkCreateComputePipelines(Device, nullptr, 1, &CreateInfo, 0, &Result));
-	return Result;
 }

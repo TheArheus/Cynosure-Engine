@@ -27,8 +27,8 @@ struct world_update_system : entity_system
 	{
 		camera_component* CurrentCameraData = Entities[0].GetComponent<camera_component>();
 		vec3 GlobalLightDir = -Normalize(GlobalLightPos);
-		u32  GlobalShadowWidth  = PreviousPowerOfTwo(Window.Gfx->Width) * 2;
-		u32  GlobalShadowHeight = PreviousPowerOfTwo(Window.Gfx->Width) * 2;
+		u32  GlobalShadowWidth  = PreviousPowerOfTwo(Window.Gfx.Backend->Width) * 2;
+		u32  GlobalShadowHeight = PreviousPowerOfTwo(Window.Gfx.Backend->Width) * 2;
 
 		if(!IsCameraLocked)
 		{
@@ -39,7 +39,7 @@ struct world_update_system : entity_system
 		float FOV   = CurrentCameraData->ProjectionData.FOV;
 		float NearZ = CurrentCameraData->ProjectionData.NearZ;
 		float FarZ  = CurrentCameraData->ProjectionData.FarZ;
-		mat4  CameraProj = PerspRH(FOV, Window.Gfx->Width, Window.Gfx->Height, NearZ, FarZ);
+		mat4  CameraProj = PerspRH(FOV, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, NearZ, FarZ);
 		mat4  CameraView = LookAtRH(ViewPos, ViewPos + ViewDir, vec3(0, 1, 0));
 		mat4  LockedCameraView = LookAtRH(LockedViewPos, LockedViewPos + LockedViewDir, vec3(0, 1, 0));
 
@@ -61,9 +61,8 @@ struct world_update_system : entity_system
 		WorldUpdate.CameraPos		= vec4(ViewPos, 1);
 		WorldUpdate.CameraDir		= vec4(ViewDir, 0);
 		WorldUpdate.GlobalLightPos	= vec4(GlobalLightPos, 1);
-		WorldUpdate.GlobalLightSize = 1;
-		WorldUpdate.ScreenWidth		= Window.Gfx->Width;
-		WorldUpdate.ScreenHeight	= Window.Gfx->Height;
+		WorldUpdate.ScreenWidth		= Window.Gfx.Backend->Width;
+		WorldUpdate.ScreenHeight	= Window.Gfx.Backend->Height;
 		WorldUpdate.NearZ			= NearZ;
 		WorldUpdate.FarZ			= FarZ;
 		WorldUpdate.DebugColors		= IsDebugColors;

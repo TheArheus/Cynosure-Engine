@@ -1,6 +1,6 @@
 #version 450
 
-#extension GL_EXT_scalar_block_layout: require
+#extension GL_EXT_scalar_block_layout:  require
 #extension GL_EXT_nonuniform_qualifier: require
 
 struct global_world_data
@@ -103,7 +103,7 @@ void main()
 		float AfterDepth  = CurrentDepth - CurrentLayerDepth;
 		float BeforeDepth = 1.0 - texture(HeightSamplers[nonuniformEXT(HeightMapIdx)], PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
 		float Weight	  = AfterDepth / (AfterDepth - BeforeDepth);
-		TextCoord   = mix(PrevTextCoord, CurrentTextCoord, Weight);
+		TextCoord         = mix(PrevTextCoord, CurrentTextCoord, Weight);
 
 		if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard;
 	}

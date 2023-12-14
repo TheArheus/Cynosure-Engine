@@ -23,6 +23,18 @@
 #include "core/vendor/imgui/imgui_tables.cpp"
 #include "core/vendor/imgui/imgui_widgets.cpp"
 
+class window;
+#include "core/gfx/renderer_utils.hpp"
+#include "core/gfx/vulkan/vulkan_backend.h"
+#include "core/gfx/vulkan/vulkan_utilities.hpp"
+
+#include "core/gfx/vulkan/command_queue.hpp"
+#include "core/gfx/vulkan/resources.hpp"
+#include "core/gfx/vulkan/shader_input_signature.hpp"
+#include "core/gfx/vulkan/pipeline_context.hpp"
+
+#include "core/gfx/renderer.h"
+#include "core/platform/window.hpp"
 
 u32 GetImageMipLevels(u32 Width, u32 Height)
 {
@@ -75,11 +87,4 @@ struct alignas(16) mesh_comp_culling_common_input
 	mat4  View;
 };
 
-#include "core/gfx/vulkan/vulkan_utilities.hpp"
-#include "core/gfx/vulkan/command_queue.hpp"
-#include "core/gfx/vulkan/resources.hpp"
-#include "core/gfx/vulkan/shader_input_signature.hpp"
-#include "core/gfx/vulkan/pipeline_context.hpp"
-#include "core/gfx/vulkan/renderer_vulkan.h"
-#include "core/platform/window.hpp"
 #include "core/scene_manager/scene_manager.h"

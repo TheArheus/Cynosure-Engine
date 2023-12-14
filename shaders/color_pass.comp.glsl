@@ -3,7 +3,7 @@
 #extension GL_EXT_scalar_block_layout: require
 #extension GL_EXT_nonuniform_qualifier: require
 
-#define SAMPLES_COUNT 64
+#define SAMPLES_COUNT 16
 #define light_type_none 0
 #define light_type_directional 1
 #define light_type_point 2
@@ -82,25 +82,24 @@ vec4 QuatMul(vec4 lhs, vec4 rhs)
 	return vec4(lhs.xyz * rhs.w + rhs.xyz * lhs.w + cross(lhs.xyz, rhs.xyz), dot(-lhs.xyz, rhs.xyz) + lhs.w * rhs.w);
 }
 
-float GetSearchWidth(float ReceiverDepth, float Near, float CameraPosZ)
+float GetSearchWidth(float LightSize, float ReceiverDepth, float Near)
 {
-    return WorldUpdate.GlobalLightSize * (Near - ReceiverDepth) / CameraPosZ;
+    return LightSize * (ReceiverDepth - Near) / ReceiverDepth;
 }
  
-float GetBlockerDistance(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation, float ReceiverDepth, float Bias, float Near, float CameraPosZ)
+float GetBlockerDistance(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation, float ReceiverDepth, float Bias, float Near, float LightSize)
 {
     float SumBlockerDistances = 0.0f;
     int   NumBlockerDistances = 0;
  
-	vec2 TextureSize = 1.0f / textureSize(ShadowSampler, 0);
-    int  sw = int(GetSearchWidth(ReceiverDepth, Near, CameraPosZ));
+    float SearchWidth  = GetSearchWidth(LightSize, ReceiverDepth, Near);
     for (int SampleIdx = 0; SampleIdx < SAMPLES_COUNT; ++SampleIdx)
     {
 		vec2 Offset = vec2(Rotation.x * PoissonDisk[SampleIdx].x - Rotation.y * PoissonDisk[SampleIdx].y,
 						   Rotation.y * PoissonDisk[SampleIdx].x + Rotation.x * PoissonDisk[SampleIdx].y);
  
-		float Depth = texture(ShadowSampler, ShadowCoord + Offset*TextureSize*sw).r;
-        if (Depth < ReceiverDepth + Bias)
+		float Depth = texture(ShadowSampler, ShadowCoord + Offset*SearchWidth).r;
+        if ((Depth + Bias) > ReceiverDepth)
         {
             NumBlockerDistances += 1;
             SumBlockerDistances += Depth;
@@ -111,61 +110,107 @@ float GetBlockerDistance(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotatio
     {
         return SumBlockerDistances / NumBlockerDistances;
     }
-    else
-    {
-        return -1;
-    }
+	return -1;
 }
 
-float GetPCFKernelSize(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation, float ReceiverDepth, float Bias, float Near, float CameraPosZ)
+float GetPenumbraSize(sampler2D ShadowSampler, vec2 ShadowCoord, vec2 Rotation, float ReceiverDepth, float Bias, float Near, float LightSize)
 {
-    float BlockerDistance = GetBlockerDistance(ShadowSampler, ShadowCoord, Rotation, ReceiverDepth, Bias, Near, CameraPosZ);
+    float BlockerDistance = GetBlockerDistance(ShadowSampler, ShadowCoord, Rotation, ReceiverDepth, Bias, Near, LightSize);
 
-    if (BlockerDistance == -1)
+    if (BlockerDistance <= -1.0)
     {
-        return 1;
+        return 1.0;
     }
  
     float  PenumbraWidth = (ReceiverDepth - BlockerDistance) / BlockerDistance;
-    return PenumbraWidth * WorldUpdate.GlobalLightSize * Near / ReceiverDepth;
+    return PenumbraWidth * LightSize * Near / ReceiverDepth;
 }
 
-float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, vec2 Rotation, float Near, vec3 Normal, vec3 CurrLightPos, vec4 CameraPosLS)
+float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, vec2 Rotation, float Near, vec3 Normal, vec3 CurrLightPos, float LightSize)
 {
 	vec3  LightPos = CurrLightPos * 5000000;
 	float Bias = dot(LightPos, Normal) > 0 ? -0.005 : 0.2;
 
-	vec3 CameraPosProjLS = CameraPosLS.xyz / CameraPosLS.w;
-
-	vec2  TextureSize = 1.0f / textureSize(ShadowSampler, 0);
 	vec3  ProjPos = PositionInLightSpace.xyz / PositionInLightSpace.w;
 	float ObjectDepth = ProjPos.z;
 	vec2  ShadowCoord = ProjPos.xy * vec2(0.5, -0.5) + 0.5;
 
 	float Result = 0.0;
 
-	float KernelSize   = GetPCFKernelSize(ShadowSampler, ShadowCoord, Rotation, ObjectDepth, Bias, Near, CameraPosProjLS.z);
+	float SearchSize   = GetPenumbraSize(ShadowSampler, ShadowCoord, Rotation, ObjectDepth, Bias, Near, LightSize);
+	if(SearchSize == 1.0) SearchSize = 3.402823466e-38;
 	for(uint SampleIdx = 0; SampleIdx < SAMPLES_COUNT; SampleIdx++)
 	{
 		vec2 Offset = vec2(Rotation.x * PoissonDisk[SampleIdx].x - Rotation.y * PoissonDisk[SampleIdx].y,
 						   Rotation.y * PoissonDisk[SampleIdx].x + Rotation.x * PoissonDisk[SampleIdx].y);
 
-		float ShadowDepth = texture(ShadowSampler, ShadowCoord + Offset*TextureSize*KernelSize).r;
+		float ShadowDepth = texture(ShadowSampler, ShadowCoord + Offset*SearchSize).r;
 		Result += (ObjectDepth + Bias) > ShadowDepth ? 1.0 : 0.0;
 	}
  
 	Result /= (SAMPLES_COUNT);
 	return Result;
 }
+ 
+float GetPointBlockerDistance(samplerCube ShadowSampler, vec3 Direction, vec2 Rotation, float ReceiverDepth, float Bias, float Near, float LightSize)
+{
+    float SumBlockerDistances = 0.0f;
+    int   NumBlockerDistances = 0;
 
-float GetPointLightShadow(samplerCube ShadowSampler, vec3 Position, vec3 LightPos, vec3 Normal, vec2 TextCoord)
+    float SearchWidth  = GetSearchWidth(LightSize, ReceiverDepth, Near);
+	for(uint SampleIdx = 0; SampleIdx < SAMPLES_COUNT; SampleIdx++)
+	{
+		vec2 Offset = vec2(Rotation.x * PoissonDisk[SampleIdx].x - Rotation.y * PoissonDisk[SampleIdx].y,
+						   Rotation.y * PoissonDisk[SampleIdx].x + Rotation.x * PoissonDisk[SampleIdx].y);
+
+		float Depth = texture(ShadowSampler, normalize(Direction + vec3(Offset.x*SearchWidth, Offset.y*SearchWidth, 1))).r;
+		if((Depth + Bias) > ReceiverDepth)
+		{
+            NumBlockerDistances += 1;
+            SumBlockerDistances += Depth;
+		}
+	}
+ 
+    if (NumBlockerDistances > 0)
+    {
+        return SumBlockerDistances / NumBlockerDistances;
+    }
+	return -1;
+}
+
+float GetPointPenumbraSize(samplerCube ShadowSampler, vec3 Direction, vec2 Rotation, float ReceiverDepth, float Bias, float Near, float LightSize)
+{
+    float BlockerDistance = GetPointBlockerDistance(ShadowSampler, Direction, Rotation, ReceiverDepth, Bias, Near, LightSize);
+
+    if (BlockerDistance <= -1.0)
+    {
+        return 1.0;
+    }
+ 
+    float  PenumbraWidth = (ReceiverDepth - BlockerDistance) / BlockerDistance;
+    return PenumbraWidth * LightSize * Near / ReceiverDepth;
+}
+
+float GetPointLightShadow(samplerCube ShadowSampler, vec3 Position, vec3 LightPos, vec3 Normal, vec2 TextCoord, vec2 Rotation, float Near, float LightSize)
 {
     vec3  Direction = normalize(Position - LightPos) * vec3(1, -1, 1);
-    float ShadowDepth = texture(ShadowSampler, Direction).r;
-    float ObjectDepth = length(Position - LightPos) / WorldUpdate.FarZ;
-    
-	float  Bias = -0.01;
-    return (ObjectDepth + Bias) > ShadowDepth ? 1.0 : 0.0;
+	float ObjectDepth = length(Position - LightPos) / WorldUpdate.FarZ;
+	float Bias = -0.01;
+	float Result = 0.0;
+
+	float SearchSize   = GetPointPenumbraSize(ShadowSampler, Direction, Rotation, ObjectDepth, Bias, Near, LightSize);
+	if(SearchSize == 1.0) SearchSize = 3.402823466e-38;
+	for(uint SampleIdx = 0; SampleIdx < SAMPLES_COUNT; SampleIdx++)
+	{
+		vec2 Offset = vec2(Rotation.x * PoissonDisk[SampleIdx].x - Rotation.y * PoissonDisk[SampleIdx].y,
+						   Rotation.y * PoissonDisk[SampleIdx].x + Rotation.x * PoissonDisk[SampleIdx].y);
+
+		float ShadowDepth = texture(ShadowSampler, normalize(Direction + vec3(Offset.x*SearchSize, Offset.y*SearchSize, 1))).r;
+		Result += (ObjectDepth + Bias) > ShadowDepth ? 1.0 : 0.0;
+	}
+ 
+	Result /= (SAMPLES_COUNT);
+	return Result;
 }
 
 vec3 DoDiffuse(vec3 LightCol, vec3 ToLightDir, vec3 Normal)
@@ -322,7 +367,7 @@ void main()
 			PointLight(LightDiffuse, LightSpecular, CoordVS.xyz, VertexNormalVS, ViewDirVS, LightSourcePosVS, Radius, LightSourceCol, Intensity, Diffuse.xyz, Specular);
 			if(WorldUpdate.LightSourceShadowsEnabled)
 			{
-				LightShadow += GetPointLightShadow(PointShadowMaps[PointLightShadowMapIdx], vec3(CoordWS), LightSourcePosWS, FragmentNormalWS, TextCoord/TextureDims);
+				LightShadow += GetPointLightShadow(PointShadowMaps[PointLightShadowMapIdx], vec3(CoordWS), LightSourcePosWS, FragmentNormalWS, TextCoord/TextureDims, Rotation2D, WorldUpdate.CascadeSplits[0], 0.1);
 			}
 			PointLightShadowMapIdx++;
 		}
@@ -344,13 +389,13 @@ void main()
 		if(abs(CoordVS.z) < WorldUpdate.CascadeSplits[CascadeIdx])
 		{
 			Layer  = CascadeIdx - 1;
-			GlobalShadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation2D, WorldUpdate.CascadeSplits[CascadeIdx - 1], VertexNormalWS, GlobalLightPosWS, CameraPosLS[Layer]);
+			GlobalShadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation2D, WorldUpdate.CascadeSplits[CascadeIdx - 1], VertexNormalWS, GlobalLightPosWS, WorldUpdate.GlobalLightSize);
 			CascadeCol = CascadeColors[Layer];
 
 			float Fade = clamp((1.0 - (CoordVS.z * CoordVS.z) / (WorldUpdate.CascadeSplits[CascadeIdx] * WorldUpdate.CascadeSplits[CascadeIdx])) / 0.2, 0.0, 1.0);
 			if(Fade > 0.0 && Fade < 1.0)
 			{
-				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation2D, WorldUpdate.CascadeSplits[CascadeIdx], VertexNormalWS, GlobalLightPosWS, CameraPosLS[CascadeIdx]);
+				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation2D, WorldUpdate.CascadeSplits[CascadeIdx], VertexNormalWS, GlobalLightPosWS, WorldUpdate.GlobalLightSize);
 				vec3  NextCascadeCol = CascadeColors[Layer + 1];
 				GlobalShadow = mix(NextShadow, GlobalShadow, Fade);
 				CascadeCol = mix(NextCascadeCol, CascadeCol, Fade);
@@ -362,20 +407,20 @@ void main()
 
 	float GlobalLightIntensity = 0.2; //max(dot(vec3(0, 1, 0), normalize(GlobalLightPosWS)), 0.00001);
 
-	vec3  ShadowCol = vec3(0.00001);
-	float Shadow = (GlobalShadow + LightShadow) / 2.0;
+	float Shadow    = (GlobalShadow + LightShadow) / 2.0;
 #if DEBUG_COLOR_BLEND
 	imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(vec4(Diffuse, 1), vec4(1.0 / 2.0)));
 #else
 	if(WorldUpdate.DebugColors)
 	{
-		vec3 FinalLight = (Diffuse.xyz + (1.0 - Shadow)) * CascadeCol;
+		vec3 ShadowCol  = vec3(0.2) * (1.0 - Shadow);
+		vec3 FinalLight = (Diffuse.xyz + ShadowCol) * CascadeCol;
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(pow(FinalLight, vec3(1.0 / 2.0)), 1.0));
 	}
 	else
 	{
-		vec3 FinalLight = (Diffuse.xyz*GlobalLightIntensity + (1.0 - Shadow) * (LightDiffuse + LightSpecular)) * AmbientOcclusion;
-		//FinalLight += mix(ShadowCol, FinalLight, 1.0 - Shadow);
+		vec3 FinalLight = (Diffuse.xyz*GlobalLightIntensity + LightDiffuse + LightSpecular) * AmbientOcclusion;
+		FinalLight = mix(vec3(0.002), FinalLight, 1.0 - Shadow);
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(pow(FinalLight, vec3(1.0 / 2.0)), 1));
 	}
 #endif
