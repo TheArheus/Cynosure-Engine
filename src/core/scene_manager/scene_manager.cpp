@@ -163,7 +163,7 @@ UpdateScene(window& Window, alloc_vector<light_source>& GlobalLightSources)
 }
 
 void scene_manager::
-RenderScene(window& Window, global_pipeline_context& PipelineContext,
+RenderScene(window& Window, global_pipeline_context* PipelineContext,
 			alloc_vector<mesh_draw_command>& DynamicMeshInstances, alloc_vector<u32>& DynamicMeshVisibility, 
 			alloc_vector<mesh_draw_command>& DynamicDebugInstances, alloc_vector<u32>& DynamicDebugVisibility,
 			alloc_vector<light_source>& GlobalLightSources)

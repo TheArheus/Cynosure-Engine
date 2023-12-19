@@ -257,6 +257,8 @@ vulkan_backend(window* Window)
 	SwapchainImages.resize(SwapchainImageCount);
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, SwapchainImages.data());
 
+	CommandQueue = new vulkan_command_queue(Device, FamilyIndex);
+
 	VkDescriptorPoolSize ImGuiPoolSizes[] = 
 	{
 		{VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
@@ -279,6 +281,22 @@ vulkan_backend(window* Window)
 	ImGuiPoolInfo.pPoolSizes = ImGuiPoolSizes;
 
 	VK_CHECK(vkCreateDescriptorPool(Device, &ImGuiPoolInfo, nullptr, &ImGuiPool));
+
+	ImGui_ImplVulkan_InitInfo InitInfo = {};
+	InitInfo.Instance = Instance;
+	InitInfo.PhysicalDevice = PhysicalDevice;
+	InitInfo.Device = Device;
+	InitInfo.DescriptorPool = ImGuiPool;
+	InitInfo.QueueFamily = FamilyIndex;
+	InitInfo.Queue = CommandQueue->Handle;
+	InitInfo.MinImageCount = 2;
+	InitInfo.ImageCount = SwapchainImages.size();
+	InitInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT; //MsaaQuality;
+	InitInfo.UseDynamicRendering = true;
+	InitInfo.ColorAttachmentFormat = SurfaceFormat.format;
+	ImGui_ImplVulkan_Init(&InitInfo, VK_NULL_HANDLE);
+
+	ImGui_ImplVulkan_CreateFontsTexture();
 }
 
 void vulkan_backend::

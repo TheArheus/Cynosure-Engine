@@ -19,6 +19,20 @@ void main()
         return;
     }
 
+	// Trims the algorithm from processing darks.
+	//   0.0833 - upper limit (default, the start of visible unfiltered edges)
+	//   0.0625 - high quality (faster)
+	//   0.0312 - visible limit (slower)
+	float ContrastThreshold = 0.0625;
+
+	// The minimum amount of local contrast required to apply algorithm.
+	//   0.333 - too little (faster)
+	//   0.250 - low quality
+	//   0.166 - default
+	//   0.125 - high quality 
+	//   0.063 - overkill (slower)
+	float RelativeContrast = 0.166;
+
 	vec3 UL = Lum(texelFetch(InTexture, ivec2(TextCoord) + ivec2(-1, -1), 0).rgb);
 	vec3 UR = Lum(texelFetch(InTexture, ivec2(TextCoord) + ivec2( 1, -1), 0).rgb);
 	vec3 M  = Lum(texelFetch(InTexture, ivec2(TextCoord) + ivec2( 0,  0), 0).rgb);
@@ -28,6 +42,8 @@ void main()
 	float MinLum = min(min(min(min(LumUL, LumUR), LumM), LumDL), LumDR);
 	float MaxLum = max(max(max(max(LumUL, LumUR), LumM), LumDL), LumDR);
 	float Contrast = MaxLum - MinLum;
+
+	if(Contrast < max(ContrastThreshold, RelativeContrast * MaxLum)) return;
 
 	vec2 Dir;
 	Dir.x = (UL + UR) - (DL + DR);

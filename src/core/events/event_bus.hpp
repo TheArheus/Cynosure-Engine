@@ -32,7 +32,7 @@ public:
 
 	~event_handler() override = default;
 
-	void Call(event& E)
+	void Call(event& E) override
 	{
 		std::invoke(Callback, Owner, static_cast<event_type&>(E));
 	}

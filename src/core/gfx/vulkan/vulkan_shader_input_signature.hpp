@@ -2,7 +2,7 @@
 
 // TODO: use vkAllocateDescriptorSets and vkCmdBindDescriptorSets and vkUpdateDescriptorSets
 // TODO: use make it so I could create both push descriptors sets and ordinary descriptor sets
-class shader_input
+class vulkan_shader_input : public shader_input
 {
 	std::vector<VkDescriptorSetLayout> Layouts;
 	std::map<VkDescriptorType, u32> DescriptorTypeCounts;
@@ -14,17 +14,17 @@ class shader_input
 	VkDevice Device;
 	VkDescriptorPool Pool;
 
-	shader_input(const shader_input&) = delete;
-	shader_input& operator=(const shader_input&) = delete;
+	vulkan_shader_input(const vulkan_shader_input&) = delete;
+	vulkan_shader_input& operator=(const vulkan_shader_input&) = delete;
 
 public:
-	shader_input() = default;
-	~shader_input()
+	vulkan_shader_input() = default;
+	~vulkan_shader_input() override
 	{
 		vkDestroyPipelineLayout(Device, Handle, nullptr);
 	}
 
-	shader_input(shader_input&& other) noexcept :
+	vulkan_shader_input(vulkan_shader_input&& other) noexcept :
 		Parameters(std::move(other.Parameters)),
 		SetIndices(std::move(other.SetIndices)),
 		Layouts(std::move(other.Layouts)),
@@ -36,7 +36,7 @@ public:
 		PushConstants(std::move(other.PushConstants))
 	{}
 
-	shader_input& operator=(shader_input&& other) noexcept
+	vulkan_shader_input& operator=(vulkan_shader_input&& other) noexcept
 	{
 		if (this != &other)
 		{
@@ -53,10 +53,10 @@ public:
 		return *this;
 	}
 
-	shader_input* PushStorageBuffer(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	vulkan_shader_input* PushStorageBuffer(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) override
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
-		Parameter.stageFlags = Flags;
+		Parameter.stageFlags = GetVKShaderStage(Stage);
 		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		Parameter.descriptorCount = Count;
@@ -68,10 +68,10 @@ public:
 		return this;
 	}
 
-	shader_input* PushUniformBuffer(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	vulkan_shader_input* PushUniformBuffer(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) override
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
-		Parameter.stageFlags = Flags;
+		Parameter.stageFlags = GetVKShaderStage(Stage);
 		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		Parameter.descriptorCount = Count;
@@ -83,10 +83,10 @@ public:
 		return this;
 	}
 
-	shader_input* PushSampler(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	vulkan_shader_input* PushSampler(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) override
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
-		Parameter.stageFlags = Flags;
+		Parameter.stageFlags = GetVKShaderStage(Stage);
 		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
 		Parameter.descriptorCount = Count;
@@ -98,10 +98,10 @@ public:
 		return this;
 	}
 
-	shader_input* PushSampledImage(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	vulkan_shader_input* PushSampledImage(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) override
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
-		Parameter.stageFlags = Flags;
+		Parameter.stageFlags = GetVKShaderStage(Stage);
 		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 		Parameter.descriptorCount = Count;
@@ -113,10 +113,10 @@ public:
 		return this;
 	}
 
-	shader_input* PushStorageImage(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	vulkan_shader_input* PushStorageImage(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) override
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
-		Parameter.stageFlags = Flags;
+		Parameter.stageFlags = GetVKShaderStage(Stage);
 		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		Parameter.descriptorCount = Count;
@@ -128,10 +128,10 @@ public:
 		return this;
 	}
 
-	shader_input* PushImageSampler(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	vulkan_shader_input* PushImageSampler(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) override
 	{
 		VkDescriptorSetLayoutBinding Parameter = {};
-		Parameter.stageFlags = Flags;
+		Parameter.stageFlags = GetVKShaderStage(Stage);
 		Parameter.binding = SetIndices[Space];
 		Parameter.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		Parameter.descriptorCount = Count;
@@ -143,10 +143,10 @@ public:
 		return this;
 	}
 
-	shader_input* PushConstant(u32 Size, VkShaderStageFlagBits Flags = VK_SHADER_STAGE_ALL)
+	vulkan_shader_input* PushConstant(u32 Size, shader_stage Stage = shader_stage::all) override
 	{
 		VkPushConstantRange ConstantRange = {};
-		ConstantRange.stageFlags = Flags;
+		ConstantRange.stageFlags = GetVKShaderStage(Stage);
 		ConstantRange.offset = GlobalOffset;
 		ConstantRange.size   = Size;
 		PushConstants.push_back(ConstantRange);
@@ -155,7 +155,7 @@ public:
 		return this;
 	}
 
-	shader_input* Update(renderer_backend* Backend, u32 Space, bool IsPush)
+	vulkan_shader_input* Update(renderer_backend* Backend, u32 Space, bool IsPush) override
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
@@ -174,7 +174,7 @@ public:
 		return this;
 	}
 
-	void UpdateAll(renderer_backend* Backend)
+	void UpdateAll(renderer_backend* Backend) override
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
@@ -195,7 +195,7 @@ public:
 		VK_CHECK(vkCreatePipelineLayout(Device, &CreateInfo, nullptr, &Handle));
 	}
 
-	shader_input* Build(renderer_backend* Backend, u32 Space = 0, bool IsPush = false)
+	vulkan_shader_input* Build(renderer_backend* Backend, u32 Space = 0, bool IsPush = false) override
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
@@ -230,7 +230,7 @@ public:
 		return this;
 	}
 
-	void BuildAll(renderer_backend* Backend)
+	void BuildAll(renderer_backend* Backend) override
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 

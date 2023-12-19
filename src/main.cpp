@@ -4,13 +4,13 @@
 #include "core/entity_component_system/entity_systems.cpp"
 #include "core/scene_manager/scene_manager.cpp"
 #include "core/mesh_loader/mesh.cpp"
-#include "core/gfx/vulkan/vulkan_backend.cpp"
 #include "core/gfx/renderer.cpp"
 
 #include <random>
 
 
 // TODO: Handle dynamic entities that updates every frame
+//			One entity - one instance for a group of the object(would be easy to handle each instance and add to them the component if needed)
 //
 // TODO: Implement reflections using cube maps
 //
@@ -26,12 +26,13 @@
 // TODO: Implement ray  tracing pipeline in the future
 
 
+
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {
 	window Window("3D Renderer");
 	Window.InitVulkanGraphics();
 	scene_manager SceneManager(Window);
-	global_pipeline_context PipelineContext(Window.Gfx.CommandQueue);
+	global_pipeline_context* PipelineContext = new vulkan_global_pipeline_context(Window.Gfx.Backend);
 
 	u32 GlobalMemorySize = MiB(128);
 	void* MemoryBlock = malloc(GlobalMemorySize);
@@ -72,7 +73,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 		if(!Window.IsGfxPaused)
 		{
-			PipelineContext.Begin(Window.Gfx.Backend, Window.Gfx.CommandQueue);
+			PipelineContext->Begin(Window.Gfx.Backend);
 
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
@@ -80,12 +81,12 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			ImGui_ImplVulkan_NewFrame();
 
 			VkRenderingInfoKHR RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
-			RenderingInfo.renderArea = {{}, {u32(Window.Gfx.GfxColorTarget.Width), u32(Window.Gfx.GfxColorTarget.Height)}};
+			RenderingInfo.renderArea = {{}, {u32(Window.Gfx.GfxColorTarget->Width), u32(Window.Gfx.GfxColorTarget->Height)}};
 			RenderingInfo.layerCount = 1;
 			RenderingInfo.viewMask   = 0;
 
 			VkRenderingAttachmentInfoKHR ColorInfo = {VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR};
-			ColorInfo.imageView = Window.Gfx.GfxColorTarget.Views[0];
+			ColorInfo.imageView = static_cast<vulkan_texture*>(Window.Gfx.GfxColorTarget)->Views[0];
 			ColorInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			ColorInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 			ColorInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -93,16 +94,16 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			RenderingInfo.colorAttachmentCount = 1;
 			RenderingInfo.pColorAttachments = &ColorInfo;
 
-			vkCmdBeginRenderingKHR(*PipelineContext.CommandList, &RenderingInfo);
+			vkCmdBeginRenderingKHR(*static_cast<vulkan_global_pipeline_context*>(PipelineContext)->CommandList, &RenderingInfo);
 
 			SceneManager.RenderUI();
 
-			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *PipelineContext.CommandList);
+			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *static_cast<vulkan_global_pipeline_context*>(PipelineContext)->CommandList);
 
-			vkCmdEndRenderingKHR(*PipelineContext.CommandList);
+			vkCmdEndRenderingKHR(*static_cast<vulkan_global_pipeline_context*>(PipelineContext)->CommandList);
 
-			PipelineContext.EmplaceColorTarget(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
-			PipelineContext.Present(Window.Gfx.Backend, Window.Gfx.CommandQueue);
+			PipelineContext->EmplaceColorTarget(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
+			PipelineContext->Present(Window.Gfx.Backend);
 		}
 
 		Window.EmitEvents();

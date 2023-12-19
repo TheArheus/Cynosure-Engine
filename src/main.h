@@ -24,14 +24,9 @@
 #include "core/vendor/imgui/imgui_widgets.cpp"
 
 class window;
+#include "core/gfx/common.hpp"
 #include "core/gfx/renderer_utils.hpp"
-#include "core/gfx/vulkan/vulkan_backend.h"
-#include "core/gfx/vulkan/vulkan_utilities.hpp"
-
-#include "core/gfx/vulkan/command_queue.hpp"
-#include "core/gfx/vulkan/resources.hpp"
-#include "core/gfx/vulkan/shader_input_signature.hpp"
-#include "core/gfx/vulkan/pipeline_context.hpp"
+#include "core/gfx/vulkan/vulkan_gfx.hpp"
 
 #include "core/gfx/renderer.h"
 #include "core/platform/window.hpp"

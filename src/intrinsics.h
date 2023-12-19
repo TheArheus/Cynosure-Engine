@@ -30,6 +30,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "core/vendor/stb_image.h"
 
+#define BYTE(n) (1 << n)
+
 // TODO: Better gamepad handling
 // TODO: Uniform button symbols and mapping
 // TODO: More than 1 controller
