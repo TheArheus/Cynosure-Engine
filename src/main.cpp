@@ -32,7 +32,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	window Window("3D Renderer");
 	Window.InitVulkanGraphics();
 	scene_manager SceneManager(Window);
-	global_pipeline_context* PipelineContext = new vulkan_global_pipeline_context(Window.Gfx.Backend);
+	global_pipeline_context* PipelineContext = Window.Gfx.CreateGlobalPipelineContext();
 
 	u32 GlobalMemorySize = MiB(128);
 	void* MemoryBlock = malloc(GlobalMemorySize);

@@ -22,7 +22,6 @@ namespace utils
 		{
 			image_format Format;
 			image_type Type;
-			image_view_type ViewType;
 			u32 Usage;
 			u32 MipLevels;
 			u32 Layers;
@@ -34,14 +33,19 @@ namespace utils
 	};
 };
 
+struct shader_define
+{
+	std::string Name;
+	std::string Value;
+};
+
 struct renderer_backend
 {
-public:
 	virtual ~renderer_backend() = default;
 
 	virtual void DestroyObject() = 0;
 
-	[[nodiscard]] u32 LoadShaderModule(const char* Path);
+	[[nodiscard]] u32 LoadShaderModule(const char* Path, shader_stage ShaderType, const std::vector<shader_define>& ShaderDefines = {});
 	virtual void RecreateSwapchain(u32 NewWidth, u32 NewHeight) = 0;
 
 	u32 Width;
@@ -64,7 +68,7 @@ public:
 	virtual shader_input* PushStorageImage(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) = 0;
 	virtual shader_input* PushImageSampler(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) = 0;
 	virtual shader_input* PushConstant(u32 Size, shader_stage Stage = shader_stage::all) = 0;
-	virtual shader_input* Update(renderer_backend* Backend, u32 Space, bool IsPush) = 0;
+	virtual shader_input* Update(renderer_backend* Backend, u32 Space = 0, bool IsPush = false) = 0;
 	virtual shader_input* Build(renderer_backend* Backend, u32 Space = 0, bool IsPush = false) = 0;
 
 	virtual void UpdateAll(renderer_backend* Backend) = 0;
@@ -236,7 +240,6 @@ struct texture
 
 	virtual void CreateResource(renderer_backend* Backend, memory_heap* Heap, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) = 0;
 	virtual void CreateResource(renderer_backend* Backend, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) = 0;
-	virtual void CreateView(u32 MipLevel, u32 LevelCount) = 0;
 	virtual void CreateStagingResource() = 0;
 	virtual void DestroyResource() = 0;
 	virtual void DestroyStagingResource() = 0;

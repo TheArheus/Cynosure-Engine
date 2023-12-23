@@ -42,9 +42,9 @@ struct light_source
 	uint Type;
 };
 
-layout(set = 0, binding = 0, std430) uniform b0 { global_world_data WorldUpdate; };
+layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 layout(set = 0, binding = 1) uniform b1 { light_source LightSources[1024]; };
-layout(set = 0, binding = 2) buffer  b2 { vec2 PoissonDisk[SAMPLES_COUNT]; };
+layout(set = 0, binding = 2) readonly buffer  b2 { vec2 PoissonDisk[SAMPLES_COUNT]; };
 layout(set = 0, binding = 3) uniform sampler3D RandomAnglesTexture;
 layout(set = 0, binding = 4) uniform sampler2D GBuffer[GBUFFER_COUNT];
 layout(set = 0, binding = 5) uniform sampler2D AmbientOcclusionBuffer;

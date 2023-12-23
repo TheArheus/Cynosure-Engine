@@ -73,8 +73,8 @@ public:
 	vulkan_render_context() = default;
 
 	vulkan_render_context(renderer_backend* Backend,
-				   shader_input* Signature,
-				   std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {true, true, true, false, false, 0});
+						   shader_input* Signature,
+						   std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
 
 	vulkan_render_context(const vulkan_render_context&) = delete;
 	vulkan_render_context& operator=(const vulkan_render_context&) = delete;
@@ -179,7 +179,7 @@ public:
 	vulkan_compute_context() = default;
 	~vulkan_compute_context() override = default;
 
-	vulkan_compute_context(renderer_backend* Backend, shader_input* Signature, const std::string& Shader);
+	vulkan_compute_context(renderer_backend* Backend, shader_input* Signature, const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
 
 	vulkan_compute_context(const vulkan_compute_context&) = delete;
 	vulkan_compute_context& operator=(const vulkan_compute_context&) = delete;

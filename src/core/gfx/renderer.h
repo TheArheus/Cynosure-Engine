@@ -9,7 +9,7 @@ class global_graphics_context
 
 public:
 	global_graphics_context() = default;
-	global_graphics_context(renderer_backend* NewBackend);
+	global_graphics_context(renderer_backend* NewBackend, backend_type BackendType);
 
 	global_graphics_context(global_graphics_context&& Oth) noexcept;
 	global_graphics_context& operator=(global_graphics_context&& Oth) noexcept;
@@ -34,7 +34,65 @@ public:
 		return GlobalHeap->PushTexture(Backend, Data, Width, Height, Depth, InputData);
 	}
 
+	memory_heap* CreateMemoryHeap()
+	{
+		switch(BackendType)
+		{
+			case backend_type::vulkan:
+				return new vulkan_memory_heap(Backend);
+			default:
+				return nullptr;
+		}
+	}
+
+	global_pipeline_context* CreateGlobalPipelineContext()
+	{
+		switch(BackendType)
+		{
+			case backend_type::vulkan:
+				return new vulkan_global_pipeline_context(Backend);
+			default:
+				return nullptr;
+		}
+	}
+
+	render_context* CreateRenderContext(shader_input* Signature, 
+										std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, 
+										const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
+	{
+		switch(BackendType)
+		{
+			case backend_type::vulkan:
+				return new vulkan_render_context(Backend, Signature, ShaderList, ColorTargets, InputData, ShaderDefines);
+			default:
+				return nullptr;
+		}
+	}
+
+	compute_context* CreateComputeContext(shader_input* Signature, const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {})
+	{
+		switch(BackendType)
+		{
+			case backend_type::vulkan:
+				return new vulkan_compute_context(Backend, Signature, Shader, ShaderDefines);
+			default:
+				return nullptr;
+		}
+	}
+
+	shader_input* CreateShaderInput()
+	{
+		switch(BackendType)
+		{
+			case backend_type::vulkan:
+				return new vulkan_shader_input;
+			default:
+				return nullptr;
+		}
+	}
+
 	renderer_backend* Backend;
+	backend_type BackendType;
 
 	std::vector<texture*> SwapchainImages;
 

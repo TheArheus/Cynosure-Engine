@@ -3,17 +3,16 @@
 #include "vulkan/vulkan_pipeline_context.cpp"
 #include "vulkan/vulkan_backend.cpp"
 
-global_graphics_context::
-global_graphics_context(renderer_backend* NewBackend)
-	: Backend(NewBackend)
-{
-	GlobalHeap = new vulkan_memory_heap(Backend);
+// TODO: CLEAR THE RESOURCES!!!
 
-	vulkan_backend* VulkanBackend = static_cast<vulkan_backend*>(Backend);
+global_graphics_context::
+global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendType)
+	: Backend(NewBackend), BackendType(NewBackendType)
+{
+	GlobalHeap = CreateMemoryHeap();
 
 	utils::texture::input_data TextureInputData = {};
-	TextureInputData.Type = image_type::Texture2D;
-	TextureInputData.ViewType  = image_view_type::Texture2D;
+	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
@@ -114,13 +113,11 @@ global_graphics_context(renderer_backend* NewBackend)
 	TextureInputData.Format    = image_format::R32G32B32A32_SFLOAT;
 	TextureInputData.Usage     = image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopyDst | image_flags::TF_ColorTexture;
 	TextureInputData.Type	   = image_type::Texture3D;
-	TextureInputData.ViewType  = image_view_type::Texture3D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	RandomAnglesTexture = PushTexture((void*)RandomAngles, 32, 32, 32, TextureInputData);
 	TextureInputData.Format    = image_format::R32G32_SFLOAT;
 	TextureInputData.Type	   = image_type::Texture2D;
-	TextureInputData.ViewType  = image_view_type::Texture2D;
 	NoiseTexture = PushTexture((void*)RandomRotations, 4, 4, 1, TextureInputData);
 
 	vec4 RandomSamples[64] = {};
@@ -140,7 +137,6 @@ global_graphics_context(renderer_backend* NewBackend)
 	TextureInputData.Format    = image_format::D32_SFLOAT;
 	TextureInputData.Usage     = image_flags::TF_DepthTexture | image_flags::TF_Sampled;
 	TextureInputData.Type	   = image_type::Texture2D;
-	TextureInputData.ViewType  = image_view_type::Texture2D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	for(u32 CascadeIdx = 0; CascadeIdx < DEPTH_CASCADES_COUNT; CascadeIdx++)
@@ -157,7 +153,6 @@ global_graphics_context(renderer_backend* NewBackend)
 	GBuffer.resize(GBUFFER_COUNT);
 	TextureInputData = {};
 	TextureInputData.Type	   = image_type::Texture2D;
-	TextureInputData.ViewType  = image_view_type::Texture2D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
@@ -173,8 +168,8 @@ global_graphics_context(renderer_backend* NewBackend)
 	GBuffer[4] = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular
 	AmbientOcclusionData = PushTexture(Backend->Width, Backend->Height, 1, TextureInputData);
 
-	shader_input* GfxRootSignature = new vulkan_shader_input;
-	GfxRootSignature->PushUniformBuffer()->				// World Update Buffer
+	shader_input* GfxRootSignature = CreateShaderInput();
+	GfxRootSignature->PushStorageBuffer()->				// World Update Buffer
 					 PushStorageBuffer()->				// Vertex Data
 					 PushStorageBuffer()->				// Mesh Draw Commands
 					 PushStorageBuffer()->				// Mesh Materials
@@ -187,8 +182,8 @@ global_graphics_context(renderer_backend* NewBackend)
 					 Build(Backend, 1)->
 					 BuildAll(Backend);
 
-	shader_input* ColorPassRootSignature = new vulkan_shader_input;
-	ColorPassRootSignature->PushUniformBuffer()->					// World Update Buffer
+	shader_input* ColorPassRootSignature = CreateShaderInput();
+	ColorPassRootSignature->PushStorageBuffer()->					// World Update Buffer
 						   PushUniformBuffer()->					// Array of Light Sources
 						   PushStorageBuffer()->					// Poisson Disk
 						   PushImageSampler()->						// Random Rotations
@@ -206,8 +201,8 @@ global_graphics_context(renderer_backend* NewBackend)
 						   Build(Backend, 1)->
 						   BuildAll(Backend);
 
-	shader_input* AmbientOcclusionRootSignature = new vulkan_shader_input;
-	AmbientOcclusionRootSignature->PushUniformBuffer()->				// World Update Buffer
+	shader_input* AmbientOcclusionRootSignature = CreateShaderInput();
+	AmbientOcclusionRootSignature->PushStorageBuffer()->				// World Update Buffer
 								  PushStorageBuffer()->					// Poisson Disk
 								  PushImageSampler()->					// Random Rotations
 								  PushImageSampler(GBUFFER_COUNT)->		// G-Buffer Vertex Position Data
@@ -219,14 +214,14 @@ global_graphics_context(renderer_backend* NewBackend)
 								  Build(Backend, 0, true)->
 								  BuildAll(Backend);
 
-	shader_input* ShadowSignature = new vulkan_shader_input;
+	shader_input* ShadowSignature = CreateShaderInput();
 	ShadowSignature->PushStorageBuffer(1, 0, false, shader_stage::vertex)->
 					PushStorageBuffer(1, 0, false, shader_stage::vertex)->
 					PushConstant(sizeof(mat4))->
 					Build(Backend, 0, true)->
 					BuildAll(Backend);
 
-	shader_input* PointShadowSignature = new vulkan_shader_input;
+	shader_input* PointShadowSignature = CreateShaderInput();
 	PointShadowSignature->PushStorageBuffer(1, 0, false, shader_stage::vertex)->
 						 PushStorageBuffer(1, 0, false, shader_stage::vertex)->
 						 PushConstant(sizeof(point_shadow_input))->
@@ -234,9 +229,9 @@ global_graphics_context(renderer_backend* NewBackend)
 						 BuildAll(Backend);
 
 
-	shader_input* CmpIndirectFrustRootSignature = new vulkan_shader_input;
+	shader_input* CmpIndirectFrustRootSignature = CreateShaderInput();
 	CmpIndirectFrustRootSignature->
-					 PushUniformBuffer()->				// Mesh Common Culling Input Buffer
+					 PushStorageBuffer()->				// Mesh Common Culling Input Buffer
 					 PushStorageBuffer()->				// Mesh Offsets
 					 PushStorageBuffer()->				// Draw Command Input
 					 PushStorageBuffer()->				// Draw Command Visibility
@@ -246,8 +241,8 @@ global_graphics_context(renderer_backend* NewBackend)
 					 Build(Backend, 0, true)->
 					 BuildAll(Backend);
 
-	shader_input* ShadowComputeRootSignature = new vulkan_shader_input;
-	ShadowComputeRootSignature->PushUniformBuffer()->	// Mesh Common Culling Input
+	shader_input* ShadowComputeRootSignature = CreateShaderInput();
+	ShadowComputeRootSignature->PushStorageBuffer()->	// Mesh Common Culling Input
 							  PushStorageBuffer()->		// Mesh Offsets
 							  PushStorageBuffer()->		// Draw Command Input
 							  PushStorageBuffer()->		// Draw Command Visibility
@@ -257,9 +252,9 @@ global_graphics_context(renderer_backend* NewBackend)
 							  Build(Backend, 0, true)->
 							  BuildAll(Backend);
 
-	shader_input* CmpIndirectOcclRootSignature = new vulkan_shader_input;
+	shader_input* CmpIndirectOcclRootSignature = CreateShaderInput();
 	CmpIndirectOcclRootSignature->
-					 PushUniformBuffer()->				// Mesh Common Culling Input Buffer
+					 PushStorageBuffer()->				// Mesh Common Culling Input Buffer
 					 PushStorageBuffer()->				// Mesh Offsets
 					 PushStorageBuffer()->				// Draw Command Input
 					 PushStorageBuffer()->				// Draw Command Visibility
@@ -267,30 +262,30 @@ global_graphics_context(renderer_backend* NewBackend)
 					 Build(Backend, 0, true)->
 					 BuildAll(Backend);
 
-	shader_input* CmpReduceRootSignature = new vulkan_shader_input;
+	shader_input* CmpReduceRootSignature = CreateShaderInput();
 	CmpReduceRootSignature->PushImageSampler(1, 0, false, shader_stage::compute)->	// Input  Texture
 						   PushStorageImage(1, 0, false, shader_stage::compute)->	// Output Texture
 						   PushConstant(sizeof(vec2), shader_stage::compute)->		// Output Texture Size
 						   Build(Backend, 0, true)->
 						   BuildAll(Backend);
 
-	shader_input* BlurRootSignature = new vulkan_shader_input;
+	shader_input* BlurRootSignature = CreateShaderInput();
 	BlurRootSignature->PushImageSampler(1, 0, false, shader_stage::compute)->		// Input  Texture
 					  PushStorageImage(1, 0, false, shader_stage::compute)->		// Output Texture
 					  PushConstant(sizeof(vec3), shader_stage::compute)->			// Texture Size, Conv Size 
 					  Build(Backend, 0, true)->
 					  BuildAll(Backend);
 
-	shader_input* DebugRootSignature = new vulkan_shader_input;
-	DebugRootSignature->PushUniformBuffer()->	// Global World Update 
+	shader_input* DebugRootSignature = CreateShaderInput();
+	DebugRootSignature->PushStorageBuffer()->	// Global World Update 
 					   PushStorageBuffer()->	// Vertex Data
 					   PushStorageBuffer()->	// Mesh Draw Commands
 					   PushStorageBuffer()->	// Mesh Materials
 					   Build(Backend, 0, true)->
 					   BuildAll(Backend);
 
-	shader_input* DebugComputeRootSignature = new vulkan_shader_input;
-	DebugComputeRootSignature->PushUniformBuffer()->	// Mesh Common Culling Input
+	shader_input* DebugComputeRootSignature = CreateShaderInput();
+	DebugComputeRootSignature->PushStorageBuffer()->	// Mesh Common Culling Input
 							  PushStorageBuffer()->		// Mesh Offsets
 							  PushStorageBuffer()->		// Draw Command Input
 							  PushStorageBuffer()->		// Draw Command Visibility
@@ -306,40 +301,41 @@ global_graphics_context(renderer_backend* NewBackend)
 	RendererInputData.UseDepth	  = true;
 	RendererInputData.UseBackFace = true;
 	RendererInputData.UseOutline  = true;
-	GfxContext = new vulkan_render_context(Backend, GfxRootSignature, {"..\\build\\shaders\\mesh.vert.spv", "..\\build\\shaders\\mesh.frag.spv"}, GBuffer);
-	DebugContext = new vulkan_render_context(Backend, DebugRootSignature, {"..\\build\\shaders\\mesh.dbg.vert.spv", "..\\build\\shaders\\mesh.dbg.frag.spv"}, {}, RendererInputData); // TODO: VulkanBackend->SwapchainImages[0]
-	DebugComputeContext = new vulkan_compute_context(Backend, DebugComputeRootSignature, "..\\build\\shaders\\mesh.dbg.comp.spv");
+	GfxContext = CreateRenderContext(GfxRootSignature, {"..\\shaders\\mesh.vert.glsl", "..\\shaders\\mesh.frag.glsl"}, GBuffer, {true, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
+	DebugContext = CreateRenderContext(DebugRootSignature, {"..\\shaders\\mesh.dbg.vert.glsl", "..\\shaders\\mesh.dbg.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	DebugComputeContext = CreateComputeContext(DebugComputeRootSignature, "..\\shaders\\mesh.dbg.comp.glsl");
 
 	RendererInputData = {};
 	RendererInputData.UseDepth = true;
 	RendererInputData.UseBackFace  = true;
-	CascadeShadowContext = new vulkan_render_context(Backend, ShadowSignature, {"..\\build\\shaders\\mesh.sdw.vert.spv", "..\\build\\shaders\\mesh.sdw.frag.spv"}, {}, RendererInputData);
-	ShadowContext = new vulkan_render_context(Backend, ShadowSignature, {"..\\build\\shaders\\mesh.sdw.vert.spv", "..\\build\\shaders\\mesh.sdw.frag.spv"}, {}, RendererInputData);
+	CascadeShadowContext = CreateRenderContext(ShadowSignature, {"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	ShadowContext = CreateRenderContext(ShadowSignature, {"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 
 	RendererInputData.UseMultiview = true;
 	for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
 	{
 		RendererInputData.ViewMask = 1 << CubeMapFaceIdx;
-		CubeMapShadowContexts.push_back(new vulkan_render_context(Backend, PointShadowSignature, {"..\\build\\shaders\\mesh.pnt.sdw.vert.spv", "..\\build\\shaders\\mesh.pnt.sdw.frag.spv"}, {}, RendererInputData));
+		CubeMapShadowContexts.push_back(CreateRenderContext(PointShadowSignature, {"..\\shaders\\mesh.pnt.sdw.vert.glsl", "..\\shaders\\mesh.pnt.sdw.frag.glsl"}, {}, RendererInputData));
 	}
 
 	RendererInputData.UseDepth	   = true;
 	RendererInputData.UseMultiview = false;
 	RendererInputData.ViewMask	   = 0;
-	DebugCameraViewContext = new vulkan_render_context(Backend, ShadowSignature, {"..\\build\\shaders\\mesh.sdw.vert.spv", "..\\build\\shaders\\mesh.sdw.frag.spv"}, {}, RendererInputData);
+	DebugCameraViewContext = CreateRenderContext(ShadowSignature, {"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData);
 
-	ColorPassContext = new vulkan_compute_context(Backend, ColorPassRootSignature, "..\\build\\shaders\\color_pass.comp.spv");
-	AmbientOcclusionContext = new vulkan_compute_context (Backend, AmbientOcclusionRootSignature, "..\\build\\shaders\\screen_space_ambient_occlusion.comp.spv");
-	ShadowComputeContext = new vulkan_compute_context(Backend, ShadowComputeRootSignature, "..\\build\\shaders\\mesh.dbg.comp.spv");
-	FrustCullingContext  = new vulkan_compute_context(Backend, CmpIndirectFrustRootSignature, "..\\build\\shaders\\indirect_cull_frust.comp.spv");
-	OcclCullingContext   = new vulkan_compute_context(Backend, CmpIndirectOcclRootSignature, "..\\build\\shaders\\indirect_cull_occl.comp.spv");
-	DepthReduceContext   = new vulkan_compute_context(Backend, CmpReduceRootSignature, "..\\build\\shaders\\depth_reduce.comp.spv");
-	BlurContext = new vulkan_compute_context(Backend, BlurRootSignature, "..\\build\\shaders\\blur.comp.spv");
+	ColorPassContext = CreateComputeContext(ColorPassRootSignature, "..\\shaders\\color_pass.comp.glsl", {{"GBUFFER_COUNT", std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	AmbientOcclusionContext = CreateComputeContext(AmbientOcclusionRootSignature, "..\\shaders\\screen_space_ambient_occlusion.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	ShadowComputeContext = CreateComputeContext(ShadowComputeRootSignature, "..\\shaders\\mesh.dbg.comp.glsl");
+	FrustCullingContext  = CreateComputeContext(CmpIndirectFrustRootSignature, "..\\shaders\\indirect_cull_frust.comp.glsl");
+	OcclCullingContext   = CreateComputeContext(CmpIndirectOcclRootSignature, "..\\shaders\\indirect_cull_occl.comp.glsl");
+	DepthReduceContext   = CreateComputeContext(CmpReduceRootSignature, "..\\shaders\\depth_reduce.comp.glsl");
+	BlurContext = CreateComputeContext(BlurRootSignature, "..\\shaders\\blur.comp.glsl");
 }
 
 global_graphics_context::
 global_graphics_context(global_graphics_context&& Oth) noexcept : 
 	Backend(std::move(Oth.Backend)),
+	BackendType(std::move(Oth.BackendType)),
 	GlobalHeap(std::move(Oth.GlobalHeap)),
 	PoissonDiskBuffer(std::move(Oth.PoissonDiskBuffer)),
 	RandomSamplesBuffer(std::move(Oth.RandomSamplesBuffer)),
@@ -374,6 +370,7 @@ operator=(global_graphics_context&& Oth) noexcept
 	if(this != &Oth)
 	{
 		Backend = std::move(Oth.Backend);
+		BackendType = std::move(Oth.BackendType);
 		GlobalHeap = std::move(Oth.GlobalHeap);
 		PoissonDiskBuffer = std::move(Oth.PoissonDiskBuffer);
 		RandomSamplesBuffer = std::move(Oth.RandomSamplesBuffer);

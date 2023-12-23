@@ -72,7 +72,6 @@ struct render_system : public entity_system
 		TextureInputData.Format    = image_format::R8G8B8A8_SRGB;
 		TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_CopyDst | image_flags::TF_ColorTexture;
 		TextureInputData.Type	   = image_type::Texture2D;
-		TextureInputData.ViewType  = image_view_type::Texture2D;
 		TextureInputData.MipLevels = 1;
 		TextureInputData.Layers    = 1;
 
@@ -168,8 +167,8 @@ struct render_system : public entity_system
 		MeshDrawShadowCommandBuffer = Window.Gfx.PushBuffer(sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 		LightSourcesBuffer = Window.Gfx.PushBuffer(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT, false, resource_flags::RF_ConstantBuffer | resource_flags::RF_CopyDst);
 
-		WorldUpdateBuffer = Window.Gfx.PushBuffer(sizeof(global_world_data), false, resource_flags::RF_ConstantBuffer | resource_flags::RF_CopyDst);
-		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer(sizeof(mesh_comp_culling_common_input), false, resource_flags::RF_ConstantBuffer | resource_flags::RF_CopyDst);
+		WorldUpdateBuffer = Window.Gfx.PushBuffer(sizeof(global_world_data), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer(sizeof(mesh_comp_culling_common_input), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 	}
 
 	void UpdateResources(window& Window, alloc_vector<light_source>& GlobalLightSources, global_world_data& WorldUpdate)
@@ -190,7 +189,7 @@ struct render_system : public entity_system
 			{
 				if(LightSource.Type == light_type_point)
 				{
-					TextureInputData.ViewType  = image_view_type::TextureCube;
+					TextureInputData.Usage |= image_flags::TF_CubeMap;
 					TextureInputData.MipLevels = 1;
 					TextureInputData.Layers    = 6;
 					if(WorldUpdate.LightSourceShadowsEnabled)
@@ -199,7 +198,6 @@ struct render_system : public entity_system
 				}
 				else if(LightSource.Type == light_type_spot)
 				{
-					TextureInputData.ViewType  = image_view_type::Texture2D;
 					TextureInputData.MipLevels = 1;
 					TextureInputData.Layers    = 1;
 					if(WorldUpdate.LightSourceShadowsEnabled)
@@ -256,7 +254,7 @@ struct render_system : public entity_system
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, 
 											  PSF_Transfer, PSF_Compute);
 
-			Window.Gfx.FrustCullingContext->SetUniformBufferView(MeshCommonCullingInputBuffer);
+			Window.Gfx.FrustCullingContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 			Window.Gfx.FrustCullingContext->SetStorageBufferView(GeometryOffsets);
 			Window.Gfx.FrustCullingContext->SetStorageBufferView(MeshDrawCommandDataBuffer);
 			Window.Gfx.FrustCullingContext->SetStorageBufferView(MeshDrawVisibilityDataBuffer);
@@ -271,7 +269,7 @@ struct render_system : public entity_system
 		{
 			Window.Gfx.ShadowComputeContext->Begin(PipelineContext);
 
-			Window.Gfx.ShadowComputeContext->SetUniformBufferView(MeshCommonCullingInputBuffer);
+			Window.Gfx.ShadowComputeContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 			Window.Gfx.ShadowComputeContext->SetStorageBufferView(GeometryOffsets);
 			Window.Gfx.ShadowComputeContext->SetStorageBufferView(MeshDrawCommandDataBuffer);
 			Window.Gfx.ShadowComputeContext->SetStorageBufferView(MeshDrawVisibilityDataBuffer);
@@ -409,7 +407,7 @@ struct render_system : public entity_system
 			Window.Gfx.GfxContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
 			Window.Gfx.GfxContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 
-			Window.Gfx.GfxContext->SetUniformBufferView(WorldUpdateBuffer);
+			Window.Gfx.GfxContext->SetStorageBufferView(WorldUpdateBuffer);
 			Window.Gfx.GfxContext->SetStorageBufferView(VertexBuffer);
 			Window.Gfx.GfxContext->SetStorageBufferView(MeshDrawCommandBuffer);
 			Window.Gfx.GfxContext->SetStorageBufferView(MeshMaterialsBuffer);
@@ -427,7 +425,7 @@ struct render_system : public entity_system
 										   {{Window.Gfx.GfxDepthTarget}, 0, AF_ShaderRead, image_barrier_state::depth_stencil_attachment, image_barrier_state::shader_read}}, 
 										  PSF_ColorAttachment, PSF_Compute);
 
-			Window.Gfx.AmbientOcclusionContext->SetUniformBufferView(WorldUpdateBuffer);
+			Window.Gfx.AmbientOcclusionContext->SetStorageBufferView(WorldUpdateBuffer);
 			Window.Gfx.AmbientOcclusionContext->SetStorageBufferView(Window.Gfx.RandomSamplesBuffer);
 			Window.Gfx.AmbientOcclusionContext->SetImageSampler({Window.Gfx.NoiseTexture}, image_barrier_state::shader_read);
 			//Window.Gfx.AmbientOcclusionContext->SetImageSampler({Window.Gfx.GfxDepthTarget}, image_barrier_state::shader_read);
@@ -486,7 +484,7 @@ struct render_system : public entity_system
 
 			PipelineContext->SetBufferBarrier({LightSourcesBuffer, AF_TransferWrite, AF_ShaderRead}, PSF_Transfer, PSF_Compute);
 
-			Window.Gfx.ColorPassContext->SetUniformBufferView(WorldUpdateBuffer);
+			Window.Gfx.ColorPassContext->SetStorageBufferView(WorldUpdateBuffer);
 			Window.Gfx.ColorPassContext->SetUniformBufferView(LightSourcesBuffer);
 			Window.Gfx.ColorPassContext->SetStorageBufferView(Window.Gfx.PoissonDiskBuffer);
 			Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.RandomAnglesTexture}, image_barrier_state::shader_read);
@@ -529,7 +527,7 @@ struct render_system : public entity_system
 		{
 			Window.Gfx.OcclCullingContext->Begin(PipelineContext);
 
-			Window.Gfx.OcclCullingContext->SetUniformBufferView(MeshCommonCullingInputBuffer);
+			Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 			Window.Gfx.OcclCullingContext->SetStorageBufferView(GeometryOffsets);
 			Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshDrawCommandDataBuffer);
 			Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshDrawVisibilityDataBuffer);

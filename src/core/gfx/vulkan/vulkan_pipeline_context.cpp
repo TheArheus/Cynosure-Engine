@@ -264,7 +264,7 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, i
 vulkan_render_context::
 vulkan_render_context(renderer_backend* Backend,
 			   shader_input* Signature,
-			   std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData) 
+			   std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData, const std::vector<shader_define>& ShaderDefines) 
 			 : InputSignature(static_cast<vulkan_shader_input*>(Signature))
 {
 	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
@@ -275,27 +275,31 @@ vulkan_render_context(renderer_backend* Backend,
 	{
 		VkPipelineShaderStageCreateInfo Stage = {};
 		Stage.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		Stage.module = Gfx->LoadShaderModule(Shader.c_str());
 		Stage.pName  = "main";
 		if(Shader.find(".vert.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, ShaderDefines);
 		}
 		if(Shader.find(".doma.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, ShaderDefines);
 		}
 		if(Shader.find(".hull.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, ShaderDefines);
 		}
 		if (Shader.find(".geom.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, ShaderDefines);
 		}
 		if(Shader.find(".frag.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, ShaderDefines);
 		}
 		ShaderStages.push_back(Stage);
 	}
@@ -760,7 +764,7 @@ SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State
 }
 
 vulkan_compute_context::
-vulkan_compute_context(renderer_backend* Backend, shader_input* Signature, const std::string& Shader) :
+vulkan_compute_context(renderer_backend* Backend, shader_input* Signature, const std::string& Shader, const std::vector<shader_define>& ShaderDefines) :
 	InputSignature(static_cast<vulkan_shader_input*>(Signature))
 {
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
@@ -768,7 +772,7 @@ vulkan_compute_context(renderer_backend* Backend, shader_input* Signature, const
 
 	ComputeStage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
 	ComputeStage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
-	ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str());
+	ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, ShaderDefines);
 	ComputeStage.pName  = "main";
 
 	VkComputePipelineCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};

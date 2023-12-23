@@ -3,12 +3,13 @@
 struct vulkan_backend : public renderer_backend
 {
 	vulkan_backend(window* Window);
-	virtual ~vulkan_backend() override = default;
+	~vulkan_backend() override = default;
 	void DestroyObject() override;
 
-	[[nodiscard]] VkShaderModule LoadShaderModule(const char* Path);
+	[[nodiscard]] VkShaderModule LoadShaderModule(const char* Path, shader_stage ShaderType, const std::vector<shader_define>& ShaderDefines = {});
 	void RecreateSwapchain(u32 NewWidth, u32 NewHeight) override;
 
+	u32 HighestUsedVulkanVersion;
 	u32 FamilyIndex = 0;
 
 	VkInstance Instance;
@@ -20,6 +21,11 @@ struct vulkan_backend : public renderer_backend
 
 	VkPhysicalDeviceProperties PhysicalDeviceProperties;
 	VkPhysicalDeviceMemoryProperties MemoryProperties;
+
+	VkPhysicalDeviceFeatures2		 Features2  = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+	VkPhysicalDeviceVulkan11Features Features11 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+	VkPhysicalDeviceVulkan12Features Features12 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+	VkPhysicalDeviceVulkan13Features Features13 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 
 	VkSampleCountFlagBits MsaaQuality = VK_SAMPLE_COUNT_1_BIT;
 

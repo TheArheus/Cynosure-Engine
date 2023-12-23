@@ -4,10 +4,12 @@ vulkan_backend(window* Window)
 {
 	volkInitialize();
 
+	VK_CHECK(vkEnumerateInstanceVersion(&HighestUsedVulkanVersion));
+
 	VkApplicationInfo AppInfo = {};
 	AppInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	AppInfo.pApplicationName = "3D Renderer";
-	AppInfo.apiVersion = VK_API_VERSION_1_3;
+	AppInfo.apiVersion = HighestUsedVulkanVersion;
 
 	std::vector<const char*> Layers = 
 	{
@@ -175,18 +177,16 @@ vulkan_backend(window* Window)
 	DeviceQueueCreateInfo.queueCount = 1;
 	DeviceQueueCreateInfo.pQueuePriorities = QueuePriorities;
 
-	VkPhysicalDeviceFeatures2 Features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+#if 0
 	Features2.features.imageCubeArray = true;
 	Features2.features.multiDrawIndirect = true;
 	Features2.features.pipelineStatisticsQuery = true;
 	Features2.features.shaderInt16 = true;
 	Features2.features.shaderInt64 = true;
 
-	VkPhysicalDeviceVulkan11Features Features11 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 	Features11.storageBuffer16BitAccess = true;
 	Features11.multiview = true;
 
-	VkPhysicalDeviceVulkan12Features Features12 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
 	Features12.drawIndirectCount = true;
 	Features12.shaderFloat16 = true;
 	Features12.shaderInt8 = true;
@@ -194,9 +194,9 @@ vulkan_backend(window* Window)
 	Features12.descriptorIndexing = true;
 	Features12.descriptorBindingPartiallyBound = true;
 
-	VkPhysicalDeviceVulkan13Features Features13 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 	Features13.maintenance4 = true;
 	Features13.dynamicRendering = true;
+#endif
 
 	VkDeviceCreateInfo DeviceCreateInfo = {};
 	DeviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -207,10 +207,11 @@ vulkan_backend(window* Window)
 	DeviceCreateInfo.enabledExtensionCount = (u32)DeviceExtensions.size();
 	DeviceCreateInfo.ppEnabledExtensionNames = DeviceExtensions.data();
 	DeviceCreateInfo.pNext = &Features2;
-	Features2.pNext = &Features11;
+	Features2.pNext  = &Features11;
 	Features11.pNext = &Features12;
 	Features12.pNext = &Features13;
 
+	vkGetPhysicalDeviceFeatures2(PhysicalDevice, &Features2);
 	vkCreateDevice(PhysicalDevice, &DeviceCreateInfo, nullptr, &Device);
 
 #if _WIN32
@@ -311,31 +312,129 @@ DestroyObject()
 }
 
 VkShaderModule vulkan_backend::
-LoadShaderModule(const char* Path)
+LoadShaderModule(const char* Path, shader_stage ShaderType, const std::vector<shader_define>& ShaderDefines)
 {
 	VkShaderModule Result = 0;
-	FILE* File = fopen(Path, "rb");
+
+	std::ifstream File(Path);
 	if(File)
 	{
-		fseek(File, 0, SEEK_END);
-		long FileLength = ftell(File);
-		fseek(File, 0, SEEK_SET);
+		std::string ShaderDefinesResult;
+		for(const shader_define& Define : ShaderDefines)
+		{
+			ShaderDefinesResult += std::string("#define " + Define.Name + " " + Define.Value + "\n");
+		}
 
-		char* Buffer = (char*)malloc(FileLength);
-		assert(Buffer);
+		std::string ShaderCode((std::istreambuf_iterator<char>(File)), (std::istreambuf_iterator<char>()));
+		std::vector<u32> SpirvCode;
 
-		size_t ReadSize = fread(Buffer, 1, FileLength, File);
-		assert(ReadSize == size_t(FileLength));
-		assert(FileLength % 4 == 0);
+		size_t VerPos = ShaderCode.find("#version");
+		if (VerPos != std::string::npos)
+		{
+			size_t LineEnd = ShaderCode.find_first_of("\r\n", VerPos);
+			ShaderCode = ShaderCode.substr(0, LineEnd) + "\n" + ShaderDefinesResult + ShaderCode.substr(LineEnd);
+		}
+
+		glslang_input_t Input = {};
+		Input.language = GLSLANG_SOURCE_GLSL;
+		Input.client = GLSLANG_CLIENT_VULKAN;
+		Input.target_language = GLSLANG_TARGET_SPV;
+		Input.target_language_version = GLSLANG_TARGET_SPV_1_4;
+		Input.code = ShaderCode.c_str();
+		Input.default_version = 450;
+		Input.default_profile = GLSLANG_NO_PROFILE;
+		Input.force_default_version_and_profile = false;
+		Input.forward_compatible = false;
+		Input.messages = GLSLANG_MSG_DEFAULT_BIT;
+		Input.resource = &DefaultBuiltInResource;
+
+		switch (ShaderType)
+		{
+			case shader_stage::vertex:
+				Input.stage = glslang_stage_t::GLSLANG_STAGE_VERTEX;
+				break;
+			case shader_stage::tessellation_control:
+				Input.stage = glslang_stage_t::GLSLANG_STAGE_TESSCONTROL;
+				break;
+			case shader_stage::tessellation_eval:
+				Input.stage = glslang_stage_t::GLSLANG_STAGE_TESSEVALUATION;
+				break;
+			case shader_stage::geometry:
+				Input.stage = glslang_stage_t::GLSLANG_STAGE_GEOMETRY;
+				break;
+			case shader_stage::fragment:
+				Input.stage = glslang_stage_t::GLSLANG_STAGE_FRAGMENT;
+				break;
+			case shader_stage::compute:
+				Input.stage = glslang_stage_t::GLSLANG_STAGE_COMPUTE;
+				break;
+		}
+
+		if(HighestUsedVulkanVersion & VK_API_VERSION_1_3)
+		{
+			Input.client_version = GLSLANG_TARGET_VULKAN_1_3;
+		}
+		else if(HighestUsedVulkanVersion & VK_API_VERSION_1_2)
+		{
+			Input.client_version = GLSLANG_TARGET_VULKAN_1_2;
+		}
+		else if(HighestUsedVulkanVersion & VK_API_VERSION_1_1)
+		{
+			Input.client_version = GLSLANG_TARGET_VULKAN_1_1;
+		}
+
+		glslang_initialize_process();
+
+		glslang_shader_t* ShaderModule = glslang_shader_create( &Input );
+
+		if (!glslang_shader_preprocess(ShaderModule, &Input))
+		{
+			std::cerr << std::string(glslang_shader_get_info_log(ShaderModule)) << std::endl;
+			std::cerr << std::string(glslang_shader_get_info_debug_log(ShaderModule)) << std::endl;
+			return VK_NULL_HANDLE;
+		}
+
+		if (!glslang_shader_parse(ShaderModule, &Input))
+		{
+			std::cerr << std::string(glslang_shader_get_info_log(ShaderModule)) << std::endl;
+			std::cerr << std::string(glslang_shader_get_info_debug_log(ShaderModule)) << std::endl;
+			return VK_NULL_HANDLE;
+		}
+
+		glslang_program_t* Program = glslang_program_create();
+		glslang_program_add_shader(Program, ShaderModule);
+
+		if (!glslang_program_link(Program, GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT))
+		{
+			std::cerr << std::string(glslang_shader_get_info_log(ShaderModule)) << std::endl;
+			std::cerr << std::string(glslang_shader_get_info_debug_log(ShaderModule)) << std::endl;
+			return VK_NULL_HANDLE;
+		}
+
+		glslang_program_SPIRV_generate(Program, Input.stage);
+
+		if (glslang_program_SPIRV_get_messages(Program))
+		{
+			printf("%s", glslang_program_SPIRV_get_messages(Program));
+		}
+
+		glslang_shader_delete(ShaderModule);
+
+		glslang_finalize_process();
+
+		const size_t SpirvSize = glslang_program_SPIRV_get_size(Program);
+		SpirvCode.resize(SpirvSize);
+		glslang_program_SPIRV_get(Program, SpirvCode.data());
 
 		VkShaderModuleCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-		CreateInfo.codeSize = FileLength;
-		CreateInfo.pCode = reinterpret_cast<const u32*>(Buffer);
+		CreateInfo.codeSize = SpirvCode.size() * sizeof(u32);
+		CreateInfo.pCode = SpirvCode.data();
 
 		VK_CHECK(vkCreateShaderModule(Device, &CreateInfo, 0, &Result));
-
-		fclose(File);
 	}
+
+	File.close();
+
 	return Result;
 }
 

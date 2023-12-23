@@ -66,7 +66,7 @@ struct mesh_comp_culling_common_input
 	mat4  View;
 };
 
-layout(binding = 0, std430) uniform readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };
+layout(binding = 0) buffer readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };
 layout(binding = 1) buffer readonly b1 { offset MeshOffsets[]; };
 layout(binding = 2) buffer readonly b2 { mesh_draw_command MeshDrawCommandData[]; };
 layout(binding = 3) buffer readonly b3 { bool MeshDrawVisibilityData[]; };

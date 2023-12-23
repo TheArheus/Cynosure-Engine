@@ -22,6 +22,8 @@
 #include <bitset>
 #include <unordered_map>
 #include <initializer_list>
+#include <iostream>
+#include <istream>
 #include <type_traits>
 #include <filesystem>
 #include <typeindex>
@@ -30,6 +32,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "core/vendor/stb_image.h"
 
+#define STRINGIFY(v) #v
 #define BYTE(n) (1 << n)
 
 // TODO: Better gamepad handling
@@ -277,7 +280,7 @@ struct texture_data
 	}
 };
 
-struct alignas(16) global_world_data 
+struct global_world_data 
 {
 	mat4  View;
 	mat4  DebugView;

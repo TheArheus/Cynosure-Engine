@@ -88,8 +88,8 @@ struct render_debug_system : public entity_system
 		DebugIndexBuffer = Window.Gfx.PushBuffer(Geometries.VertexIndices.data(), Geometries.VertexIndices.size() * sizeof(u32), false, resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
 		MeshDrawDebugCommandBuffer = Window.Gfx.PushBuffer(sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		WorldUpdateBuffer = Window.Gfx.PushBuffer(sizeof(global_world_data), false, resource_flags::RF_ConstantBuffer | resource_flags::RF_CopyDst);
-		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer(sizeof(mesh_comp_culling_common_input), false, resource_flags::RF_ConstantBuffer | resource_flags::RF_CopyDst);
+		WorldUpdateBuffer = Window.Gfx.PushBuffer(sizeof(global_world_data), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer(sizeof(mesh_comp_culling_common_input), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 	}
 
 	void Render(window& Window, global_pipeline_context* PipelineContext, 
@@ -140,7 +140,7 @@ struct render_debug_system : public entity_system
 
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_Compute);
 
-			Window.Gfx.DebugComputeContext->SetUniformBufferView(MeshCommonCullingInputBuffer);
+			Window.Gfx.DebugComputeContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 			Window.Gfx.DebugComputeContext->SetStorageBufferView(GeometryDebugOffsets);
 			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugMeshDrawCommandDataBuffer);
 			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugMeshDrawVisibilityDataBuffer);
@@ -174,7 +174,7 @@ struct render_debug_system : public entity_system
 			Window.Gfx.DebugContext->SetDepthTarget(load_op::load, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
 			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 
-			Window.Gfx.DebugContext->SetUniformBufferView(WorldUpdateBuffer);
+			Window.Gfx.DebugContext->SetStorageBufferView(WorldUpdateBuffer);
 			Window.Gfx.DebugContext->SetStorageBufferView(DebugVertexBuffer);
 			Window.Gfx.DebugContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
 			Window.Gfx.DebugContext->SetStorageBufferView(MeshDebugMaterialsBuffer);

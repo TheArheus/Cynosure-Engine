@@ -271,10 +271,11 @@ private:
 	VkDeviceMemory TempMemory;
 };
 
+// TODO: Better image view handling
 struct vulkan_texture : public texture
 {
 
-	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_view_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_transparent, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average})
+	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_transparent, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average})
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
@@ -293,13 +294,6 @@ struct vulkan_texture : public texture
 		if(Data && !Info.UseStagingBuffer)
 			DestroyStagingResource();
 
-		for(u32 MipIdx = 0;
-			MipIdx < InputData.MipLevels;
-			++MipIdx)
-		{
-			CreateView(MipIdx, 1);
-		}
-
 		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
 		ReductionMode.reductionMode = GetVKSamplerReductionMode(Info.ReductionMode);
 
@@ -317,7 +311,7 @@ struct vulkan_texture : public texture
 		VK_CHECK(vkCreateSampler(Gfx->Device, &CreateInfo, nullptr, &SamplerHandle));
 	}
 
-	vulkan_texture(renderer_backend* Backend, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_view_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_transparent, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average})
+	vulkan_texture(renderer_backend* Backend, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_transparent, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average})
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
@@ -335,13 +329,6 @@ struct vulkan_texture : public texture
 		}
 		if(Data && !Info.UseStagingBuffer)
 			DestroyStagingResource();
-
-		for(u32 MipIdx = 0;
-			MipIdx < InputData.MipLevels;
-			++MipIdx)
-		{
-			CreateView(MipIdx, 1);
-		}
 
 		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
 		ReductionMode.reductionMode = GetVKSamplerReductionMode(Info.ReductionMode);
@@ -435,11 +422,10 @@ struct vulkan_texture : public texture
 		Info   = InputData;
 
 		VkImageCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-		CreateInfo.flags = Info.Layers == 6 ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
 		CreateInfo.imageType = GetVKImageType(Info.Type);
 		CreateInfo.format = GetVKFormat(Info.Format);
-		CreateInfo.extent.width  = Info.Layers == 6 ? Max((u32)NewWidth, (u32)NewHeight) : (u32)NewWidth;
-		CreateInfo.extent.height = Info.Layers == 6 ? Max((u32)NewWidth, (u32)NewHeight) : (u32)NewHeight;
+		CreateInfo.extent.width  = (u32)NewWidth;
+		CreateInfo.extent.height = (u32)NewHeight;
 		CreateInfo.extent.depth  = (u32)DepthOrArraySize;
 		CreateInfo.mipLevels = InputData.MipLevels;
 		CreateInfo.arrayLayers = Info.Layers;
@@ -447,6 +433,9 @@ struct vulkan_texture : public texture
 		CreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 		CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		CreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		if(Info.Usage & image_flags::TF_CubeMap)
+			CreateInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 
 		if(Info.Usage & image_flags::TF_DepthTexture || Info.Usage & image_flags::TF_StencilTexture)
 			CreateInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -474,6 +463,37 @@ struct vulkan_texture : public texture
 		VK_CHECK(vmaCreateImage(VulkanHeap->Handle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
 		Memory = AllocationInfo.deviceMemory;
 		Size = AllocationInfo.size;
+
+		VkImageViewCreateInfo ViewCreateInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+		ViewCreateInfo.format = CreateInfo.format;
+		ViewCreateInfo.image = Handle;
+		ViewCreateInfo.subresourceRange.aspectMask = Aspect;
+		ViewCreateInfo.subresourceRange.layerCount = Info.Layers;
+		ViewCreateInfo.subresourceRange.levelCount = 1;//InputData.MipLevel;
+
+		if(InputData.Usage & image_flags::TF_CubeMap)
+		{
+			ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		}
+		else
+		{
+			if(InputData.Type == image_type::Texture1D)
+				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
+			if(InputData.Type == image_type::Texture2D)
+				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+			if(InputData.Type == image_type::Texture1D)
+				ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+		}
+		for(u32 MipIdx = 0;
+			MipIdx < InputData.MipLevels;
+			++MipIdx)
+		{
+			ViewCreateInfo.subresourceRange.baseMipLevel = MipIdx;
+
+			VkImageView Result = 0;
+			VK_CHECK(vkCreateImageView(Device, &ViewCreateInfo, 0, &Result));
+			Views.push_back(Result);
+		}
 	}
 
 	void CreateResource(renderer_backend* Backend, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
@@ -490,11 +510,10 @@ struct vulkan_texture : public texture
 		Info   = InputData;
 
 		VkImageCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-		CreateInfo.flags = Info.Layers == 6 ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
 		CreateInfo.imageType = GetVKImageType(Info.Type);
 		CreateInfo.format = GetVKFormat(Info.Format);
-		CreateInfo.extent.width  = Info.Layers == 6 ? Max((u32)NewWidth, (u32)NewHeight) : (u32)NewWidth;
-		CreateInfo.extent.height = Info.Layers == 6 ? Max((u32)NewWidth, (u32)NewHeight) : (u32)NewHeight;
+		CreateInfo.extent.width  = (u32)NewWidth;
+		CreateInfo.extent.height = (u32)NewHeight;
 		CreateInfo.extent.depth  = (u32)DepthOrArraySize;
 		CreateInfo.mipLevels = InputData.MipLevels;
 		CreateInfo.arrayLayers = Info.Layers;
@@ -502,6 +521,9 @@ struct vulkan_texture : public texture
 		CreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 		CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		CreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		if(Info.Usage & image_flags::TF_CubeMap)
+			CreateInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 
 		if(Info.Usage & image_flags::TF_DepthTexture || Info.Usage & image_flags::TF_StencilTexture)
 			CreateInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -538,22 +560,37 @@ struct vulkan_texture : public texture
 
 		vkAllocateMemory(Device, &AllocateInfo, 0, &Memory);
 		vkBindImageMemory(Device, Handle, Memory, 0);
-	}
 
-	void CreateView(u32 MipLevel, u32 LevelCount) override
-	{
 		VkImageViewCreateInfo ViewCreateInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-		ViewCreateInfo.format = GetVKFormat(Info.Format);
-		ViewCreateInfo.viewType = GetVKImageViewType(Info.ViewType);
+		ViewCreateInfo.format = CreateInfo.format;
 		ViewCreateInfo.image = Handle;
 		ViewCreateInfo.subresourceRange.aspectMask = Aspect;
-		ViewCreateInfo.subresourceRange.baseMipLevel = MipLevel;
 		ViewCreateInfo.subresourceRange.layerCount = Info.Layers;
-		ViewCreateInfo.subresourceRange.levelCount = LevelCount;
+		ViewCreateInfo.subresourceRange.levelCount = 1;//InputData.MipLevel;
 
-		VkImageView Result = 0;
-		VK_CHECK(vkCreateImageView(Device, &ViewCreateInfo, 0, &Result));
-		Views.push_back(Result);
+		if(InputData.Usage & image_flags::TF_CubeMap)
+		{
+			ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		}
+		else
+		{
+			if(InputData.Type == image_type::Texture1D)
+				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
+			if(InputData.Type == image_type::Texture2D)
+				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+			if(InputData.Type == image_type::Texture1D)
+				ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+		}
+		for(u32 MipIdx = 0;
+			MipIdx < InputData.MipLevels;
+			++MipIdx)
+		{
+			ViewCreateInfo.subresourceRange.baseMipLevel = MipIdx;
+
+			VkImageView Result = 0;
+			VK_CHECK(vkCreateImageView(Device, &ViewCreateInfo, 0, &Result));
+			Views.push_back(Result);
+		}
 	}
 
 	void CreateStagingResource() override

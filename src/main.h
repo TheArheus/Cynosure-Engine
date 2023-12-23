@@ -15,6 +15,14 @@
 #include <Volk/volk.c>
 #include "core/vendor/vk_mem_alloc.h"
 
+#define  AMD_EXTENSIONS
+#define  NV_EXTENSIONS
+#include <core/vendor/glslang/Include/glslang_c_interface.h>
+#include <core/vendor/glslang/Public/resource_limits_c.h>
+#include <core/vendor/glslang/Public/ResourceLimits.h>
+#include <core/vendor/glslang/SPIRV/GlslangToSpv.h>
+#include <core/vendor/glslang/Public/ShaderLang.h>
+
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "core/vendor/imgui/imgui.h"
 #include "core/vendor/imgui/imgui.cpp"

@@ -74,10 +74,10 @@ vec4 QuatMul(vec4 lhs, vec4 rhs)
 	return vec4(lhs.xyz * rhs.w + rhs.xyz * lhs.w + cross(lhs.xyz, rhs.xyz), dot(-lhs.xyz, rhs.xyz) + lhs.w * rhs.w);
 }
 
-layout(set = 0, binding = 0, std430) readonly uniform b0 { global_world_data WorldUpdate; };
-layout(set = 0, binding = 1) readonly buffer  b1 { vert_in In[]; };
-layout(set = 0, binding = 2) readonly buffer  b2 { mesh_draw_command MeshDrawCommands[]; };
-layout(set = 0, binding = 3) readonly buffer  b3 { material MeshMaterials[]; };
+layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
+layout(set = 0, binding = 1) readonly buffer b1 { vert_in In[]; };
+layout(set = 0, binding = 2) readonly buffer b2 { mesh_draw_command MeshDrawCommands[]; };
+layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
 
 layout(location = 0) out vert_out Out;
 layout(location = 4) out uint     MatIdx;

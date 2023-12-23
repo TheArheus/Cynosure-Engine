@@ -246,7 +246,7 @@ void window::SetTitle(std::string& Title)
 void window::InitVulkanGraphics()
 {
 	renderer_backend* NewBackend = new vulkan_backend(this);
-	Gfx = global_graphics_context(NewBackend);
+	Gfx = global_graphics_context(NewBackend, backend_type::vulkan);
 }
 
 void* window::

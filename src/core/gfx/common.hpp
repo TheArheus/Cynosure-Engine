@@ -2,8 +2,9 @@
 
 enum class backend_type
 {
-	vulkan_renderer,
-	directx12_renderer,
+	vulkan,
+	directx12,
+	metal,
 };
 
 enum class shader_stage
@@ -12,8 +13,8 @@ enum class shader_stage
 	fragment,
 	compute,
 	geometry,
-	tesellation_control,
-	tesellation_eval,
+	tessellation_control,
+	tessellation_eval,
 	all,
 };
 
@@ -115,14 +116,6 @@ enum class image_type
 	Texture1D,
 	Texture2D,
 	Texture3D,
-};
-
-enum class image_view_type
-{
-	Texture1D,
-	Texture2D,
-	Texture3D,
-	TextureCube,
 };
 
 enum class polygon_mode
@@ -365,7 +358,7 @@ enum image_flags
 	TF_LinearTiling          = BYTE(4),
 	TF_Sampled               = BYTE(5),
 	TF_Storage               = BYTE(6),
-	TF_SampleOutsideFragment = BYTE(7),
+	TF_CubeMap				 = BYTE(7),
 	TF_CopySrc	             = BYTE(8),
 	TF_CopyDst               = BYTE(9),
 };

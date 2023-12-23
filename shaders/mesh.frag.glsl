@@ -47,7 +47,7 @@ struct material
 	uint LightType;
 };
 
-layout(set = 0, binding = 0, std430) uniform b0 { global_world_data WorldUpdate; };
+layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
 layout(set = 1, binding = 0) uniform sampler2D DiffuseSamplers[];
 layout(set = 1, binding = 1) uniform sampler2D NormalSamplers[];

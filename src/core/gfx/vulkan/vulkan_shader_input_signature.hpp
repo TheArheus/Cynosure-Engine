@@ -155,7 +155,7 @@ public:
 		return this;
 	}
 
-	vulkan_shader_input* Update(renderer_backend* Backend, u32 Space, bool IsPush) override
+	vulkan_shader_input* Update(renderer_backend* Backend, u32 Space = 0, bool IsPush = false) override
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 

@@ -52,6 +52,7 @@ public:
 
 	void NewFrame() {ImGui_ImplWin32_NewFrame();};
 	void EmitEvents();
+
 	void InitVulkanGraphics();
 
 	void SetTitle(std::string& Title);

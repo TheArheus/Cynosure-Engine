@@ -62,10 +62,10 @@ struct mesh_draw_command
 	uint MatIdx;
 };
 
-layout(binding = 0, std430) readonly uniform b0 { global_world_data WorldUpdate; };
-layout(binding = 1) readonly buffer  b1 { vert_in In[]; };
-layout(binding = 2) readonly buffer  b2 { mesh_draw_command MeshData[]; };
-layout(binding = 3) readonly buffer  b3 { material MeshMaterials[]; };
+layout(binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
+layout(binding = 1) readonly buffer b1 { vert_in In[]; };
+layout(binding = 2) readonly buffer b2 { mesh_draw_command MeshData[]; };
+layout(binding = 3) readonly buffer b3 { material MeshMaterials[]; };
 
 layout(location = 0) out vec4 OutCol;
 
