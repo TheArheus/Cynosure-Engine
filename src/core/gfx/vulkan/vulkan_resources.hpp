@@ -1,6 +1,5 @@
 #pragma once
 
-// TODO: Implement this properly
 class vulkan_memory_heap : public memory_heap
 {
 public:
@@ -274,16 +273,9 @@ private:
 // TODO: Better image view handling
 struct vulkan_texture : public texture
 {
-
 	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_transparent, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average})
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-
-		if(InputData.Layers == 6)
-		{
-			Width  = Max(NewWidth, NewHeight);
-			Height = Max(NewWidth, NewHeight);
-		}
 
 		CreateResource(Backend, Heap, NewWidth, NewHeight, DepthOrArraySize, InputData);
 		if(Data || Info.UseStagingBuffer)
@@ -311,41 +303,6 @@ struct vulkan_texture : public texture
 		VK_CHECK(vkCreateSampler(Gfx->Device, &CreateInfo, nullptr, &SamplerHandle));
 	}
 
-	vulkan_texture(renderer_backend* Backend, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_transparent, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average})
-	{
-		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-
-		if(InputData.Layers == 6)
-		{
-			Width  = Max(NewWidth, NewHeight);
-			Height = Max(NewWidth, NewHeight);
-		}
-
-		CreateResource(Backend, NewWidth, NewHeight, DepthOrArraySize, InputData);
-		if(Data || Info.UseStagingBuffer)
-		{
-			CreateStagingResource();
-			Update(Backend, Data);
-		}
-		if(Data && !Info.UseStagingBuffer)
-			DestroyStagingResource();
-
-		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
-		ReductionMode.reductionMode = GetVKSamplerReductionMode(Info.ReductionMode);
-
-		VkSamplerCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
-		CreateInfo.pNext = &ReductionMode;
-		CreateInfo.magFilter = VK_FILTER_LINEAR;
-		CreateInfo.minFilter = VK_FILTER_LINEAR;
-		CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-		CreateInfo.addressModeU = CreateInfo.addressModeV = CreateInfo.addressModeW = GetVKSamplerAddressMode(Info.AddressMode);
-		CreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-		CreateInfo.compareEnable = false;
-		CreateInfo.compareOp = VK_COMPARE_OP_NEVER;
-		CreateInfo.maxLod = Info.MipLevels;
-
-		VK_CHECK(vkCreateSampler(Gfx->Device, &CreateInfo, nullptr, &SamplerHandle));
-	}
 
 	~vulkan_texture() override = default;
 
@@ -481,104 +438,7 @@ struct vulkan_texture : public texture
 				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
 			if(InputData.Type == image_type::Texture2D)
 				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
-			if(InputData.Type == image_type::Texture1D)
-				ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
-		}
-		for(u32 MipIdx = 0;
-			MipIdx < InputData.MipLevels;
-			++MipIdx)
-		{
-			ViewCreateInfo.subresourceRange.baseMipLevel = MipIdx;
-
-			VkImageView Result = 0;
-			VK_CHECK(vkCreateImageView(Device, &ViewCreateInfo, 0, &Result));
-			Views.push_back(Result);
-		}
-	}
-
-	void CreateResource(renderer_backend* Backend, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
-	{
-		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-
-		MemoryProperties = Gfx->MemoryProperties;
-		Device = Gfx->Device;
-
-		Aspect = 0;
-		Width  = NewWidth;
-		Height = NewHeight;
-		Depth  = DepthOrArraySize;
-		Info   = InputData;
-
-		VkImageCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-		CreateInfo.imageType = GetVKImageType(Info.Type);
-		CreateInfo.format = GetVKFormat(Info.Format);
-		CreateInfo.extent.width  = (u32)NewWidth;
-		CreateInfo.extent.height = (u32)NewHeight;
-		CreateInfo.extent.depth  = (u32)DepthOrArraySize;
-		CreateInfo.mipLevels = InputData.MipLevels;
-		CreateInfo.arrayLayers = Info.Layers;
-		CreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;//Gfx->MsaaQuality;
-		CreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		CreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-		if(Info.Usage & image_flags::TF_CubeMap)
-			CreateInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-
-		if(Info.Usage & image_flags::TF_DepthTexture || Info.Usage & image_flags::TF_StencilTexture)
-			CreateInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-		if(Info.Usage & image_flags::TF_ColorAttachment)
-			CreateInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-		if(Info.Usage & image_flags::TF_Storage)
-			CreateInfo.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
-		if(Info.Usage & image_flags::TF_Sampled)
-			CreateInfo.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-		if(Info.Usage & image_flags::TF_CopySrc)
-			CreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-		if(Info.Usage & image_flags::TF_CopyDst)
-			CreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-		if(Info.Usage & image_flags::TF_ColorAttachment)
-			Aspect |= VK_IMAGE_ASPECT_COLOR_BIT;
-		if(Info.Usage & image_flags::TF_DepthTexture)
-			Aspect |= VK_IMAGE_ASPECT_DEPTH_BIT;
-		if(Info.Usage & image_flags::TF_StencilTexture)
-			Aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
-
-		VK_CHECK(vkCreateImage(Device, &CreateInfo, 0, &Handle));
-
-		VkMemoryRequirements MemoryRequirements;
-		vkGetImageMemoryRequirements(Device, Handle, &MemoryRequirements);
-		Size = MemoryRequirements.size;
-
-		u32 MemoryTypeIndex = SelectMemoryType(MemoryProperties, MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		assert(MemoryTypeIndex != ~0u);
-
-		VkMemoryAllocateInfo AllocateInfo = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-		AllocateInfo.memoryTypeIndex = MemoryTypeIndex;
-		AllocateInfo.allocationSize = MemoryRequirements.size;
-
-		vkAllocateMemory(Device, &AllocateInfo, 0, &Memory);
-		vkBindImageMemory(Device, Handle, Memory, 0);
-
-		VkImageViewCreateInfo ViewCreateInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-		ViewCreateInfo.format = CreateInfo.format;
-		ViewCreateInfo.image = Handle;
-		ViewCreateInfo.subresourceRange.aspectMask = Aspect;
-		ViewCreateInfo.subresourceRange.layerCount = Info.Layers;
-		ViewCreateInfo.subresourceRange.levelCount = 1;//InputData.MipLevel;
-
-		if(InputData.Usage & image_flags::TF_CubeMap)
-		{
-			ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-		}
-		else
-		{
-			if(InputData.Type == image_type::Texture1D)
-				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
-			if(InputData.Type == image_type::Texture2D)
-				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
-			if(InputData.Type == image_type::Texture1D)
+			if(InputData.Type == image_type::Texture3D)
 				ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
 		}
 		for(u32 MipIdx = 0;

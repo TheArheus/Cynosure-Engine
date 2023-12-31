@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #if _WIN32
+	#define NOMINMAX
 	#include <windows.h>
 	#include <windowsx.h>
 	#include <vulkan/vulkan_win32.h>
@@ -11,17 +12,18 @@
 	#include "core/vendor/glfw/glfw3.h"
 #endif
 
-#include <Volk/volk.h>
-#include <Volk/volk.c>
-#include "core/vendor/vk_mem_alloc.h"
+#include <core/vendor/Volk/volk.h>
+#include <core/vendor/Volk/volk.c>
 
 #define  AMD_EXTENSIONS
 #define  NV_EXTENSIONS
-#include <core/vendor/glslang/Include/glslang_c_interface.h>
-#include <core/vendor/glslang/Public/resource_limits_c.h>
-#include <core/vendor/glslang/Public/ResourceLimits.h>
-#include <core/vendor/glslang/SPIRV/GlslangToSpv.h>
-#include <core/vendor/glslang/Public/ShaderLang.h>
+#include <glslang/SPIRV/GlslangToSpv.h>
+#include <glslang/Include/ResourceLimits.h>
+#include <glslang/Public/ShaderLang.h>
+
+#include <spirv_cross/spirv_glsl.hpp>
+#include <spirv_cross/spirv_hlsl.hpp>
+#include <spirv-headers/spirv.h>
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "core/vendor/imgui/imgui.h"

@@ -92,6 +92,23 @@ struct render_debug_system : public entity_system
 		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer(sizeof(mesh_comp_culling_common_input), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 	}
 
+	void UpdateResources(window& Window, alloc_vector<light_source>& GlobalLightSources, global_world_data& WorldUpdate)
+	{
+		Window.Gfx.DebugComputeContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
+		Window.Gfx.DebugComputeContext->SetStorageBufferView(GeometryDebugOffsets);
+		Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugMeshDrawCommandDataBuffer);
+		Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugMeshDrawVisibilityDataBuffer);
+		Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugIndirectDrawIndexedCommands);
+		Window.Gfx.DebugComputeContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
+		Window.Gfx.DebugComputeContext->StaticUpdate();
+
+		Window.Gfx.DebugContext->SetStorageBufferView(WorldUpdateBuffer);
+		Window.Gfx.DebugContext->SetStorageBufferView(DebugVertexBuffer);
+		Window.Gfx.DebugContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
+		Window.Gfx.DebugContext->SetStorageBufferView(MeshDebugMaterialsBuffer);
+		Window.Gfx.DebugContext->StaticUpdate();
+	}
+
 	void Render(window& Window, global_pipeline_context* PipelineContext, 
 				global_world_data& WorldData, mesh_comp_culling_common_input& MeshCommonCullingInput,
 				alloc_vector<mesh_draw_command>& DynamicMeshInstances, alloc_vector<u32>& DynamicMeshVisibility)
@@ -136,19 +153,10 @@ struct render_debug_system : public entity_system
 #endif
 
 		{
-			Window.Gfx.DebugComputeContext->Begin(PipelineContext);
-
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_Compute);
 
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(GeometryDebugOffsets);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugMeshDrawCommandDataBuffer);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugMeshDrawVisibilityDataBuffer);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugIndirectDrawIndexedCommands);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
-
+			Window.Gfx.DebugComputeContext->Begin(PipelineContext);
 			Window.Gfx.DebugComputeContext->Execute(StaticMeshInstances.size());
-
 			Window.Gfx.DebugComputeContext->End();
 		}
 
@@ -172,14 +180,9 @@ struct render_debug_system : public entity_system
 
 			Window.Gfx.DebugContext->SetColorTarget(load_op::load, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget}, {0, 0, 0, 1});
 			Window.Gfx.DebugContext->SetDepthTarget(load_op::load, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
+
 			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
-
-			Window.Gfx.DebugContext->SetStorageBufferView(WorldUpdateBuffer);
-			Window.Gfx.DebugContext->SetStorageBufferView(DebugVertexBuffer);
-			Window.Gfx.DebugContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
-			Window.Gfx.DebugContext->SetStorageBufferView(MeshDebugMaterialsBuffer);
 			Window.Gfx.DebugContext->DrawIndirect(Geometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
-
 			Window.Gfx.DebugContext->End();
 		}
 	}

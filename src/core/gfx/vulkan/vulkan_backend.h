@@ -6,11 +6,12 @@ struct vulkan_backend : public renderer_backend
 	~vulkan_backend() override = default;
 	void DestroyObject() override;
 
-	[[nodiscard]] VkShaderModule LoadShaderModule(const char* Path, shader_stage ShaderType, const std::vector<shader_define>& ShaderDefines = {});
+	[[nodiscard]] VkShaderModule LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines = {});
 	void RecreateSwapchain(u32 NewWidth, u32 NewHeight) override;
 
 	u32 HighestUsedVulkanVersion;
 	u32 FamilyIndex = 0;
+	bool IsPushDescriptorsFeatureEnabled;
 
 	VkInstance Instance;
 	VkPhysicalDevice PhysicalDevice;

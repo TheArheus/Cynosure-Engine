@@ -73,15 +73,12 @@ public:
 	vulkan_render_context() = default;
 
 	vulkan_render_context(renderer_backend* Backend,
-						   shader_input* Signature,
 						   std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
 
 	vulkan_render_context(const vulkan_render_context&) = delete;
 	vulkan_render_context& operator=(const vulkan_render_context&) = delete;
 
     vulkan_render_context(vulkan_render_context&& other) noexcept : 
-		GlobalOffset(std::move(other.GlobalOffset)),
-		PushConstantIdx(std::move(other.PushConstantIdx)),
 		RenderingInfo(std::move(other.RenderingInfo)),
 		SetIndices(std::move(other.SetIndices)),
 		ShaderStages(std::move(other.ShaderStages)),
@@ -91,7 +88,6 @@ public:
 		BufferArrayInfos(std::move(other.BufferArrayInfos)),
 		RenderingAttachmentInfos(std::move(other.RenderingAttachmentInfos)),
 		RenderingAttachmentInfoArrays(std::move(other.RenderingAttachmentInfoArrays)),
-		InputSignature(other.InputSignature),
 		PipelineContext(std::move(other.PipelineContext)),
 		Device(std::move(other.Device)),
 		Pipeline(std::move(other.Pipeline))
@@ -101,8 +97,6 @@ public:
 	{
         if (this != &other) 
 		{
-			std::swap(GlobalOffset, other.GlobalOffset);
-			std::swap(PushConstantIdx, other.PushConstantIdx);
 			std::swap(RenderingInfo, other.RenderingInfo);
 			std::swap(SetIndices, other.SetIndices);
 			std::swap(ShaderStages, other.ShaderStages);
@@ -112,9 +106,6 @@ public:
 			std::swap(BufferArrayInfos, other.BufferArrayInfos);
 			std::swap(RenderingAttachmentInfos, other.RenderingAttachmentInfos);
 			std::swap(RenderingAttachmentInfoArrays, other.RenderingAttachmentInfoArrays);
-
-			InputSignature = other.InputSignature;
-			other.InputSignature = nullptr;
 
 			std::swap(PipelineContext, other.PipelineContext);
 			std::swap(Device, other.Device);
@@ -155,6 +146,9 @@ private:
 	u32 GlobalOffset = 0;
 	u32 PushConstantIdx = 0;
 
+	u32 PushConstantSize = 0;
+	bool HavePushConstant = false;
+
 	VkRenderingInfoKHR RenderingInfo;
 	std::map<u32, u32> SetIndices;
 
@@ -166,11 +160,15 @@ private:
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>   RenderingAttachmentInfos;
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>> RenderingAttachmentInfoArrays;
 
-	const vulkan_shader_input* InputSignature;
 	vulkan_global_pipeline_context* PipelineContext;
 
 	VkDevice Device;
 	VkPipeline Pipeline;
+	VkDescriptorPool Pool;
+	VkPipelineLayout RootSignatureHandle;
+	std::vector<VkDescriptorSet> Sets;
+	std::vector<VkDescriptorSetLayout> Layouts;
+	VkPushConstantRange ConstantRange = {};
 };
 
 class vulkan_compute_context : public compute_context
@@ -179,21 +177,18 @@ public:
 	vulkan_compute_context() = default;
 	~vulkan_compute_context() override = default;
 
-	vulkan_compute_context(renderer_backend* Backend, shader_input* Signature, const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
+	vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
 
 	vulkan_compute_context(const vulkan_compute_context&) = delete;
 	vulkan_compute_context& operator=(const vulkan_compute_context&) = delete;
 
     vulkan_compute_context(vulkan_compute_context&& other) noexcept : 
 		ComputeStage(std::move(other.ComputeStage)),
-		GlobalOffset(std::move(other.GlobalOffset)),
-		PushConstantIdx(std::move(other.PushConstantIdx)),
 		PushDescriptorBindings(std::move(other.PushDescriptorBindings)),
 		StaticDescriptorBindings(std::move(other.StaticDescriptorBindings)),
 		BufferInfos(std::move(other.BufferInfos)),
 		BufferArrayInfos(std::move(other.BufferArrayInfos)),
 		SetIndices(std::move(other.SetIndices)),
-		InputSignature(other.InputSignature),
 		PipelineContext(std::move(other.PipelineContext)),
 		Device(std::move(other.Device)),
 		Pipeline(other.Pipeline)
@@ -206,18 +201,12 @@ public:
 		{
 			std::swap(ComputeStage, other.ComputeStage);
 
-			std::swap(GlobalOffset, other.GlobalOffset);
-			std::swap(PushConstantIdx, other.PushConstantIdx);
-
 			std::swap(PushDescriptorBindings, other.PushDescriptorBindings);
 			std::swap(StaticDescriptorBindings, other.StaticDescriptorBindings);
 			std::swap(BufferInfos, other.BufferInfos);
 			std::swap(BufferArrayInfos, other.BufferArrayInfos);
 
 			std::swap(SetIndices, other.SetIndices);
-
-			InputSignature = other.InputSignature;
-			other.InputSignature = nullptr;
 
 			std::swap(PipelineContext, other.PipelineContext);
 
@@ -250,8 +239,8 @@ private:
 
 	VkPipelineShaderStageCreateInfo ComputeStage;
 
-	u32 GlobalOffset = 0;
-	u32 PushConstantIdx = 0;
+	u32 PushConstantSize = 0;
+	bool HavePushConstant = false;
 
 	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;
 	std::vector<VkWriteDescriptorSet> StaticDescriptorBindings;
@@ -260,9 +249,13 @@ private:
 
 	std::map<u32, u32> SetIndices;
 
-	const vulkan_shader_input* InputSignature;
 	vulkan_global_pipeline_context* PipelineContext;
 
 	VkDevice Device;
 	VkPipeline Pipeline;
+	VkDescriptorPool Pool;
+	VkPipelineLayout RootSignatureHandle;
+	std::vector<VkDescriptorSet> Sets;
+	std::vector<VkDescriptorSetLayout> Layouts;
+	VkPushConstantRange ConstantRange = {};
 };

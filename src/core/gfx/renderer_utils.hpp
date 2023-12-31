@@ -12,6 +12,7 @@ namespace utils
 			bool UseBackFace;
 			bool UseOutline;
 			bool UseMultiview;
+			bool UsePushDescriptors;
 			uint8_t ViewMask;
 		};
 	};
@@ -42,10 +43,7 @@ struct shader_define
 struct renderer_backend
 {
 	virtual ~renderer_backend() = default;
-
 	virtual void DestroyObject() = 0;
-
-	[[nodiscard]] u32 LoadShaderModule(const char* Path, shader_stage ShaderType, const std::vector<shader_define>& ShaderDefines = {});
 	virtual void RecreateSwapchain(u32 NewWidth, u32 NewHeight) = 0;
 
 	u32 Width;
@@ -239,7 +237,6 @@ struct texture
 	virtual void ReadBack(renderer_backend* Backend, void* Data) = 0;
 
 	virtual void CreateResource(renderer_backend* Backend, memory_heap* Heap, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) = 0;
-	virtual void CreateResource(renderer_backend* Backend, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) = 0;
 	virtual void CreateStagingResource() = 0;
 	virtual void DestroyResource() = 0;
 	virtual void DestroyStagingResource() = 0;

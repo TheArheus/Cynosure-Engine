@@ -50,8 +50,8 @@ layout(set = 0, binding = 4) uniform sampler2D GBuffer[GBUFFER_COUNT];
 layout(set = 0, binding = 5) uniform sampler2D AmbientOcclusionBuffer;
 layout(set = 0, binding = 6) uniform writeonly image2D ColorTarget;
 layout(set = 0, binding = 7) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
-layout(set = 1, binding = 0) uniform sampler2D ShadowMaps[];
-layout(set = 1, binding = 1) uniform samplerCube PointShadowMaps[];
+layout(set = 1, binding = 0) uniform sampler2D ShadowMaps[1024];
+layout(set = 1, binding = 1) uniform samplerCube PointShadowMaps[1024];
 
 float GetRandomValue(vec2 Seed)
 {

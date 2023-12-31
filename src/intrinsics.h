@@ -7,27 +7,29 @@
 #endif
 
 #include <algorithm>
+#include <array>
+#include <bitset>
 #include <cassert>
 #include <cstdint>
-#include <memory>
-#include <optional>
-#include <iostream>
-#include <string>
+#include <filesystem>
 #include <fstream>
-#include <string_view>
-#include <vector>
-#include <map>
-#include <array>
-#include <set>
-#include <bitset>
-#include <unordered_map>
+#include <functional>
 #include <initializer_list>
 #include <iostream>
+#include <iostream>
 #include <istream>
+#include <limits>
+#include <map>
+#include <memory>
+#include <numeric>
+#include <optional>
+#include <set>
+#include <string>
+#include <string_view>
 #include <type_traits>
-#include <filesystem>
 #include <typeindex>
-#include <functional>
+#include <unordered_map>
+#include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "core/vendor/stb_image.h"

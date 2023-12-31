@@ -56,25 +56,24 @@ public:
 		}
 	}
 
-	render_context* CreateRenderContext(shader_input* Signature, 
-										std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, 
+	render_context* CreateRenderContext(std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, 
 										const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
 	{
 		switch(BackendType)
 		{
 			case backend_type::vulkan:
-				return new vulkan_render_context(Backend, Signature, ShaderList, ColorTargets, InputData, ShaderDefines);
+				return new vulkan_render_context(Backend, ShaderList, ColorTargets, InputData, ShaderDefines);
 			default:
 				return nullptr;
 		}
 	}
 
-	compute_context* CreateComputeContext(shader_input* Signature, const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {})
+	compute_context* CreateComputeContext(const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {})
 	{
 		switch(BackendType)
 		{
 			case backend_type::vulkan:
-				return new vulkan_compute_context(Backend, Signature, Shader, ShaderDefines);
+				return new vulkan_compute_context(Backend, Shader, ShaderDefines);
 			default:
 				return nullptr;
 		}

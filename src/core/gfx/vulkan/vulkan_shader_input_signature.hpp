@@ -162,6 +162,8 @@ public:
 		Device = Gfx->Device;
 		vkDestroyDescriptorSetLayout(Device, Layouts[Space], nullptr);
 
+		IsPush = (Gfx->IsPushDescriptorsFeatureEnabled & IsPush);
+
 		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
 		DescriptorSetLayoutCreateInfo.flags = IsPush * VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
 		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[Space].size();
@@ -200,6 +202,8 @@ public:
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
 		Device = Gfx->Device;
+
+		IsPush = (Gfx->IsPushDescriptorsFeatureEnabled & IsPush);
 
 		if(IsPush)
 		{

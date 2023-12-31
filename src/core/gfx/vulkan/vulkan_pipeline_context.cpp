@@ -263,13 +263,14 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, i
 
 vulkan_render_context::
 vulkan_render_context(renderer_backend* Backend,
-			   shader_input* Signature,
 			   std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData, const std::vector<shader_define>& ShaderDefines) 
-			 : InputSignature(static_cast<vulkan_shader_input*>(Signature))
 {
 	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	Device = Gfx->Device;
+
+	std::map<VkDescriptorType, u32> DescriptorTypeCounts;
+	std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>> ShaderRootLayout;
 
 	for(const std::string Shader : ShaderList)
 	{
@@ -279,34 +280,107 @@ vulkan_render_context(renderer_backend* Backend,
 		if(Shader.find(".vert.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
 		}
 		if(Shader.find(".doma.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
 		}
 		if(Shader.find(".hull.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
 		}
 		if (Shader.find(".geom.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
 		}
 		if(Shader.find(".frag.") != std::string::npos)
 		{
 			Stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
 		}
 		ShaderStages.push_back(Stage);
 	}
 
+	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
+	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
+	{
+		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
+		{
+			Parameters[LayoutIdx].push_back(ShaderRootLayout[LayoutIdx][BindingIdx]);
+		}
+	}
+
+	// TODO: Check if binding partially bound
+	// TODO: Binding flags
+	Layouts.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
+	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
+	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)
+	{
+		//VkDescriptorSetLayoutBindingFlagsCreateInfoEXT BindingFlagsCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT};
+		//BindingFlagsCreateInfo.bindingCount = static_cast<uint32_t>(ParametersFlags[Space].size());
+		//BindingFlagsCreateInfo.pBindingFlags = ParametersFlags[Space].data();
+
+		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
+		//DescriptorSetLayoutCreateInfo.flags = IsPush * VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
+		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
+		//DescriptorSetLayoutCreateInfo.pNext = &BindingFlagsCreateInfo;
+
+		VkDescriptorSetLayout DescriptorSetLayout;
+		VK_CHECK(vkCreateDescriptorSetLayout(Device, &DescriptorSetLayoutCreateInfo, 0, &DescriptorSetLayout));
+		Layouts[SpaceIdx] = DescriptorSetLayout;
+	}
+
+
+	std::vector<VkDescriptorPoolSize> PoolSizes;
+	for (const auto& DescriptorType : DescriptorTypeCounts) {
+		VkDescriptorPoolSize PoolSize = {};
+		PoolSize.type = DescriptorType.first;
+		PoolSize.descriptorCount = DescriptorType.second;
+		PoolSizes.push_back(PoolSize);
+	}
+
+	VkDescriptorPoolCreateInfo PoolInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+	PoolInfo.poolSizeCount = PoolSizes.size();
+	PoolInfo.pPoolSizes = PoolSizes.data();
+	PoolInfo.maxSets = ShaderRootLayout.size();
+
+	VK_CHECK(vkCreateDescriptorPool(Device, &PoolInfo, nullptr, &Pool));
+
+	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
+	{
+		//if(IsSetPush[LayoutIdx]) continue;
+		VkDescriptorSetAllocateInfo AllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+		AllocInfo.descriptorPool = Pool;
+		AllocInfo.descriptorSetCount = 1;
+		AllocInfo.pSetLayouts = &Layouts[LayoutIdx];
+
+		VkDescriptorSet DescriptorSet;
+		VK_CHECK(vkAllocateDescriptorSets(Device, &AllocInfo, &DescriptorSet));
+		Sets[LayoutIdx] = DescriptorSet;
+	}
+
+	VkPipelineLayoutCreateInfo RootSignatureCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+	RootSignatureCreateInfo.pSetLayouts = Layouts.data();
+	RootSignatureCreateInfo.setLayoutCount = Layouts.size();
+
+	if(HavePushConstant)
+	{
+		ConstantRange.stageFlags = VK_SHADER_STAGE_ALL;
+		ConstantRange.size       = PushConstantSize;
+		RootSignatureCreateInfo.pushConstantRangeCount = 1;
+		RootSignatureCreateInfo.pPushConstantRanges    = &ConstantRange;
+	}
+
+	VK_CHECK(vkCreatePipelineLayout(Device, &RootSignatureCreateInfo, nullptr, &RootSignatureHandle));
+
 	VkGraphicsPipelineCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
 
-	CreateInfo.layout = InputSignature->Handle;
+	CreateInfo.layout = RootSignatureHandle;
 	CreateInfo.pStages = ShaderStages.data();
 	CreateInfo.stageCount = ShaderStages.size();
 
@@ -374,7 +448,8 @@ vulkan_render_context(renderer_backend* Backend,
 	CreateInfo.pTessellationState = &TessellationState;
 	CreateInfo.pVertexInputState = &VertexInputState;
 	CreateInfo.pViewportState = &ViewportState;
-	CreateInfo.pNext = &PipelineRenderingCreateInfo;
+	if(Gfx->Features13.dynamicRendering)
+		CreateInfo.pNext = &PipelineRenderingCreateInfo;
 
 	VK_CHECK(vkCreateGraphicsPipelines(Device, nullptr, 1, &CreateInfo, 0, &Pipeline));
 }
@@ -396,7 +471,7 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 	PipelineContext = static_cast<vulkan_global_pipeline_context*>(GlobalPipelineContext);
 
 	std::vector<VkDescriptorSet> SetsToBind;
-	for(const VkDescriptorSet& DescriptorSet : InputSignature->Sets)
+	for(const VkDescriptorSet& DescriptorSet : Sets)
 	{
 		if(DescriptorSet) SetsToBind.push_back(DescriptorSet);
 	}
@@ -405,7 +480,7 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 
 	vkCmdBindPipeline(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
 	if(SetsToBind.size())
-		vkCmdBindDescriptorSets(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
+		vkCmdBindDescriptorSets(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, 0, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
 
 	VkViewport Viewport = {0, (float)RenderHeight, (float)RenderWidth, -(float)RenderHeight, 0, 1};
 	VkRect2D Scissor = {{0, 0}, {RenderWidth, RenderHeight}};
@@ -416,9 +491,6 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 void vulkan_render_context::
 End()
 {
-	GlobalOffset = 0;
-	PushConstantIdx = 0;
-
 	SetIndices.clear();
 	PushDescriptorBindings.clear();
 	StaticDescriptorBindings.clear();
@@ -510,11 +582,9 @@ Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount)
 {
 	vulkan_buffer* VertexAttachment = static_cast<vulkan_buffer*>(VertexBuffer);
 
-	vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
+	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 	vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
 	SetIndices.clear();
-	GlobalOffset = 0;
-	PushConstantIdx = 0;
 }
 
 void vulkan_render_context::
@@ -522,12 +592,10 @@ DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffse
 {
 	vulkan_buffer* IndexAttachment = static_cast<vulkan_buffer*>(IndexBuffer);
 
-	vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
+	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexed(*PipelineContext->CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 	SetIndices.clear();
-	GlobalOffset = 0;
-	PushConstantIdx = 0;
 }
 
 void vulkan_render_context::
@@ -536,19 +604,16 @@ DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands,
 	vulkan_buffer* IndexAttachment = static_cast<vulkan_buffer*>(IndexBuffer);
 	vulkan_buffer* IndirectCommandsAttachment = static_cast<vulkan_buffer*>(IndirectCommands);
 
-	vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
+	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 0, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
 	SetIndices.clear();
-	GlobalOffset = 0;
-	PushConstantIdx = 0;
 }
 
 void vulkan_render_context::
 SetConstant(void* Data, size_t Size)
 {
-	vkCmdPushConstants(*PipelineContext->CommandList, InputSignature->Handle, InputSignature->PushConstants[PushConstantIdx++].stageFlags, GlobalOffset, Size, Data);
-	GlobalOffset += Size;
+	vkCmdPushConstants(*PipelineContext->CommandList, RootSignatureHandle, ConstantRange.stageFlags, 0, Size, Data);
 }
 
 // NOTE: If with counter, then it is using 2 bindings instead of 1
@@ -557,7 +622,7 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 	BufferInfo->buffer = Attachment->Handle;
@@ -567,15 +632,17 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	VkWriteDescriptorSet CounterDescriptorSet = {};
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
@@ -588,15 +655,17 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 		CounterBufferInfo->range  = sizeof(u32);
 
 		CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		if(!IsPush)
-			CounterDescriptorSet.dstSet = InputSignature->Sets[Set];
+		//if(!IsPush)
+			CounterDescriptorSet.dstSet = Sets[Set];
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
+#if 0
 		if(IsPush)
 			PushDescriptorBindings.push_back(CounterDescriptorSet);
 		else
+#endif
 			StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
 
@@ -609,7 +678,7 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 	BufferInfo->buffer = Attachment->Handle;
@@ -619,15 +688,17 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	VkWriteDescriptorSet CounterDescriptorSet = {};
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
@@ -640,15 +711,17 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 		CounterBufferInfo->range  = sizeof(u32);
 
 		CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		if(!IsPush)
-			CounterDescriptorSet.dstSet = InputSignature->Sets[Set];
+		//if(!IsPush)
+			CounterDescriptorSet.dstSet = Sets[Set];
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
+#if 0
 		if(IsPush)
 			PushDescriptorBindings.push_back(CounterDescriptorSet);
 		else
+#endif
 			StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
 
@@ -665,7 +738,7 @@ SetSampledImage(const std::vector<texture*>& Textures, image_barrier_state State
 		SetIndices[Set] += 1;
 		return;
 	}
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
@@ -677,16 +750,18 @@ SetSampledImage(const std::vector<texture*>& Textures, image_barrier_state State
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
@@ -701,7 +776,7 @@ SetStorageImage(const std::vector<texture*>& Textures, image_barrier_state State
 		SetIndices[Set] += 1;
 		return;
 	}
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
@@ -713,15 +788,17 @@ SetStorageImage(const std::vector<texture*>& Textures, image_barrier_state State
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
@@ -736,7 +813,7 @@ SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State
 		SetIndices[Set] += 1;
 		return;
 	}
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
@@ -748,15 +825,17 @@ SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
@@ -764,20 +843,94 @@ SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State
 }
 
 vulkan_compute_context::
-vulkan_compute_context(renderer_backend* Backend, shader_input* Signature, const std::string& Shader, const std::vector<shader_define>& ShaderDefines) :
-	InputSignature(static_cast<vulkan_shader_input*>(Signature))
+vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, const std::vector<shader_define>& ShaderDefines)
 {
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	Device = Gfx->Device;
 
+	std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>> ShaderRootLayout;
+	std::map<VkDescriptorType, u32> DescriptorTypeCounts;
+
 	ComputeStage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
 	ComputeStage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
-	ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, ShaderDefines);
+	ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
 	ComputeStage.pName  = "main";
+
+	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
+	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
+	{
+		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
+		{
+			Parameters[LayoutIdx].push_back(ShaderRootLayout[LayoutIdx][BindingIdx]);
+		}
+	}
+
+	// TODO: Check if binding partially bound
+	Layouts.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
+	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
+	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)
+	{
+		//VkDescriptorSetLayoutBindingFlagsCreateInfoEXT BindingFlagsCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT};
+		//BindingFlagsCreateInfo.bindingCount = static_cast<uint32_t>(ParametersFlags[Space].size());
+		//BindingFlagsCreateInfo.pBindingFlags = ParametersFlags[Space].data();
+
+		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
+		//DescriptorSetLayoutCreateInfo.flags = IsPush * VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
+		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
+		//DescriptorSetLayoutCreateInfo.pNext = &BindingFlagsCreateInfo;
+
+		VkDescriptorSetLayout DescriptorSetLayout;
+		VK_CHECK(vkCreateDescriptorSetLayout(Device, &DescriptorSetLayoutCreateInfo, 0, &DescriptorSetLayout));
+		Layouts[SpaceIdx] = DescriptorSetLayout;
+	}
+
+
+	std::vector<VkDescriptorPoolSize> PoolSizes;
+	for (const auto& DescriptorType : DescriptorTypeCounts) {
+		VkDescriptorPoolSize PoolSize = {};
+		PoolSize.type = DescriptorType.first;
+		PoolSize.descriptorCount = DescriptorType.second;
+		PoolSizes.push_back(PoolSize);
+	}
+
+	VkDescriptorPoolCreateInfo PoolInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+	PoolInfo.poolSizeCount = PoolSizes.size();
+	PoolInfo.pPoolSizes = PoolSizes.data();
+	PoolInfo.maxSets = ShaderRootLayout.size();
+
+	VK_CHECK(vkCreateDescriptorPool(Device, &PoolInfo, nullptr, &Pool));
+
+	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
+	{
+		//if(IsSetPush[LayoutIdx]) continue;
+		VkDescriptorSetAllocateInfo AllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+		AllocInfo.descriptorPool = Pool;
+		AllocInfo.descriptorSetCount = 1;
+		AllocInfo.pSetLayouts = &Layouts[LayoutIdx];
+
+		VkDescriptorSet DescriptorSet;
+		VK_CHECK(vkAllocateDescriptorSets(Device, &AllocInfo, &DescriptorSet));
+		Sets[LayoutIdx] = DescriptorSet;
+	}
+
+	VkPipelineLayoutCreateInfo RootSignatureCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+	RootSignatureCreateInfo.pSetLayouts = Layouts.data();
+	RootSignatureCreateInfo.setLayoutCount = Layouts.size();
+
+	if(HavePushConstant)
+	{
+		ConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		ConstantRange.size       = PushConstantSize;
+		RootSignatureCreateInfo.pushConstantRangeCount = 1;
+		RootSignatureCreateInfo.pPushConstantRanges    = &ConstantRange;
+	}
+
+	VK_CHECK(vkCreatePipelineLayout(Device, &RootSignatureCreateInfo, nullptr, &RootSignatureHandle));
 
 	VkComputePipelineCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
 	CreateInfo.stage  = ComputeStage;
-	CreateInfo.layout = InputSignature->Handle;
+	CreateInfo.layout = RootSignatureHandle;
 
 	VK_CHECK(vkCreateComputePipelines(Device, nullptr, 1, &CreateInfo, 0, &Pipeline));
 }
@@ -796,22 +949,19 @@ Begin(global_pipeline_context* GlobalPipelineContext)
 	PipelineContext = static_cast<vulkan_global_pipeline_context*>(GlobalPipelineContext);
 
 	std::vector<VkDescriptorSet> SetsToBind;
-	for(const VkDescriptorSet& DescriptorSet : InputSignature->Sets)
+	for(const VkDescriptorSet& DescriptorSet : Sets)
 	{
 		if(DescriptorSet) SetsToBind.push_back(DescriptorSet);
 	}
 
 	vkCmdBindPipeline(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline);
 	if(SetsToBind.size())
-		vkCmdBindDescriptorSets(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, InputSignature->Handle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
+		vkCmdBindDescriptorSets(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, RootSignatureHandle, 0, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
 }
 
 void vulkan_compute_context::
 End()
 {
-	GlobalOffset = 0;
-	PushConstantIdx = 0;
-
 	SetIndices.clear();
 	PushDescriptorBindings.clear();
 	StaticDescriptorBindings.clear();
@@ -828,18 +978,15 @@ StaticUpdate()
 void vulkan_compute_context::
 Execute(u32 X, u32 Y, u32 Z)
 {
-	vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
+	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 	vkCmdDispatch(*PipelineContext->CommandList, (X + 31) / 32, (Y + 31) / 32, (Z + 31) / 32);
 	SetIndices.clear();
-	GlobalOffset = 0;
-	PushConstantIdx = 0;
 }
 
 void vulkan_compute_context::
 SetConstant(void* Data, size_t Size)
 {
-	vkCmdPushConstants(*PipelineContext->CommandList, InputSignature->Handle, InputSignature->PushConstants[PushConstantIdx++].stageFlags, GlobalOffset, Size, Data);
-	GlobalOffset += Size;
+	vkCmdPushConstants(*PipelineContext->CommandList, RootSignatureHandle, ConstantRange.stageFlags, 0, Size, Data);
 }
 
 void vulkan_compute_context::
@@ -847,7 +994,7 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 	BufferInfo->buffer = Attachment->Handle;
@@ -857,15 +1004,17 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	VkWriteDescriptorSet CounterDescriptorSet = {};
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
@@ -878,15 +1027,17 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 		CounterBufferInfo->range  = sizeof(u32);
 
 		CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		if(!IsPush)
-			CounterDescriptorSet.dstSet = InputSignature->Sets[Set];
+		//if(!IsPush)
+			CounterDescriptorSet.dstSet = Sets[Set];
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
+#if 0
 		if(IsPush)
 			PushDescriptorBindings.push_back(CounterDescriptorSet);
 		else
+#endif
 			StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
 
@@ -899,7 +1050,7 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 	BufferInfo->buffer = Attachment->Handle;
@@ -909,15 +1060,17 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	VkWriteDescriptorSet CounterDescriptorSet = {};
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
@@ -930,15 +1083,17 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 		CounterBufferInfo->range  = sizeof(u32);
 
 		CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		if(!IsPush)
-			CounterDescriptorSet.dstSet = InputSignature->Sets[Set];
+		//if(!IsPush)
+			CounterDescriptorSet.dstSet = Sets[Set];
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
+#if 0
 		if(IsPush)
 			PushDescriptorBindings.push_back(CounterDescriptorSet);
 		else
+#endif
 			StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
 
@@ -955,7 +1110,7 @@ SetSampledImage(const std::vector<texture*>& Textures, image_barrier_state State
 		SetIndices[Set] += 1;
 		return;
 	}
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
@@ -967,15 +1122,17 @@ SetSampledImage(const std::vector<texture*>& Textures, image_barrier_state State
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
@@ -990,7 +1147,7 @@ SetStorageImage(const std::vector<texture*>& Textures, image_barrier_state State
 		SetIndices[Set] += 1;
 		return;
 	}
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
@@ -1002,15 +1159,17 @@ SetStorageImage(const std::vector<texture*>& Textures, image_barrier_state State
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
@@ -1025,7 +1184,7 @@ SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State
 		SetIndices[Set] += 1;
 		return;
 	}
-	bool IsPush = InputSignature->IsSetPush.at(Set);
+	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
@@ -1037,15 +1196,17 @@ SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!IsPush)
-		DescriptorSet.dstSet = InputSignature->Sets[Set];
+	//if(!IsPush)
+		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
+#if 0
 	if(IsPush)
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
+#endif
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 

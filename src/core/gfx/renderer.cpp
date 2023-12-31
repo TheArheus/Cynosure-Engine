@@ -19,7 +19,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_CopySrc;
 	GfxColorTarget = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TextureInputData.Format    = image_format::D32_SFLOAT;
-	TextureInputData.Usage     = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	TextureInputData.Usage     = image_flags::TF_DepthTexture | image_flags::TF_Sampled;
 	GfxDepthTarget = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	DebugCameraViewDepthTarget = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 
@@ -155,7 +155,6 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
-	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc;
 	TextureInputData.Format    = image_format::R16G16B16A16_SFLOAT;
 	GBuffer[0] = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Vertex Positions
@@ -168,168 +167,41 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	GBuffer[4] = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular
 	AmbientOcclusionData = PushTexture(Backend->Width, Backend->Height, 1, TextureInputData);
 
-	shader_input* GfxRootSignature = CreateShaderInput();
-	GfxRootSignature->PushStorageBuffer()->				// World Update Buffer
-					 PushStorageBuffer()->				// Vertex Data
-					 PushStorageBuffer()->				// Mesh Draw Commands
-					 PushStorageBuffer()->				// Mesh Materials
-					 // TODO: Update ammount of image samplers in the frame maybe???
-					 PushImageSampler(1024, 1, false, shader_stage::fragment)->		// Diffuse Texture
-					 PushImageSampler(1024, 1, false, shader_stage::fragment)->		// Normal Map Texture
-					 PushImageSampler(1024, 1, false, shader_stage::fragment)->		// Specular Map Texture
-					 PushImageSampler(1024, 1, false, shader_stage::fragment)->		// Height Map Texture
-					 Build(Backend, 0, true)->
-					 Build(Backend, 1)->
-					 BuildAll(Backend);
-
-	shader_input* ColorPassRootSignature = CreateShaderInput();
-	ColorPassRootSignature->PushStorageBuffer()->					// World Update Buffer
-						   PushUniformBuffer()->					// Array of Light Sources
-						   PushStorageBuffer()->					// Poisson Disk
-						   PushImageSampler()->						// Random Rotations
-						   PushImageSampler(GBUFFER_COUNT)->		// G-Buffer Vertex Position Data
-																	// G-Buffer Vertex Normal Data
-																	// G-Buffer Fragment Normal Data
-																	// G-Buffer Diffuse Data
-																	// G-Buffer Specular Data
-						   PushImageSampler()->						// Ambient Occlusion Data
-						   PushImageSampler(LIGHT_SOURCES_MAX_COUNT, 1, true)->	// Spot Directional Light Shadow Maps
-						   PushImageSampler(LIGHT_SOURCES_MAX_COUNT, 1, true)->	// Point Light Shadow Maps
-						   PushStorageImage()->						// Color Target Texture
-						   PushImageSampler(DEPTH_CASCADES_COUNT)->	// Shadow Cascades
-						   Build(Backend, 0, true)->
-						   Build(Backend, 1)->
-						   BuildAll(Backend);
-
-	shader_input* AmbientOcclusionRootSignature = CreateShaderInput();
-	AmbientOcclusionRootSignature->PushStorageBuffer()->				// World Update Buffer
-								  PushStorageBuffer()->					// Poisson Disk
-								  PushImageSampler()->					// Random Rotations
-								  PushImageSampler(GBUFFER_COUNT)->		// G-Buffer Vertex Position Data
-																		// G-Buffer Vertex Normal Data
-																		// G-Buffer Fragment Normal Data
-																		// G-Buffer Diffuse Data
-																		// G-Buffer Specular Data
-								  PushStorageImage()->					// Ambient Occlusion Target Texture
-								  Build(Backend, 0, true)->
-								  BuildAll(Backend);
-
-	shader_input* ShadowSignature = CreateShaderInput();
-	ShadowSignature->PushStorageBuffer(1, 0, false, shader_stage::vertex)->
-					PushStorageBuffer(1, 0, false, shader_stage::vertex)->
-					PushConstant(sizeof(mat4))->
-					Build(Backend, 0, true)->
-					BuildAll(Backend);
-
-	shader_input* PointShadowSignature = CreateShaderInput();
-	PointShadowSignature->PushStorageBuffer(1, 0, false, shader_stage::vertex)->
-						 PushStorageBuffer(1, 0, false, shader_stage::vertex)->
-						 PushConstant(sizeof(point_shadow_input))->
-						 Build(Backend, 0, true)->
-						 BuildAll(Backend);
-
-
-	shader_input* CmpIndirectFrustRootSignature = CreateShaderInput();
-	CmpIndirectFrustRootSignature->
-					 PushStorageBuffer()->				// Mesh Common Culling Input Buffer
-					 PushStorageBuffer()->				// Mesh Offsets
-					 PushStorageBuffer()->				// Draw Command Input
-					 PushStorageBuffer()->				// Draw Command Visibility
-					 PushStorageBuffer()->				// Indirect Draw Indexed Command
-					 PushStorageBuffer()->				// Indirect Draw Indexed Command Counter
-					 PushStorageBuffer()->				// Mesh Draw Command Data
-					 Build(Backend, 0, true)->
-					 BuildAll(Backend);
-
-	shader_input* ShadowComputeRootSignature = CreateShaderInput();
-	ShadowComputeRootSignature->PushStorageBuffer()->	// Mesh Common Culling Input
-							  PushStorageBuffer()->		// Mesh Offsets
-							  PushStorageBuffer()->		// Draw Command Input
-							  PushStorageBuffer()->		// Draw Command Visibility
-							  PushStorageBuffer()->		// Indirect Draw Indexed Command
-							  PushStorageBuffer()->		// Indirect Draw Indexed Command Counter
-							  PushStorageBuffer()->		// Draw Commands
-							  Build(Backend, 0, true)->
-							  BuildAll(Backend);
-
-	shader_input* CmpIndirectOcclRootSignature = CreateShaderInput();
-	CmpIndirectOcclRootSignature->
-					 PushStorageBuffer()->				// Mesh Common Culling Input Buffer
-					 PushStorageBuffer()->				// Mesh Offsets
-					 PushStorageBuffer()->				// Draw Command Input
-					 PushStorageBuffer()->				// Draw Command Visibility
-					 PushImageSampler()->				// Hierarchy-Z depth texture
-					 Build(Backend, 0, true)->
-					 BuildAll(Backend);
-
-	shader_input* CmpReduceRootSignature = CreateShaderInput();
-	CmpReduceRootSignature->PushImageSampler(1, 0, false, shader_stage::compute)->	// Input  Texture
-						   PushStorageImage(1, 0, false, shader_stage::compute)->	// Output Texture
-						   PushConstant(sizeof(vec2), shader_stage::compute)->		// Output Texture Size
-						   Build(Backend, 0, true)->
-						   BuildAll(Backend);
-
-	shader_input* BlurRootSignature = CreateShaderInput();
-	BlurRootSignature->PushImageSampler(1, 0, false, shader_stage::compute)->		// Input  Texture
-					  PushStorageImage(1, 0, false, shader_stage::compute)->		// Output Texture
-					  PushConstant(sizeof(vec3), shader_stage::compute)->			// Texture Size, Conv Size 
-					  Build(Backend, 0, true)->
-					  BuildAll(Backend);
-
-	shader_input* DebugRootSignature = CreateShaderInput();
-	DebugRootSignature->PushStorageBuffer()->	// Global World Update 
-					   PushStorageBuffer()->	// Vertex Data
-					   PushStorageBuffer()->	// Mesh Draw Commands
-					   PushStorageBuffer()->	// Mesh Materials
-					   Build(Backend, 0, true)->
-					   BuildAll(Backend);
-
-	shader_input* DebugComputeRootSignature = CreateShaderInput();
-	DebugComputeRootSignature->PushStorageBuffer()->	// Mesh Common Culling Input
-							  PushStorageBuffer()->		// Mesh Offsets
-							  PushStorageBuffer()->		// Draw Command Input
-							  PushStorageBuffer()->		// Draw Command Visibility
-							  PushStorageBuffer()->		// Indirect Draw Indexed Command
-							  PushStorageBuffer()->		// Indirect Draw Indexed Command Counter
-							  PushStorageBuffer()->		// Draw Commands
-							  Build(Backend, 0, true)->
-							  BuildAll(Backend);
-
 	// TODO: Better context creation API
 	utils::render_context::input_data RendererInputData = {};
 	RendererInputData.UseColor	  = true;
 	RendererInputData.UseDepth	  = true;
 	RendererInputData.UseBackFace = true;
 	RendererInputData.UseOutline  = true;
-	GfxContext = CreateRenderContext(GfxRootSignature, {"..\\shaders\\mesh.vert.glsl", "..\\shaders\\mesh.frag.glsl"}, GBuffer, {true, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
-	DebugContext = CreateRenderContext(DebugRootSignature, {"..\\shaders\\mesh.dbg.vert.glsl", "..\\shaders\\mesh.dbg.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	DebugComputeContext = CreateComputeContext(DebugComputeRootSignature, "..\\shaders\\mesh.dbg.comp.glsl");
+	GfxContext = CreateRenderContext({"..\\shaders\\mesh.vert.glsl", "..\\shaders\\mesh.frag.glsl"}, GBuffer, {true, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
+	DebugContext = CreateRenderContext({"..\\shaders\\mesh.dbg.vert.glsl", "..\\shaders\\mesh.dbg.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	DebugComputeContext = CreateComputeContext("..\\shaders\\mesh.dbg.comp.glsl");
 
 	RendererInputData = {};
 	RendererInputData.UseDepth = true;
 	RendererInputData.UseBackFace  = true;
-	CascadeShadowContext = CreateRenderContext(ShadowSignature, {"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	ShadowContext = CreateRenderContext(ShadowSignature, {"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	CascadeShadowContext = CreateRenderContext({"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	ShadowContext = CreateRenderContext({"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 
 	RendererInputData.UseMultiview = true;
 	for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
 	{
 		RendererInputData.ViewMask = 1 << CubeMapFaceIdx;
-		CubeMapShadowContexts.push_back(CreateRenderContext(PointShadowSignature, {"..\\shaders\\mesh.pnt.sdw.vert.glsl", "..\\shaders\\mesh.pnt.sdw.frag.glsl"}, {}, RendererInputData));
+		CubeMapShadowContexts.push_back(CreateRenderContext({"..\\shaders\\mesh.pnt.sdw.vert.glsl", "..\\shaders\\mesh.pnt.sdw.frag.glsl"}, {}, RendererInputData));
 	}
 
 	RendererInputData.UseDepth	   = true;
 	RendererInputData.UseMultiview = false;
 	RendererInputData.ViewMask	   = 0;
-	DebugCameraViewContext = CreateRenderContext(ShadowSignature, {"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData);
+	DebugCameraViewContext = CreateRenderContext({"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData);
 
-	ColorPassContext = CreateComputeContext(ColorPassRootSignature, "..\\shaders\\color_pass.comp.glsl", {{"GBUFFER_COUNT", std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	AmbientOcclusionContext = CreateComputeContext(AmbientOcclusionRootSignature, "..\\shaders\\screen_space_ambient_occlusion.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	ShadowComputeContext = CreateComputeContext(ShadowComputeRootSignature, "..\\shaders\\mesh.dbg.comp.glsl");
-	FrustCullingContext  = CreateComputeContext(CmpIndirectFrustRootSignature, "..\\shaders\\indirect_cull_frust.comp.glsl");
-	OcclCullingContext   = CreateComputeContext(CmpIndirectOcclRootSignature, "..\\shaders\\indirect_cull_occl.comp.glsl");
-	DepthReduceContext   = CreateComputeContext(CmpReduceRootSignature, "..\\shaders\\depth_reduce.comp.glsl");
-	BlurContext = CreateComputeContext(BlurRootSignature, "..\\shaders\\blur.comp.glsl");
+	ColorPassContext = CreateComputeContext("..\\shaders\\color_pass.comp.glsl", {{"GBUFFER_COUNT", std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	AmbientOcclusionContext = CreateComputeContext("..\\shaders\\screen_space_ambient_occlusion.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	ShadowComputeContext = CreateComputeContext("..\\shaders\\mesh.dbg.comp.glsl");
+	FrustCullingContext  = CreateComputeContext("..\\shaders\\indirect_cull_frust.comp.glsl");
+	OcclCullingContext   = CreateComputeContext("..\\shaders\\indirect_cull_occl.comp.glsl");
+	DepthReduceContext   = CreateComputeContext("..\\shaders\\depth_reduce.comp.glsl");
+	BlurContext = CreateComputeContext("..\\shaders\\blur.comp.glsl");
 }
 
 global_graphics_context::

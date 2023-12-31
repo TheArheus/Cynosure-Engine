@@ -11,13 +11,16 @@ vulkan_backend(window* Window)
 	AppInfo.pApplicationName = "3D Renderer";
 	AppInfo.apiVersion = HighestUsedVulkanVersion;
 
-	std::vector<const char*> Layers = 
+	std::vector<const char*> InstanceLayers;
+	std::vector<const char*> RequiredInstanceLayers = 
 	{
 #if _DEBUG
 		"VK_LAYER_KHRONOS_validation"
 #endif
 	};
-	std::vector<const char*> Extensions = 
+
+	std::vector<const char*> InstanceExtensions;
+	std::vector<const char*> RequiredInstanceExtensions = 
 	{
 #if _WIN32
 		VK_KHR_SURFACE_EXTENSION_NAME,
@@ -28,10 +31,10 @@ vulkan_backend(window* Window)
 
 #if __linux__
 	u32 RequiredInstanceExtensionCount;
-	const char** RequiredExtensions = glfwGetRequiredInstanceExtensions(&RequiredInstanceExtensionCount);
+	const char** RequiredGLFWExtensions = glfwGetRequiredInstanceExtensions(&RequiredInstanceExtensionCount);
 	for(u32 ExtIdx = 0; ExtIdx < RequiredInstanceExtensionCount; ++ExtIdx)
 	{
-		Extensions.push_back(RequiredExtensions[ExtIdx]);
+		InstanceExtensions.push_back(RequiredGLFWExtensions[ExtIdx]);
 	}
 #endif
 
@@ -45,13 +48,14 @@ vulkan_backend(window* Window)
 	std::vector<VkExtensionProperties> AvailableInstanceExtensions(AvailableInstanceExtensionCount);
 	vkEnumerateInstanceExtensionProperties(nullptr, &AvailableInstanceExtensionCount, AvailableInstanceExtensions.data());
 
-	for(const char* Required : Layers)
+	for(const char* Required : RequiredInstanceLayers)
 	{
 		bool Found = false;
 		for(const auto& Available : AvailableInstanceLayers)
 		{
 			if(strcmp(Required, Available.layerName) == 0)
 			{
+				InstanceLayers.push_back(Required);
 				Found = true;
 				break;
 			}
@@ -67,13 +71,14 @@ vulkan_backend(window* Window)
 		}
 	}
 
-	for(const char* Required : Extensions)
+	for(const char* Required : RequiredInstanceExtensions)
 	{
 		bool Found = false;
 		for(const auto& Available : AvailableInstanceExtensions)
 		{
 			if(strcmp(Required, Available.extensionName) == 0)
 			{
+				InstanceExtensions.push_back(Required);
 				Found = true;
 				break;
 			}
@@ -92,10 +97,10 @@ vulkan_backend(window* Window)
 	VkInstanceCreateInfo InstanceCreateInfo = {};
 	InstanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	InstanceCreateInfo.pApplicationInfo = &AppInfo;
-	InstanceCreateInfo.enabledLayerCount = (u32)Layers.size();
-	InstanceCreateInfo.ppEnabledLayerNames = Layers.data();
-	InstanceCreateInfo.enabledExtensionCount = (u32)Extensions.size();
-	InstanceCreateInfo.ppEnabledExtensionNames = Extensions.data();
+	InstanceCreateInfo.enabledLayerCount = (u32)InstanceLayers.size();
+	InstanceCreateInfo.ppEnabledLayerNames = InstanceLayers.data();
+	InstanceCreateInfo.enabledExtensionCount = (u32)InstanceExtensions.size();
+	InstanceCreateInfo.ppEnabledExtensionNames = InstanceExtensions.data();
 
 	VK_CHECK(vkCreateInstance(&InstanceCreateInfo, nullptr, &Instance));
 	volkLoadInstance(Instance);
@@ -125,11 +130,13 @@ vulkan_backend(window* Window)
 	if(SampleCount & VK_SAMPLE_COUNT_8_BIT)  MsaaQuality = VK_SAMPLE_COUNT_8_BIT;
 	if(SampleCount & VK_SAMPLE_COUNT_2_BIT)  MsaaQuality = VK_SAMPLE_COUNT_2_BIT;
 
-	std::vector<const char*> DeviceLayers = 
+	std::vector<const char*> DeviceLayers;
+	std::vector<const char*> RequiredDeviceLayers = 
 	{
 	};
 
-	std::vector<const char*> DeviceExtensions = 
+	std::vector<const char*> DeviceExtensions;
+	std::vector<const char*> RequiredDeviceExtensions = 
 	{
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
@@ -148,13 +155,16 @@ vulkan_backend(window* Window)
 	std::vector<VkExtensionProperties> AvailableDeviceExtensions(DeviceExtensionsCount);
 	vkEnumerateDeviceExtensionProperties(PhysicalDevice, nullptr, &DeviceExtensionsCount, AvailableDeviceExtensions.data());
 
-	for(const char* Required : DeviceExtensions)
+	for(const char* Required : RequiredDeviceExtensions)
 	{
 		bool Found = false;
 		for(const VkExtensionProperties& Available : AvailableDeviceExtensions)
 		{
 			if(strcmp(Required, Available.extensionName) == 0)
 			{
+				if(strcmp(Required, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME) == 0) IsPushDescriptorsFeatureEnabled = true;
+
+				DeviceExtensions.push_back(Required);
 				Found = true;
 				break;
 			}
@@ -212,13 +222,13 @@ vulkan_backend(window* Window)
 	Features12.pNext = &Features13;
 
 	vkGetPhysicalDeviceFeatures2(PhysicalDevice, &Features2);
-	vkCreateDevice(PhysicalDevice, &DeviceCreateInfo, nullptr, &Device);
+	VK_CHECK(vkCreateDevice(PhysicalDevice, &DeviceCreateInfo, nullptr, &Device), true);
 
 #if _WIN32
 	VkWin32SurfaceCreateInfoKHR SurfaceCreateInfo = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
 	SurfaceCreateInfo.hinstance = Window->WindowClass.Inst;
 	SurfaceCreateInfo.hwnd = Window->Handle;
-	vkCreateWin32SurfaceKHR(Instance, &SurfaceCreateInfo, 0, &Surface);
+	VK_CHECK(vkCreateWin32SurfaceKHR(Instance, &SurfaceCreateInfo, 0, &Surface));
 #else
 	glfwCreateWindowSurface(Instance, Window->Handle, nullptr, &Surface);
 #endif
@@ -283,6 +293,7 @@ vulkan_backend(window* Window)
 
 	VK_CHECK(vkCreateDescriptorPool(Device, &ImGuiPoolInfo, nullptr, &ImGuiPool));
 
+#if 0
 	ImGui_ImplVulkan_InitInfo InitInfo = {};
 	InitInfo.Instance = Instance;
 	InitInfo.PhysicalDevice = PhysicalDevice;
@@ -298,6 +309,7 @@ vulkan_backend(window* Window)
 	ImGui_ImplVulkan_Init(&InitInfo, VK_NULL_HANDLE);
 
 	ImGui_ImplVulkan_CreateFontsTexture();
+#endif
 }
 
 void vulkan_backend::
@@ -311,8 +323,226 @@ DestroyObject()
 	vkDestroyInstance(Instance, nullptr);
 }
 
+#if 0
+#endif
+
+struct op_info
+{
+	u32 Set;
+	u32 Binding;
+
+	u32 OpCode;
+	std::vector<u32> TypeId;
+	u32 SizeId;
+	u32 StorageClass;
+	u32 Constant;
+
+	u32 Width;
+
+	bool IsDescriptor;
+	bool IsPushConstant;
+	bool IsSigned;
+};
+
+void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std::set<u32>& DescriptorIndices)
+{
+	assert(Binary[0] == SpvMagicNumber);
+
+	Info.resize(Binary[3]);
+
+	u32 Offset = 5;
+	u32 OpCode = 0;
+	u32 OpSize = 0;
+	u32 ResultId = 0;
+	while(Offset != Binary.size())
+	{
+		OpCode = static_cast<u16>(Binary[Offset] & 0xffff);
+		OpSize = static_cast<u16>(Binary[Offset] >> 16u);
+
+		switch(OpCode)
+		{
+			case SpvOpDecorate:
+			{
+				ResultId = Binary[Offset + 1];
+
+				Info[ResultId].OpCode = OpCode;
+
+				switch(Binary[Offset + 2])
+				{
+					case SpvDecorationBinding:
+					{
+						Info[ResultId].Binding = Binary[Offset + 3];
+						Info[ResultId].IsDescriptor = true;
+						DescriptorIndices.insert(ResultId);
+					} break;
+
+					case SpvDecorationDescriptorSet:
+					{
+						Info[ResultId].Set = Binary[Offset + 3];
+						Info[ResultId].IsDescriptor = true;
+						DescriptorIndices.insert(ResultId);
+					} break;
+				}
+
+			} break;
+
+			case SpvOpVariable:
+			{
+				u32 TypeId      = Binary[Offset + 1];
+				    ResultId    = Binary[Offset + 2];
+				u32 StorageType = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].StorageClass = StorageType;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypeVoid:
+			{
+				    ResultId = Binary[Offset + 1];
+				Info[ResultId].OpCode = OpCode;
+			} break;
+			case SpvOpTypeBool:
+			{
+				    ResultId = Binary[Offset + 1];
+				Info[ResultId].OpCode = OpCode;
+			} break;
+			case SpvOpTypeInt:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 Width    = Binary[Offset + 2];
+				u32 IsSigned = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Width  = Width;
+				Info[ResultId].IsSigned = IsSigned;
+			} break;
+			case SpvOpTypeFloat:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 Width    = Binary[Offset + 2];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Width  = Width;
+			} break;
+			case SpvOpTypeVector:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				u32 Count    = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Width  = Count;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypeMatrix:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				u32 Count    = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Width  = Count;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypeStruct:
+			{
+				    ResultId  = Binary[Offset + 1];
+				u32 TypeCount = OpSize - 2;
+
+				for(u32 TypeIdIdx = 0; TypeIdIdx < TypeCount; ++TypeIdIdx)
+					Info[ResultId].TypeId.push_back(Binary[Offset + 2 + TypeIdIdx]);
+
+				Info[ResultId].OpCode = OpCode;
+			} break;
+			case SpvOpTypeImage:
+			case SpvOpTypeSampler:
+			case SpvOpTypeSampledImage:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypePointer:
+			{
+				    ResultId    = Binary[Offset + 1];
+				u32 StorageType = Binary[Offset + 2];
+				u32 TypeId      = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].TypeId.push_back(TypeId);
+				Info[ResultId].StorageClass = StorageType;
+			} break;
+			case SpvOpTypeArray:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				u32 SizeId   = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].SizeId = SizeId;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypeRuntimeArray:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].SizeId = ~0u;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpConstant:
+			{
+				u32 TypeId   = Binary[Offset + 1];
+				    ResultId = Binary[Offset + 2];
+				u32 Constant = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Constant = Constant;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+		}
+
+		assert(Offset < Binary.size());
+		Offset += OpSize;
+	}
+}
+
+VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
+{
+	switch(OpCode)
+	{
+		case SpvOpTypeStruct:
+		{
+			if(StorageClass == SpvStorageClassUniform || StorageClass == SpvStorageClassUniformConstant)
+			{
+				return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			}
+			else if(StorageClass == SpvStorageClassStorageBuffer)
+			{
+				return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			}
+		} break;
+		case SpvOpTypeImage:
+		{
+			return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		} break;
+		case SpvOpTypeSampler:
+		{
+			return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+			//return VK_DESCRIPTOR_TYPE_SAMPLER;
+		} break;
+		case SpvOpTypeSampledImage:
+		{
+			return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		} break;
+	}
+}
+
+// TODO: Parse for push constant sizes
+// TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
 VkShaderModule vulkan_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, const std::vector<shader_define>& ShaderDefines)
+LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines)
 {
 	VkShaderModule Result = 0;
 
@@ -335,102 +565,247 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, const std::vector<sh
 			ShaderCode = ShaderCode.substr(0, LineEnd) + "\n" + ShaderDefinesResult + ShaderCode.substr(LineEnd);
 		}
 
-		glslang_input_t Input = {};
-		Input.language = GLSLANG_SOURCE_GLSL;
-		Input.client = GLSLANG_CLIENT_VULKAN;
-		Input.target_language = GLSLANG_TARGET_SPV;
-		Input.target_language_version = GLSLANG_TARGET_SPV_1_4;
-		Input.code = ShaderCode.c_str();
-		Input.default_version = 450;
-		Input.default_profile = GLSLANG_NO_PROFILE;
-		Input.force_default_version_and_profile = false;
-		Input.forward_compatible = false;
-		Input.messages = GLSLANG_MSG_DEFAULT_BIT;
-		Input.resource = &DefaultBuiltInResource;
+		glslang::InitializeProcess();
 
+		EShLanguage LanguageStage = EShLangVertex;
+		glslang::EShTargetClientVersion ClientVersion = glslang::EShTargetVulkan_1_0;
+		glslang::EShTargetLanguageVersion TargetLanguageVersion = glslang::EShTargetSpv_1_0;
 		switch (ShaderType)
 		{
-			case shader_stage::vertex:
-				Input.stage = glslang_stage_t::GLSLANG_STAGE_VERTEX;
-				break;
 			case shader_stage::tessellation_control:
-				Input.stage = glslang_stage_t::GLSLANG_STAGE_TESSCONTROL;
+				LanguageStage = EShLangTessControl;
 				break;
 			case shader_stage::tessellation_eval:
-				Input.stage = glslang_stage_t::GLSLANG_STAGE_TESSEVALUATION;
+				LanguageStage = EShLangTessEvaluation;
 				break;
 			case shader_stage::geometry:
-				Input.stage = glslang_stage_t::GLSLANG_STAGE_GEOMETRY;
+				LanguageStage = EShLangGeometry;
 				break;
 			case shader_stage::fragment:
-				Input.stage = glslang_stage_t::GLSLANG_STAGE_FRAGMENT;
+				LanguageStage = EShLangFragment;
 				break;
 			case shader_stage::compute:
-				Input.stage = glslang_stage_t::GLSLANG_STAGE_COMPUTE;
+				LanguageStage = EShLangCompute;
 				break;
 		}
 
-		if(HighestUsedVulkanVersion & VK_API_VERSION_1_3)
+		if(HighestUsedVulkanVersion >= VK_API_VERSION_1_3)
 		{
-			Input.client_version = GLSLANG_TARGET_VULKAN_1_3;
+			ClientVersion = glslang::EShTargetVulkan_1_3;
+			TargetLanguageVersion = glslang::EShTargetSpv_1_6;
 		}
-		else if(HighestUsedVulkanVersion & VK_API_VERSION_1_2)
+		else if(HighestUsedVulkanVersion >= VK_API_VERSION_1_2)
 		{
-			Input.client_version = GLSLANG_TARGET_VULKAN_1_2;
+			ClientVersion = glslang::EShTargetVulkan_1_2;
+			TargetLanguageVersion = glslang::EShTargetSpv_1_5;
 		}
-		else if(HighestUsedVulkanVersion & VK_API_VERSION_1_1)
+		else if(HighestUsedVulkanVersion >= VK_API_VERSION_1_1)
 		{
-			Input.client_version = GLSLANG_TARGET_VULKAN_1_1;
+			ClientVersion = glslang::EShTargetVulkan_1_1;
+			TargetLanguageVersion = glslang::EShTargetSpv_1_3;
 		}
 
-		glslang_initialize_process();
+		const char* GlslSource = ShaderCode.c_str();
+		glslang::TShader ShaderModule(LanguageStage);
+		ShaderModule.setStrings(&GlslSource, 1);
 
-		glslang_shader_t* ShaderModule = glslang_shader_create( &Input );
+		ShaderModule.setEnvInput(glslang::EShSourceGlsl, LanguageStage, glslang::EShClientVulkan, 100);
+		ShaderModule.setEnvClient(glslang::EShClientVulkan, ClientVersion);
+		ShaderModule.setEnvTarget(glslang::EshTargetSpv, TargetLanguageVersion);
 
-		if (!glslang_shader_preprocess(ShaderModule, &Input))
+		const char* ShaderStrings[1];
+		ShaderStrings[0] = ShaderCode.c_str();
+		ShaderModule.setStrings(ShaderStrings, 1);
+
+		TBuiltInResource DefaultBuiltInResource = GetDefaultBuiltInResource();
+		if (!ShaderModule.parse(&DefaultBuiltInResource, 100, false, static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgDefault)))
 		{
-			std::cerr << std::string(glslang_shader_get_info_log(ShaderModule)) << std::endl;
-			std::cerr << std::string(glslang_shader_get_info_debug_log(ShaderModule)) << std::endl;
+			std::cerr << ShaderModule.getInfoLog() << std::endl;
+			std::cerr << ShaderModule.getInfoDebugLog() << std::endl;
 			return VK_NULL_HANDLE;
 		}
 
-		if (!glslang_shader_parse(ShaderModule, &Input))
+		glslang::TProgram Program;
+		Program.addShader(&ShaderModule);
+
+		if (!Program.link(static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules)))
 		{
-			std::cerr << std::string(glslang_shader_get_info_log(ShaderModule)) << std::endl;
-			std::cerr << std::string(glslang_shader_get_info_debug_log(ShaderModule)) << std::endl;
+			std::cerr << Program.getInfoLog() << std::endl;
+			std::cerr << Program.getInfoDebugLog() << std::endl;
 			return VK_NULL_HANDLE;
 		}
 
-		glslang_program_t* Program = glslang_program_create();
-		glslang_program_add_shader(Program, ShaderModule);
+		glslang::TIntermediate *Intermediate = Program.getIntermediate(ShaderModule.getStage());
+		glslang::GlslangToSpv(*Intermediate, SpirvCode);
 
-		if (!glslang_program_link(Program, GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT))
-		{
-			std::cerr << std::string(glslang_shader_get_info_log(ShaderModule)) << std::endl;
-			std::cerr << std::string(glslang_shader_get_info_debug_log(ShaderModule)) << std::endl;
-			return VK_NULL_HANDLE;
-		}
+		glslang::FinalizeProcess();
 
-		glslang_program_SPIRV_generate(Program, Input.stage);
-
-		if (glslang_program_SPIRV_get_messages(Program))
-		{
-			printf("%s", glslang_program_SPIRV_get_messages(Program));
-		}
-
-		glslang_shader_delete(ShaderModule);
-
-		glslang_finalize_process();
-
-		const size_t SpirvSize = glslang_program_SPIRV_get_size(Program);
-		SpirvCode.resize(SpirvSize);
-		glslang_program_SPIRV_get(Program, SpirvCode.data());
+		std::vector<op_info> ShaderInfo;
+		std::set<u32> DescriptorIndices;
 
 		VkShaderModuleCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
 		CreateInfo.codeSize = SpirvCode.size() * sizeof(u32);
 		CreateInfo.pCode = SpirvCode.data();
 
 		VK_CHECK(vkCreateShaderModule(Device, &CreateInfo, 0, &Result));
+
+		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices);
+
+		for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
+		{
+			const op_info& Var = ShaderInfo[VariableIdx];
+			// TODO: Better type size calculation
+			if (Var.OpCode == SpvOpVariable && Var.StorageClass == SpvStorageClassPushConstant)
+			{
+				const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
+
+				HavePushConstant = true;
+				PushConstantSize = 0;
+
+				u32 NewSize = 0;
+				if(VariableType.OpCode == SpvOpTypePointer)
+				{
+					const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
+
+					switch(PointerType.OpCode)
+					{
+					case SpvOpTypeStruct:
+					{
+						for(u32 TypeIdIdx = 0; TypeIdIdx < PointerType.TypeId.size(); TypeIdIdx++)
+						{
+							const op_info& StructType = ShaderInfo[PointerType.TypeId[TypeIdIdx]];
+
+							switch(StructType.OpCode)
+							{
+							case SpvOpTypeArray:
+							{
+								const op_info& ArrayInfo = ShaderInfo[StructType.TypeId[0]];
+								const op_info& SizeInfo  = ShaderInfo[StructType.SizeId];
+								switch(ArrayInfo.OpCode)
+								{
+								case SpvOpTypeMatrix:
+								{
+									NewSize = ArrayInfo.Width;
+									const op_info& MatrixType = ShaderInfo[ArrayInfo.TypeId[0]];
+									const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
+									if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
+									{
+										NewSize *= VectorType.Width / 8;
+									}
+								} break;
+								case SpvOpTypeVector:
+								{
+									NewSize = ArrayInfo.Width;
+									const op_info& VectorType = ShaderInfo[ArrayInfo.TypeId[0]];
+									if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
+									{
+										NewSize *= VectorType.Width / 8;
+									}
+								} break;
+								case SpvOpTypeInt:
+								case SpvOpTypeFloat:
+								{
+									NewSize = ArrayInfo.Width / 8;
+								} break;
+								}
+								PushConstantSize += NewSize * SizeInfo.Constant;
+							} break;
+							case SpvOpTypeMatrix:
+							{
+								const op_info& MatrixType = ShaderInfo[StructType.TypeId[0]];
+								const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
+								if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
+								{
+									PushConstantSize += StructType.Width * MatrixType.Width * VectorType.Width / 8;
+								}
+							} break;
+							case SpvOpTypeVector:
+							{
+								const op_info& VectorType = ShaderInfo[StructType.TypeId[0]];
+								if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
+								{
+									PushConstantSize += StructType.Width * VectorType.Width / 8;
+								}
+							} break;
+							case SpvOpTypeInt:
+							case SpvOpTypeFloat:
+							{
+								PushConstantSize += StructType.Width / 8;
+							} break;
+							}
+						}
+					} break;
+					case SpvOpTypeMatrix:
+					{
+						NewSize = PointerType.Width;
+						const op_info& MatrixType = ShaderInfo[PointerType.TypeId[0]];
+						const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
+						if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
+						{
+							PushConstantSize += NewSize * VectorType.Width / 8;
+						}
+					} break;
+					case SpvOpTypeVector:
+					{
+						NewSize = PointerType.Width;
+						const op_info& VectorType = ShaderInfo[PointerType.TypeId[0]];
+						if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
+						{
+							PushConstantSize += NewSize * VectorType.Width / 8;
+						}
+					} break;
+					case SpvOpTypeInt:
+					case SpvOpTypeFloat:
+					{
+						PushConstantSize += PointerType.Width / 8;
+					} break;
+					}
+				}
+			}
+			else if (Var.OpCode == SpvOpVariable && Var.IsDescriptor)
+			{
+				const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
+
+				u32 Size = ~0u;
+				u32 StorageClass = Var.StorageClass;
+				VkDescriptorType DescriptorType;
+				if(VariableType.OpCode == SpvOpTypePointer)
+				{
+					const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
+
+					if(PointerType.OpCode == SpvOpTypeArray)
+					{
+						const op_info& ArrayInfo = ShaderInfo[PointerType.TypeId[0]];
+						const op_info& SizeInfo  = ShaderInfo[PointerType.SizeId];
+
+						Size = SizeInfo.Constant;
+
+						DescriptorType = GetVkSpvDescriptorType(ArrayInfo.OpCode, StorageClass);
+					}
+					else if(PointerType.OpCode == SpvOpTypeRuntimeArray)
+					{
+						const op_info& ArrayInfo = ShaderInfo[PointerType.TypeId[0]];
+
+						DescriptorType = GetVkSpvDescriptorType(ArrayInfo.OpCode, StorageClass);
+					}
+					else
+					{
+						DescriptorType = GetVkSpvDescriptorType(PointerType.OpCode, StorageClass);
+					}
+				}
+				else
+				{
+					DescriptorType = GetVkSpvDescriptorType(VariableType.OpCode, StorageClass);
+				}
+
+				VkDescriptorSetLayoutBinding& DescriptorTypeInfoUpdate = ShaderRootLayout[Var.Set][Var.Binding];
+				DescriptorTypeInfoUpdate.stageFlags |= GetVKShaderStage(ShaderType);
+				DescriptorTypeInfoUpdate.binding = Var.Binding;
+				DescriptorTypeInfoUpdate.descriptorType = DescriptorType;
+				DescriptorTypeInfoUpdate.descriptorCount = Size == ~0u ? 1 : Size;
+				DescriptorTypeCounts[DescriptorType] += DescriptorTypeInfoUpdate.descriptorCount;
+			}
+		}
 	}
 
 	File.close();

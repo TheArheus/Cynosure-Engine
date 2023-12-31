@@ -49,10 +49,10 @@ struct material
 
 layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
-layout(set = 1, binding = 0) uniform sampler2D DiffuseSamplers[];
-layout(set = 1, binding = 1) uniform sampler2D NormalSamplers[];
-layout(set = 1, binding = 2) uniform sampler2D SpecularSamplers[];
-layout(set = 1, binding = 3) uniform sampler2D HeightSamplers[];
+layout(set = 1, binding = 0) uniform sampler2D DiffuseSamplers[1024];
+layout(set = 1, binding = 1) uniform sampler2D NormalSamplers[1024];
+layout(set = 1, binding = 2) uniform sampler2D SpecularSamplers[1024];
+layout(set = 1, binding = 3) uniform sampler2D HeightSamplers[1024];
 
 layout(location = 0) in vert_in   In;
 layout(location = 4) in flat uint MatIdx;
