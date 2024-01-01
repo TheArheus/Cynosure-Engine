@@ -79,17 +79,6 @@ public:
 		}
 	}
 
-	shader_input* CreateShaderInput()
-	{
-		switch(BackendType)
-		{
-			case backend_type::vulkan:
-				return new vulkan_shader_input;
-			default:
-				return nullptr;
-		}
-	}
-
 	renderer_backend* Backend;
 	backend_type BackendType;
 
@@ -111,6 +100,8 @@ public:
 	buffer* RandomSamplesBuffer;
 
 	std::vector<render_context*> CubeMapShadowContexts;
+	std::vector<compute_context*> DepthReduceContext;
+
 	render_context* GfxContext;
 	render_context* CascadeShadowContext;
 	render_context* ShadowContext;
@@ -122,7 +113,6 @@ public:
 	compute_context* ShadowComputeContext;
 	compute_context* FrustCullingContext;
 	compute_context* OcclCullingContext;
-	compute_context* DepthReduceContext;
 	compute_context* BlurContext;
 	compute_context* DebugComputeContext;
 };

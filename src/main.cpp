@@ -80,7 +80,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
 			// TODO: Move this out to ui_context or something
-#if 0
 			ImGui_ImplVulkan_NewFrame();
 
 			VkRenderingInfoKHR RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
@@ -104,7 +103,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *static_cast<vulkan_global_pipeline_context*>(PipelineContext)->CommandList);
 
 			vkCmdEndRenderingKHR(*static_cast<vulkan_global_pipeline_context*>(PipelineContext)->CommandList);
-#endif
 
 			PipelineContext->EmplaceColorTarget(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
 			PipelineContext->Present(Window.Gfx.Backend);

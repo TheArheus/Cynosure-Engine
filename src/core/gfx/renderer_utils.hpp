@@ -50,29 +50,6 @@ struct renderer_backend
 	u32 Height;
 };
 
-class shader_input
-{
-	shader_input(const shader_input&) = delete;
-	shader_input& operator=(const shader_input&) = delete;
-
-public:
-	shader_input() = default;
-	virtual ~shader_input() = default;
-
-	virtual shader_input* PushStorageBuffer(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) = 0;
-	virtual shader_input* PushUniformBuffer(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) = 0;
-	virtual shader_input* PushSampler(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) = 0;
-	virtual shader_input* PushSampledImage(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) = 0;
-	virtual shader_input* PushStorageImage(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) = 0;
-	virtual shader_input* PushImageSampler(u32 Count = 1, u32 Space = 0, bool IsPartiallyBound = false, shader_stage Stage = shader_stage::all) = 0;
-	virtual shader_input* PushConstant(u32 Size, shader_stage Stage = shader_stage::all) = 0;
-	virtual shader_input* Update(renderer_backend* Backend, u32 Space = 0, bool IsPush = false) = 0;
-	virtual shader_input* Build(renderer_backend* Backend, u32 Space = 0, bool IsPush = false) = 0;
-
-	virtual void UpdateAll(renderer_backend* Backend) = 0;
-	virtual void BuildAll(renderer_backend* Backend) = 0;
-};
-
 struct buffer;
 struct texture;
 struct global_pipeline_context

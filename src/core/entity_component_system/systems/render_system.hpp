@@ -219,8 +219,8 @@ struct render_system : public entity_system
 			// TODO: Think about abstracting this usage???
 			Window.Gfx.ColorPassContext->SetImageSampler(LightShadows, image_barrier_state::shader_read, 0, 1);
 			Window.Gfx.ColorPassContext->SetImageSampler(PointLightShadows, image_barrier_state::shader_read, 0, 1);
-			Window.Gfx.ColorPassContext->StaticUpdate();
 		}
+		Window.Gfx.ColorPassContext->StaticUpdate();
 
 		Window.Gfx.FrustCullingContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 		Window.Gfx.FrustCullingContext->SetStorageBufferView(GeometryOffsets);
@@ -247,6 +247,13 @@ struct render_system : public entity_system
 			Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetStorageBufferView(VertexBuffer);
 			Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetStorageBufferView(MeshDrawShadowCommandBuffer);
 			Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->StaticUpdate();
+		}
+
+		for(u32 MipIdx = 0; MipIdx < Window.Gfx.DepthReduceContext.size(); ++MipIdx)
+		{
+			Window.Gfx.DepthReduceContext[MipIdx]->SetImageSampler({MipIdx == 0 ? Window.Gfx.DebugCameraViewDepthTarget : Window.Gfx.DepthPyramid}, MipIdx == 0 ? image_barrier_state::shader_read: image_barrier_state::general, MipIdx == 0 ? MipIdx : (MipIdx - 1));
+			Window.Gfx.DepthReduceContext[MipIdx]->SetStorageImage({Window.Gfx.DepthPyramid}, image_barrier_state::general, MipIdx);
+			Window.Gfx.DepthReduceContext[MipIdx]->StaticUpdate();
 		}
 
 		Window.Gfx.ShadowContext->SetStorageBufferView(VertexBuffer);
@@ -410,16 +417,11 @@ struct render_system : public entity_system
 				}
 			}
 		}
-		else
+		for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
 		{
-			for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
-			{
-				Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
-				Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->End();
-			}
-			Window.Gfx.ShadowContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
-			Window.Gfx.ShadowContext->End();
+			Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->End();
 		}
+		Window.Gfx.ShadowContext->End();
 
 		// NOTE: This is only for debug. Maybe not compile on release mode???
 		{
@@ -520,31 +522,25 @@ struct render_system : public entity_system
 		}
 
 		{
-			Window.Gfx.DepthReduceContext->Begin(PipelineContext);
-
 			PipelineContext->SetImageBarriers({{Window.Gfx.DebugCameraViewDepthTarget, AF_DepthStencilAttachmentWrite, AF_ShaderRead, image_barrier_state::depth_stencil_attachment, image_barrier_state::shader_read},
 											  {Window.Gfx.DepthPyramid, 0, AF_ShaderWrite|AF_ShaderRead, image_barrier_state::undefined, image_barrier_state::general}}, 
 											  PSF_LateFragment, PSF_Compute);
 
-#if 0
 			for(u32 MipIdx = 0;
-				MipIdx < Window.Gfx.DepthPyramid->Info.MipLevels;
+				MipIdx < Window.Gfx.DepthReduceContext.size();
 				++MipIdx)
 			{
 				vec2 VecDims(Max(1, Window.Gfx.DepthPyramid->Width  >> MipIdx),
 							 Max(1, Window.Gfx.DepthPyramid->Height >> MipIdx));
 
-				Window.Gfx.DepthReduceContext->SetImageSampler({MipIdx == 0 ? Window.Gfx.DebugCameraViewDepthTarget : Window.Gfx.DepthPyramid}, MipIdx == 0 ? image_barrier_state::shader_read: image_barrier_state::general, MipIdx == 0 ? MipIdx : (MipIdx - 1));
-				Window.Gfx.DepthReduceContext->SetStorageImage({Window.Gfx.DepthPyramid}, image_barrier_state::general, MipIdx);
-				Window.Gfx.DepthReduceContext->SetConstant((void*)VecDims.E, sizeof(vec2));
-
-				Window.Gfx.DepthReduceContext->Execute(VecDims.x, VecDims.y);
+				Window.Gfx.DepthReduceContext[MipIdx]->Begin(PipelineContext);
+				Window.Gfx.DepthReduceContext[MipIdx]->SetConstant((void*)VecDims.E, sizeof(vec2));
+				Window.Gfx.DepthReduceContext[MipIdx]->Execute(VecDims.x, VecDims.y);
+				Window.Gfx.DepthReduceContext[MipIdx]->End();
 
 				PipelineContext->SetImageBarriers({{Window.Gfx.DepthPyramid, AF_ShaderWrite|AF_ShaderRead, AF_ShaderWrite|AF_ShaderRead, image_barrier_state::general, image_barrier_state::general}}, 
 												 PSF_Compute, PSF_Compute);
 			}
-#endif
-			Window.Gfx.DepthReduceContext->End();
 		}
 
 		{

@@ -200,8 +200,12 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	ShadowComputeContext = CreateComputeContext("..\\shaders\\mesh.dbg.comp.glsl");
 	FrustCullingContext  = CreateComputeContext("..\\shaders\\indirect_cull_frust.comp.glsl");
 	OcclCullingContext   = CreateComputeContext("..\\shaders\\indirect_cull_occl.comp.glsl");
-	DepthReduceContext   = CreateComputeContext("..\\shaders\\depth_reduce.comp.glsl");
 	BlurContext = CreateComputeContext("..\\shaders\\blur.comp.glsl");
+
+	for(u32 MipIdx = 0; MipIdx < GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height)); ++MipIdx)
+	{
+		DepthReduceContext.push_back(CreateComputeContext("..\\shaders\\depth_reduce.comp.glsl"));
+	}
 }
 
 global_graphics_context::

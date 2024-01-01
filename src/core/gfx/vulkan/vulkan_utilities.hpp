@@ -908,44 +908,45 @@ VkImageLayout GetVKImageLayout(image_barrier_state State)
     }
 }
 
-VkAccessFlags GetVKAccessMask(u32 Layout)
+VkAccessFlags GetVKAccessMask(u32 Layouts)
 {
 	VkAccessFlags Result = {};
 
-	if(AF_IndirectCommandRead)
+	if(Layouts & AF_IndirectCommandRead)
 		Result |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-	if(AF_IndexRead)
+	if(Layouts & AF_IndexRead)
 		Result |= VK_ACCESS_INDEX_READ_BIT;
-	if(AF_VertexAttributeRead)
+	if(Layouts & AF_VertexAttributeRead)
 		Result |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-	if(AF_UniformRead)
+	if(Layouts & AF_UniformRead)
 		Result |= VK_ACCESS_UNIFORM_READ_BIT;
-	if(AF_InputAttachmentRead)
+	if(Layouts & AF_InputAttachmentRead)
 		Result |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-	if(AF_ShaderRead)
+	if(Layouts & AF_ShaderRead)
 		Result |= VK_ACCESS_SHADER_READ_BIT;
-	if(AF_ShaderWrite)
+	if(Layouts & AF_ShaderWrite)
 		Result |= VK_ACCESS_SHADER_WRITE_BIT;
-	if(AF_ColorAttachmentRead)
+	if(Layouts & AF_ColorAttachmentRead)
 		Result |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-	if(AF_ColorAttachmentWrite)
+	if(Layouts & AF_ColorAttachmentWrite)
 		Result |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	if(AF_DepthStencilAttachmentRead)
+	if(Layouts & AF_DepthStencilAttachmentRead)
 		Result |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-	if(AF_DepthStencilAttachmentWrite)
+	if(Layouts & AF_DepthStencilAttachmentWrite)
 		Result |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-	if(AF_TransferRead)
+	if(Layouts & AF_TransferRead)
 		Result |= VK_ACCESS_TRANSFER_READ_BIT;
-	if(AF_TransferWrite)
+	if(Layouts & AF_TransferWrite)
 		Result |= VK_ACCESS_TRANSFER_WRITE_BIT;
-	if(AF_HostRead)
+	if(Layouts & AF_HostRead)
 		Result |= VK_ACCESS_HOST_READ_BIT;
-	if(AF_HostWrite)
+	if(Layouts & AF_HostWrite)
 		Result |= VK_ACCESS_HOST_WRITE_BIT;
-	if(AF_MemoryRead)
+	if(Layouts & AF_MemoryRead)
 		Result |= VK_ACCESS_MEMORY_READ_BIT;
-	if(AF_MemoryWrite)
+	if(Layouts & AF_MemoryWrite)
 		Result |= VK_ACCESS_MEMORY_WRITE_BIT;
+
 	return Result;
 }
 
@@ -953,33 +954,33 @@ VkPipelineStageFlags GetVKPipelineStage(u32 Stages)
 {
 	VkPipelineStageFlags Result = {};
 
-	if(PSF_TopOfPipe)
+	if(Stages & PSF_TopOfPipe)
 		Result |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-	if(PSF_DrawIndirect)
+	if(Stages & PSF_DrawIndirect)
 		Result |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
-	if(PSF_VertexInput)
+	if(Stages & PSF_VertexInput)
 		Result |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-	if(PSF_VertexShader)
+	if(Stages & PSF_VertexShader)
 		Result |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-	if(PSF_FragmentShader)
+	if(Stages & PSF_FragmentShader)
 		Result |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	if(PSF_EarlyFragment)
+	if(Stages & PSF_EarlyFragment)
 		Result |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-	if(PSF_LateFragment)
+	if(Stages & PSF_LateFragment)
 		Result |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-	if(PSF_ColorAttachment)
+	if(Stages & PSF_ColorAttachment)
 		Result |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	if(PSF_Compute)
+	if(Stages & PSF_Compute)
 		Result |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-	if(PSF_Transfer)
+	if(Stages & PSF_Transfer)
 		Result |= VK_PIPELINE_STAGE_TRANSFER_BIT;
-	if(PSF_BottomOfPipe)
+	if(Stages & PSF_BottomOfPipe)
 		Result |= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-	if(PSF_Host)
+	if(Stages & PSF_Host)
 		Result |= VK_PIPELINE_STAGE_HOST_BIT;
-	if(PSF_AllGraphics)
+	if(Stages & PSF_AllGraphics)
 		Result |= VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
-	if(PSF_AllCommands)
+	if(Stages & PSF_AllCommands)
 		Result |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
 	return Result;

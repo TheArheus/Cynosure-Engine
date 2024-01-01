@@ -146,7 +146,7 @@ private:
 	u32 GlobalOffset = 0;
 	u32 PushConstantIdx = 0;
 
-	u32 PushConstantSize = 0;
+	u32  PushConstantSize = 0;
 	bool HavePushConstant = false;
 
 	VkRenderingInfoKHR RenderingInfo;

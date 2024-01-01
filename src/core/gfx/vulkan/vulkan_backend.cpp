@@ -293,7 +293,6 @@ vulkan_backend(window* Window)
 
 	VK_CHECK(vkCreateDescriptorPool(Device, &ImGuiPoolInfo, nullptr, &ImGuiPool));
 
-#if 0
 	ImGui_ImplVulkan_InitInfo InitInfo = {};
 	InitInfo.Instance = Instance;
 	InitInfo.PhysicalDevice = PhysicalDevice;
@@ -309,7 +308,6 @@ vulkan_backend(window* Window)
 	ImGui_ImplVulkan_Init(&InitInfo, VK_NULL_HANDLE);
 
 	ImGui_ImplVulkan_CreateFontsTexture();
-#endif
 }
 
 void vulkan_backend::
@@ -544,8 +542,17 @@ VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
 VkShaderModule vulkan_backend::
 LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines)
 {
-	VkShaderModule Result = 0;
+	auto FoundCompiledShader = CompiledShaders.find(Path);
+	if(FoundCompiledShader != CompiledShaders.end())
+	{
+		ShaderRootLayout.insert(FoundCompiledShader->second.ShaderRootLayout.begin(), FoundCompiledShader->second.ShaderRootLayout.end());
+		DescriptorTypeCounts.insert(FoundCompiledShader->second.DescriptorTypeCounts.begin(), FoundCompiledShader->second.DescriptorTypeCounts.end());
+		HavePushConstant = FoundCompiledShader->second.HavePushConstant;
+		PushConstantSize = FoundCompiledShader->second.PushConstantSize;
+		return FoundCompiledShader->second.Handle;
+	}
 
+	VkShaderModule Result = 0;
 	std::ifstream File(Path);
 	if(File)
 	{
@@ -648,6 +655,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		CreateInfo.pCode = SpirvCode.data();
 
 		VK_CHECK(vkCreateShaderModule(Device, &CreateInfo, 0, &Result));
+		CompiledShaders[Path].Handle = Result;
 
 		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices);
 
@@ -659,6 +667,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 			{
 				const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
 
+				CompiledShaders[Path].HavePushConstant = true;
 				HavePushConstant = true;
 				PushConstantSize = 0;
 
@@ -804,8 +813,12 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 				DescriptorTypeInfoUpdate.descriptorType = DescriptorType;
 				DescriptorTypeInfoUpdate.descriptorCount = Size == ~0u ? 1 : Size;
 				DescriptorTypeCounts[DescriptorType] += DescriptorTypeInfoUpdate.descriptorCount;
+				CompiledShaders[Path].DescriptorTypeCounts[DescriptorType] += DescriptorTypeInfoUpdate.descriptorCount;
 			}
 		}
+
+		CompiledShaders[Path].PushConstantSize = PushConstantSize;
+		CompiledShaders[Path].ShaderRootLayout.insert(ShaderRootLayout.begin(), ShaderRootLayout.end());
 	}
 
 	File.close();

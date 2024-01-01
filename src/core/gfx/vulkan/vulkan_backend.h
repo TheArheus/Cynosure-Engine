@@ -2,6 +2,15 @@
 
 struct vulkan_backend : public renderer_backend
 {
+	struct compiled_shader_info
+	{
+		std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>> ShaderRootLayout;
+		std::map<VkDescriptorType, u32> DescriptorTypeCounts;
+		VkShaderModule Handle;
+		u32 PushConstantSize;
+		bool HavePushConstant;
+	};
+
 	vulkan_backend(window* Window);
 	~vulkan_backend() override = default;
 	void DestroyObject() override;
@@ -32,6 +41,8 @@ struct vulkan_backend : public renderer_backend
 
 	std::vector<VkImage> SwapchainImages;
 	std::vector<VkImageView> SwapchainImageViews;
+
+	std::unordered_map<std::string, compiled_shader_info> CompiledShaders;
 
 	VkDevice Device;
 	VkSwapchainKHR Swapchain;

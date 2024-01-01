@@ -67,10 +67,10 @@ EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture)
 
 	std::vector<VkImageMemoryBarrier> ImageCopyBarriers = 
 	{
-		CreateImageBarrier(Texture->Handle, AF_ColorAttachmentWrite, AF_TransferRead, GetVKImageLayout(image_barrier_state::color_attachment), GetVKImageLayout(image_barrier_state::transfer_src)),
-		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], 0, AF_TransferWrite, GetVKImageLayout(image_barrier_state::undefined), GetVKImageLayout(image_barrier_state::transfer_dst)),
+		CreateImageBarrier(Texture->Handle, GetVKAccessMask(AF_ColorAttachmentWrite), GetVKAccessMask(AF_TransferRead), GetVKImageLayout(image_barrier_state::color_attachment), GetVKImageLayout(image_barrier_state::transfer_src)),
+		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], 0, GetVKAccessMask(AF_TransferWrite), GetVKImageLayout(image_barrier_state::undefined), GetVKImageLayout(image_barrier_state::transfer_dst)),
 	};
-	ImageBarrier(*CommandList, PSF_ColorAttachment, PSF_Transfer, ImageCopyBarriers);
+	ImageBarrier(*CommandList, GetVKPipelineStage(PSF_ColorAttachment), GetVKPipelineStage(PSF_Transfer), ImageCopyBarriers);
 
 	VkImageCopy ImageCopyRegion = {};
 	ImageCopyRegion.srcSubresource.aspectMask = Texture->Aspect;
@@ -90,9 +90,9 @@ Present(renderer_backend* Backend)
 
 	std::vector<VkImageMemoryBarrier> ImageEndRenderBarriers = 
 	{
-		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], AF_TransferWrite, 0, GetVKImageLayout(image_barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], GetVKAccessMask(AF_TransferWrite), 0, GetVKImageLayout(image_barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
 	};
-	ImageBarrier(*CommandList, PSF_Transfer, PSF_BottomOfPipe, ImageEndRenderBarriers);
+	ImageBarrier(*CommandList, GetVKPipelineStage(PSF_Transfer), GetVKPipelineStage(PSF_BottomOfPipe), ImageEndRenderBarriers);
 
 	CommandQueue->Execute(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 
@@ -120,12 +120,9 @@ CopyImage(texture* Dst, texture* Src)
 	vulkan_texture* SrcTexture = static_cast<vulkan_texture*>(Src);
 	vulkan_texture* DstTexture = static_cast<vulkan_texture*>(Dst);
 
-	std::vector<VkImageMemoryBarrier> ImageCopyBarriers = 
-	{
-		CreateImageBarrier(SrcTexture->Handle, 0, AF_TransferWrite, GetVKImageLayout(image_barrier_state::undefined), GetVKImageLayout(image_barrier_state::transfer_src)),
-		CreateImageBarrier(DstTexture->Handle, 0, AF_TransferWrite, GetVKImageLayout(image_barrier_state::undefined), GetVKImageLayout(image_barrier_state::transfer_dst)),
-	};
-	ImageBarrier(*CommandList, PSF_ColorAttachment, PSF_Transfer, ImageCopyBarriers);
+	SetImageBarriers({{SrcTexture, 0, AF_TransferWrite, image_barrier_state::undefined, image_barrier_state::transfer_src}, 
+					  {DstTexture, 0, AF_TransferWrite, image_barrier_state::undefined, image_barrier_state::transfer_dst}}, 
+					 PSF_ColorAttachment, PSF_Transfer);
 
 	VkImageCopy ImageCopyRegion = {};
 	ImageCopyRegion.srcSubresource.aspectMask = SrcTexture->Aspect;
@@ -269,6 +266,7 @@ vulkan_render_context(renderer_backend* Backend,
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	Device = Gfx->Device;
 
+	u32 PushConstantStage = 0;
 	std::map<VkDescriptorType, u32> DescriptorTypeCounts;
 	std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>> ShaderRootLayout;
 
@@ -279,28 +277,48 @@ vulkan_render_context(renderer_backend* Backend,
 		Stage.pName  = "main";
 		if(Shader.find(".vert.") != std::string::npos)
 		{
+			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+
+			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_VERTEX_BIT;
+			HavePushConstant  |= UsingPushConstant;
 		}
 		if(Shader.find(".doma.") != std::string::npos)
 		{
+			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+
+			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+			HavePushConstant  |= UsingPushConstant;
 		}
 		if(Shader.find(".hull.") != std::string::npos)
 		{
+			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+
+			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+			HavePushConstant  |= UsingPushConstant;
 		}
 		if (Shader.find(".geom.") != std::string::npos)
 		{
+			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+
+			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_GEOMETRY_BIT;
+			HavePushConstant  |= UsingPushConstant;
 		}
 		if(Shader.find(".frag.") != std::string::npos)
 		{
+			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+
+			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_FRAGMENT_BIT;
+			HavePushConstant  |= UsingPushConstant;
 		}
 		ShaderStages.push_back(Stage);
 	}
@@ -370,7 +388,7 @@ vulkan_render_context(renderer_backend* Backend,
 
 	if(HavePushConstant)
 	{
-		ConstantRange.stageFlags = VK_SHADER_STAGE_ALL;
+		ConstantRange.stageFlags = PushConstantStage;
 		ConstantRange.size       = PushConstantSize;
 		RootSignatureCreateInfo.pushConstantRangeCount = 1;
 		RootSignatureCreateInfo.pPushConstantRanges    = &ConstantRange;
@@ -498,8 +516,6 @@ End()
 	std::vector<std::unique_ptr<descriptor_info[]>>().swap(BufferArrayInfos);
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>().swap(RenderingAttachmentInfos);
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>>().swap(RenderingAttachmentInfoArrays);
-
-	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
 }
 
 void vulkan_render_context::
@@ -584,6 +600,7 @@ Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount)
 
 	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 	vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
+	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
 	SetIndices.clear();
 }
 
@@ -595,6 +612,7 @@ DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffse
 	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexed(*PipelineContext->CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
+	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
 	SetIndices.clear();
 }
 
@@ -607,6 +625,7 @@ DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands,
 	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 0, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
+	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
 	SetIndices.clear();
 }
 
