@@ -54,10 +54,10 @@ struct vulkan_global_pipeline_context : public global_pipeline_context
 	void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData, 
 						   u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, image_barrier_state, image_barrier_state>>& BarrierData, 
+	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, image_barrier_state, image_barrier_state>>& BarrierData, 
+	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
 	VkDevice Device;
@@ -137,9 +137,9 @@ public:
 	void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) override;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	void SetSampledImage(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 	
 private:
 	
@@ -231,9 +231,9 @@ public:
 	void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) override;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	void SetSampledImage(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
 private:
 

@@ -43,15 +43,16 @@ struct light_source
 };
 
 layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
-layout(set = 0, binding = 1) uniform b1 { light_source LightSources[1024]; };
-layout(set = 0, binding = 2) readonly buffer  b2 { vec2 PoissonDisk[SAMPLES_COUNT]; };
+layout(set = 0, binding = 1) readonly buffer b1 { light_source LightSources[LIGHT_SOURCES_MAX_COUNT]; };
+layout(set = 0, binding = 2) readonly buffer b2 { vec2 PoissonDisk[SAMPLES_COUNT]; };
 layout(set = 0, binding = 3) uniform sampler3D RandomAnglesTexture;
 layout(set = 0, binding = 4) uniform sampler2D GBuffer[GBUFFER_COUNT];
-layout(set = 0, binding = 5) uniform sampler2D AmbientOcclusionBuffer;
-layout(set = 0, binding = 6) uniform writeonly image2D ColorTarget;
-layout(set = 0, binding = 7) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
-layout(set = 1, binding = 0) uniform sampler2D ShadowMaps[1024];
-layout(set = 1, binding = 1) uniform samplerCube PointShadowMaps[1024];
+layout(set = 0, binding = 5) uniform writeonly image2D ColorTarget;
+
+layout(set = 1, binding = 0) uniform sampler2D AmbientOcclusionBuffer;
+layout(set = 2, binding = 0) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
+layout(set = 3, binding = 0) uniform sampler2D ShadowMaps[LIGHT_SOURCES_MAX_COUNT];
+layout(set = 4, binding = 0) uniform samplerCube PointShadowMaps[LIGHT_SOURCES_MAX_COUNT];
 
 float GetRandomValue(vec2 Seed)
 {

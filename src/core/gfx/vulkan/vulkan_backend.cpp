@@ -27,6 +27,7 @@ vulkan_backend(window* Window)
 		VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #endif
 		VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+		"VK_EXT_debug_utils",
 	};
 
 #if __linux__
@@ -104,6 +105,8 @@ vulkan_backend(window* Window)
 
 	VK_CHECK(vkCreateInstance(&InstanceCreateInfo, nullptr, &Instance));
 	volkLoadInstance(Instance);
+
+	vkSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(Instance, "vkSetDebugUtilsObjectNameEXT");
 
 	VkDebugReportCallbackCreateInfoEXT DebugReportCreateInfo = {VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT};
 	DebugReportCreateInfo.flags = VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT | VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_DEBUG_BIT_EXT | VK_DEBUG_REPORT_INFORMATION_BIT_EXT;
@@ -321,191 +324,6 @@ DestroyObject()
 	vkDestroyInstance(Instance, nullptr);
 }
 
-#if 0
-#endif
-
-struct op_info
-{
-	u32 Set;
-	u32 Binding;
-
-	u32 OpCode;
-	std::vector<u32> TypeId;
-	u32 SizeId;
-	u32 StorageClass;
-	u32 Constant;
-
-	u32 Width;
-
-	bool IsDescriptor;
-	bool IsPushConstant;
-	bool IsSigned;
-};
-
-void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std::set<u32>& DescriptorIndices)
-{
-	assert(Binary[0] == SpvMagicNumber);
-
-	Info.resize(Binary[3]);
-
-	u32 Offset = 5;
-	u32 OpCode = 0;
-	u32 OpSize = 0;
-	u32 ResultId = 0;
-	while(Offset != Binary.size())
-	{
-		OpCode = static_cast<u16>(Binary[Offset] & 0xffff);
-		OpSize = static_cast<u16>(Binary[Offset] >> 16u);
-
-		switch(OpCode)
-		{
-			case SpvOpDecorate:
-			{
-				ResultId = Binary[Offset + 1];
-
-				Info[ResultId].OpCode = OpCode;
-
-				switch(Binary[Offset + 2])
-				{
-					case SpvDecorationBinding:
-					{
-						Info[ResultId].Binding = Binary[Offset + 3];
-						Info[ResultId].IsDescriptor = true;
-						DescriptorIndices.insert(ResultId);
-					} break;
-
-					case SpvDecorationDescriptorSet:
-					{
-						Info[ResultId].Set = Binary[Offset + 3];
-						Info[ResultId].IsDescriptor = true;
-						DescriptorIndices.insert(ResultId);
-					} break;
-				}
-
-			} break;
-
-			case SpvOpVariable:
-			{
-				u32 TypeId      = Binary[Offset + 1];
-				    ResultId    = Binary[Offset + 2];
-				u32 StorageType = Binary[Offset + 3];
-
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].StorageClass = StorageType;
-				Info[ResultId].TypeId.push_back(TypeId);
-			} break;
-			case SpvOpTypeVoid:
-			{
-				    ResultId = Binary[Offset + 1];
-				Info[ResultId].OpCode = OpCode;
-			} break;
-			case SpvOpTypeBool:
-			{
-				    ResultId = Binary[Offset + 1];
-				Info[ResultId].OpCode = OpCode;
-			} break;
-			case SpvOpTypeInt:
-			{
-				    ResultId = Binary[Offset + 1];
-				u32 Width    = Binary[Offset + 2];
-				u32 IsSigned = Binary[Offset + 3];
-
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].Width  = Width;
-				Info[ResultId].IsSigned = IsSigned;
-			} break;
-			case SpvOpTypeFloat:
-			{
-				    ResultId = Binary[Offset + 1];
-				u32 Width    = Binary[Offset + 2];
-
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].Width  = Width;
-			} break;
-			case SpvOpTypeVector:
-			{
-				    ResultId = Binary[Offset + 1];
-				u32 TypeId   = Binary[Offset + 2];
-				u32 Count    = Binary[Offset + 3];
-
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].Width  = Count;
-				Info[ResultId].TypeId.push_back(TypeId);
-			} break;
-			case SpvOpTypeMatrix:
-			{
-				    ResultId = Binary[Offset + 1];
-				u32 TypeId   = Binary[Offset + 2];
-				u32 Count    = Binary[Offset + 3];
-
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].Width  = Count;
-				Info[ResultId].TypeId.push_back(TypeId);
-			} break;
-			case SpvOpTypeStruct:
-			{
-				    ResultId  = Binary[Offset + 1];
-				u32 TypeCount = OpSize - 2;
-
-				for(u32 TypeIdIdx = 0; TypeIdIdx < TypeCount; ++TypeIdIdx)
-					Info[ResultId].TypeId.push_back(Binary[Offset + 2 + TypeIdIdx]);
-
-				Info[ResultId].OpCode = OpCode;
-			} break;
-			case SpvOpTypeImage:
-			case SpvOpTypeSampler:
-			case SpvOpTypeSampledImage:
-			{
-				    ResultId = Binary[Offset + 1];
-				u32 TypeId   = Binary[Offset + 2];
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].TypeId.push_back(TypeId);
-			} break;
-			case SpvOpTypePointer:
-			{
-				    ResultId    = Binary[Offset + 1];
-				u32 StorageType = Binary[Offset + 2];
-				u32 TypeId      = Binary[Offset + 3];
-
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].TypeId.push_back(TypeId);
-				Info[ResultId].StorageClass = StorageType;
-			} break;
-			case SpvOpTypeArray:
-			{
-				    ResultId = Binary[Offset + 1];
-				u32 TypeId   = Binary[Offset + 2];
-				u32 SizeId   = Binary[Offset + 3];
-
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].SizeId = SizeId;
-				Info[ResultId].TypeId.push_back(TypeId);
-			} break;
-			case SpvOpTypeRuntimeArray:
-			{
-				    ResultId = Binary[Offset + 1];
-				u32 TypeId   = Binary[Offset + 2];
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].SizeId = ~0u;
-				Info[ResultId].TypeId.push_back(TypeId);
-			} break;
-			case SpvOpConstant:
-			{
-				u32 TypeId   = Binary[Offset + 1];
-				    ResultId = Binary[Offset + 2];
-				u32 Constant = Binary[Offset + 3];
-
-				Info[ResultId].OpCode = OpCode;
-				Info[ResultId].Constant = Constant;
-				Info[ResultId].TypeId.push_back(TypeId);
-			} break;
-		}
-
-		assert(Offset < Binary.size());
-		Offset += OpSize;
-	}
-}
-
 VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
 {
 	switch(OpCode)
@@ -649,6 +467,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 
 		std::vector<op_info> ShaderInfo;
 		std::set<u32> DescriptorIndices;
+		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices);
 
 		VkShaderModuleCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
 		CreateInfo.codeSize = SpirvCode.size() * sizeof(u32);
@@ -656,8 +475,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 
 		VK_CHECK(vkCreateShaderModule(Device, &CreateInfo, 0, &Result));
 		CompiledShaders[Path].Handle = Result;
-
-		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices);
 
 		for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
 		{

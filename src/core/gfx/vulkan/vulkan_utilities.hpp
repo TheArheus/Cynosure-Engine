@@ -720,39 +720,6 @@ u32 GetVKColorComponentFlags(color_component_flags flags)
 	}
 }
 
-VkImageLayout GetVKImageLayoutTextureBarrier(image_barrier_state State, u16 TextureFlags)
-{
-	switch (State)
-	{
-	case image_barrier_state::color_attachment:
-		return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	case image_barrier_state::depth_stencil_attachment: {
-		if ((TextureFlags & image_flags::TF_DepthTexture) && !(TextureFlags & image_flags::TF_StencilTexture))
-			return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-		else if (!(TextureFlags & image_flags::TF_DepthTexture) && (TextureFlags & image_flags::TF_StencilTexture))
-			return VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR;
-		else
-			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	}
-	case image_barrier_state::shader_read: 
-		return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	case image_barrier_state::depth_read:
-		return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
-	case image_barrier_state::stencil_read:
-		return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
-	case image_barrier_state::depth_stencil_read:
-		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-	case image_barrier_state::present:
-		return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-	case image_barrier_state::transfer_src:
-		return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	case image_barrier_state::transfer_dst:
-		return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	default:
-		return VK_IMAGE_LAYOUT_UNDEFINED;
-	}
-}
-
 VkAttachmentLoadOp GetLoadOp(load_op Op)
 {
 	switch (Op)
@@ -877,31 +844,31 @@ VkPresentModeKHR GetVKPresentMode(vk_sync VSync)
 	}
 }
 
-VkImageLayout GetVKImageLayout(image_barrier_state State)
+VkImageLayout GetVKLayout(barrier_state State)
 {
     switch (State)
     {
-	case image_barrier_state::general:
+	case barrier_state::general:
         return VK_IMAGE_LAYOUT_GENERAL;
-    case image_barrier_state::color_attachment:
+    case barrier_state::color_attachment:
         return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    case image_barrier_state::depth_stencil_attachment:
+    case barrier_state::depth_stencil_attachment:
         return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    case image_barrier_state::shader_read:
+    case barrier_state::shader_read:
         return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    case image_barrier_state::depth_read:
+    case barrier_state::depth_read:
         return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
-    case image_barrier_state::stencil_read:
+    case barrier_state::stencil_read:
         return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
-    case image_barrier_state::depth_stencil_read:
+    case barrier_state::depth_stencil_read:
         return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    case image_barrier_state::present:
+    case barrier_state::present:
         return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    case image_barrier_state::transfer_src:
+    case barrier_state::transfer_src:
         return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    case image_barrier_state::transfer_dst:
+    case barrier_state::transfer_dst:
         return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	case image_barrier_state::undefined:
+	case barrier_state::undefined:
         return VK_IMAGE_LAYOUT_UNDEFINED;
     default:
         return VK_IMAGE_LAYOUT_UNDEFINED;

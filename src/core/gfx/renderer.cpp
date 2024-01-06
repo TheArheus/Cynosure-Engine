@@ -3,6 +3,11 @@
 #include "vulkan/vulkan_pipeline_context.cpp"
 #include "vulkan/vulkan_backend.cpp"
 
+#if _WIN32
+	#include "dx12/directx12_backend.cpp"
+	#include "dx12/directx12_pipeline_context.cpp"
+#endif
+
 // TODO: CLEAR THE RESOURCES!!!
 
 global_graphics_context::
@@ -17,11 +22,11 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_CopySrc;
-	GfxColorTarget = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
+	GfxColorTarget = PushTexture("ColorTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TextureInputData.Format    = image_format::D32_SFLOAT;
 	TextureInputData.Usage     = image_flags::TF_DepthTexture | image_flags::TF_Sampled;
-	GfxDepthTarget = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
-	DebugCameraViewDepthTarget = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
+	GfxDepthTarget = PushTexture("DepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
+	DebugCameraViewDepthTarget = PushTexture("DebugCameraViewDepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 
 	vec2 PoissonDisk[64] = {};
 	PoissonDisk[0]  = vec2(-0.613392, 0.617481);
@@ -88,7 +93,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	PoissonDisk[61] = vec2(0.789239, -0.419965);
 	PoissonDisk[62] = vec2(-0.545396, 0.538133);
 	PoissonDisk[63] = vec2(-0.178564, -0.596057);
-	PoissonDiskBuffer = PushBuffer(PoissonDisk, sizeof(vec2) * 64, false, resource_flags::RF_StorageBuffer);
+	PoissonDiskBuffer = PushBuffer("PoissonDiskBuffer", PoissonDisk, sizeof(vec2), 64, false, resource_flags::RF_StorageBuffer);
 
 	const u32 Res = 32;
 	vec4  RandomAngles[Res][Res][Res] = {};
@@ -115,10 +120,10 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Type	   = image_type::Texture3D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
-	RandomAnglesTexture = PushTexture((void*)RandomAngles, 32, 32, 32, TextureInputData);
+	RandomAnglesTexture = PushTexture("RandomAnglesTexture", (void*)RandomAngles, 32, 32, 32, TextureInputData);
 	TextureInputData.Format    = image_format::R32G32_SFLOAT;
 	TextureInputData.Type	   = image_type::Texture2D;
-	NoiseTexture = PushTexture((void*)RandomRotations, 4, 4, 1, TextureInputData);
+	NoiseTexture = PushTexture("NoiseTexture", (void*)RandomRotations, 4, 4, 1, TextureInputData);
 
 	vec4 RandomSamples[64] = {};
 	for(u32 RotIdx = 0; RotIdx < 64; ++RotIdx)
@@ -131,7 +136,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 		Scale = Lerp(0.1, Scale, 1.0);
 		RandomSamples[RotIdx] = vec4(Sample * Scale, 0);
 	}
-	RandomSamplesBuffer = PushBuffer((void*)RandomSamples, sizeof(vec4) * 64, false, resource_flags::RF_StorageBuffer);
+	RandomSamplesBuffer = PushBuffer("RandomSamplesBuffer", (void*)RandomSamples, sizeof(vec4), 64, false, resource_flags::RF_StorageBuffer);
 
 	GlobalShadow.resize(DEPTH_CASCADES_COUNT);
 	TextureInputData.Format    = image_format::D32_SFLOAT;
@@ -141,14 +146,14 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Layers    = 1;
 	for(u32 CascadeIdx = 0; CascadeIdx < DEPTH_CASCADES_COUNT; CascadeIdx++)
 	{
-		GlobalShadow[CascadeIdx] = PushTexture(nullptr, PreviousPowerOfTwo(Backend->Width) * 2, PreviousPowerOfTwo(Backend->Width) * 2, 1, TextureInputData);
+		GlobalShadow[CascadeIdx] = PushTexture("GlobalShadow" + std::to_string(CascadeIdx), nullptr, PreviousPowerOfTwo(Backend->Width) * 2, PreviousPowerOfTwo(Backend->Width) * 2, 1, TextureInputData);
 	}
 
 	TextureInputData.Format    = image_format::R32_SFLOAT;
 	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc | image_flags::TF_ColorTexture;
 	TextureInputData.MipLevels = GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height));
 	TextureInputData.ReductionMode = sampler_reduction_mode::max;
-	DepthPyramid = PushTexture(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height), 1, TextureInputData);
+	DepthPyramid = PushTexture("DepthPyramid", PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height), 1, TextureInputData);
 
 	GBuffer.resize(GBUFFER_COUNT);
 	TextureInputData = {};
@@ -157,15 +162,15 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Layers    = 1;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc;
 	TextureInputData.Format    = image_format::R16G16B16A16_SFLOAT;
-	GBuffer[0] = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Vertex Positions
+	GBuffer[0] = PushTexture("GBuffer0", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Vertex Positions
 	TextureInputData.Format    = image_format::R16G16B16A16_SNORM;
-	GBuffer[1] = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Vertex Normals
-	GBuffer[2] = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Fragment Normals
+	GBuffer[1] = PushTexture("GBuffer1", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Vertex Normals
+	GBuffer[2] = PushTexture("GBuffer2", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Fragment Normals
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
-	GBuffer[3] = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Diffuse Color
+	GBuffer[3] = PushTexture("GBuffer3", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Diffuse Color
 	TextureInputData.Format    = image_format::R32_SFLOAT;
-	GBuffer[4] = PushTexture(nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular
-	AmbientOcclusionData = PushTexture(Backend->Width, Backend->Height, 1, TextureInputData);
+	GBuffer[4] = PushTexture("GBuffer4", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular
+	AmbientOcclusionData = PushTexture("AmbientOcclusionData", Backend->Width, Backend->Height, 1, TextureInputData);
 
 	// TODO: Better context creation API
 	utils::render_context::input_data RendererInputData = {};
@@ -174,7 +179,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	RendererInputData.UseBackFace = true;
 	RendererInputData.UseOutline  = true;
 	GfxContext = CreateRenderContext({"..\\shaders\\mesh.vert.glsl", "..\\shaders\\mesh.frag.glsl"}, GBuffer, {true, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
-	DebugContext = CreateRenderContext({"..\\shaders\\mesh.dbg.vert.glsl", "..\\shaders\\mesh.dbg.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	DebugContext = CreateRenderContext({"..\\shaders\\mesh.dbg.vert.glsl", "..\\shaders\\mesh.dbg.frag.glsl"}, {GfxColorTarget}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	DebugComputeContext = CreateComputeContext("..\\shaders\\mesh.dbg.comp.glsl");
 
 	RendererInputData = {};

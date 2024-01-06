@@ -317,7 +317,7 @@ enum access_flags
 	AF_MemoryWrite                 = BYTE(16),
 };
 
-enum class image_barrier_state
+enum class barrier_state
 {
 	general,
 	color_attachment,
@@ -330,12 +330,6 @@ enum class image_barrier_state
 	transfer_src,
 	transfer_dst,
 	undefined,
-};
-
-enum class resource_barrier_state
-{
-	transfer_read,
-	transfer_write,
 };
 
 enum resource_flags
@@ -362,6 +356,96 @@ enum image_flags
 	TF_CopySrc	             = BYTE(8),
 	TF_CopyDst               = BYTE(9),
 };
+
+u32 GetPixelSize(image_format Format)
+{
+    switch (Format)
+    {
+        // 8-bit formats
+        case image_format::R8_SINT:
+        case image_format::R8_UINT:
+        case image_format::R8_UNORM:
+        case image_format::R8_SNORM:
+			return 1;
+
+        case image_format::R8G8_SINT:
+        case image_format::R8G8_UINT:
+        case image_format::R8G8_UNORM:
+        case image_format::R8G8_SNORM:
+			return 2;
+
+        case image_format::R8G8B8A8_SINT:
+        case image_format::R8G8B8A8_UINT:
+        case image_format::R8G8B8A8_UNORM:
+        case image_format::R8G8B8A8_SNORM:
+        case image_format::R8G8B8A8_SRGB:
+
+        case image_format::B8G8R8A8_UNORM:
+        case image_format::B8G8R8A8_SRGB:
+            return 4;
+
+        // 16-bit formats
+        case image_format::R16_SINT:
+        case image_format::R16_UINT:
+        case image_format::R16_UNORM:
+        case image_format::R16_SNORM:
+        case image_format::R16_SFLOAT:
+			return 2;
+
+        case image_format::R16G16_SINT:
+        case image_format::R16G16_UINT:
+        case image_format::R16G16_UNORM:
+        case image_format::R16G16_SNORM:
+        case image_format::R16G16_SFLOAT:
+			return 4;
+
+        case image_format::R16G16B16A16_SINT:
+        case image_format::R16G16B16A16_UINT:
+        case image_format::R16G16B16A16_UNORM:
+        case image_format::R16G16B16A16_SNORM:
+        case image_format::R16G16B16A16_SFLOAT:
+            return 8;
+
+        // 32-bit formats
+        case image_format::R32_SINT:
+        case image_format::R32_UINT:
+        case image_format::R32_SFLOAT:
+			return 4;
+
+        case image_format::R32G32_SINT:
+        case image_format::R32G32_UINT:
+        case image_format::R32G32_SFLOAT:
+			return 8;
+
+        case image_format::R32G32B32_SFLOAT:
+        case image_format::R32G32B32_SINT:
+        case image_format::R32G32B32_UINT:
+			return 12;
+
+        case image_format::R32G32B32A32_SINT:
+        case image_format::R32G32B32A32_UINT:
+        case image_format::R32G32B32A32_SFLOAT:
+            return 16;
+
+        // Depth-stencil formats
+        case image_format::D32_SFLOAT:
+        case image_format::D24_UNORM_S8_UINT:
+            return 4;
+
+        case image_format::D16_UNORM:
+            return 2;
+
+        // Miscellaneous formats
+        case image_format::R11G11B10_SFLOAT:
+        case image_format::R10G0B10A2_INT:
+        case image_format::BC3_BLOCK_SRGB:
+        case image_format::BC3_BLOCK_UNORM:
+            return 0;
+
+        default:
+            return 0;
+    }
+}
 
 #if 0
 #if 0
@@ -725,4 +809,199 @@ TBuiltInResource GetDefaultBuiltInResource()
 	DefaultBuiltInResource.limits.generalConstantMatrixVectorIndexing =  1;
 
 	return DefaultBuiltInResource;
+}
+
+struct op_info
+{
+	u32 Set;
+	u32 Binding;
+
+	u32 OpCode;
+	std::vector<u32> TypeId;
+	u32 SizeId;
+	u32 StorageClass;
+	u32 Constant;
+
+	u32 Width;
+
+	bool IsDescriptor;
+	bool IsPushConstant;
+	bool IsSigned;
+	bool NonWritable;
+};
+
+void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std::set<u32>& DescriptorIndices)
+{
+	assert(Binary[0] == SpvMagicNumber);
+
+	Info.resize(Binary[3]);
+
+	u32 Offset = 5;
+	u32 OpCode = 0;
+	u32 OpSize = 0;
+	u32 ResultId = 0;
+	while(Offset != Binary.size())
+	{
+		OpCode = static_cast<u16>(Binary[Offset] & 0xffff);
+		OpSize = static_cast<u16>(Binary[Offset] >> 16u);
+
+		switch(OpCode)
+		{
+			case SpvOpMemberDecorate:
+			{
+				    ResultId     = Binary[Offset + 1];
+				u32 DecorateType = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+
+				if(DecorateType == SpvDecorationNonWritable)
+				{
+					Info[ResultId].NonWritable = true;
+				}
+			} break;
+			case SpvOpDecorate:
+			{
+				ResultId = Binary[Offset + 1];
+
+				Info[ResultId].OpCode = OpCode;
+
+				switch(Binary[Offset + 2])
+				{
+					case SpvDecorationBinding:
+					{
+						Info[ResultId].Binding = Binary[Offset + 3];
+						Info[ResultId].IsDescriptor = true;
+						DescriptorIndices.insert(ResultId);
+					} break;
+
+					case SpvDecorationDescriptorSet:
+					{
+						Info[ResultId].Set = Binary[Offset + 3];
+						Info[ResultId].IsDescriptor = true;
+						DescriptorIndices.insert(ResultId);
+					} break;
+				}
+
+			} break;
+
+			case SpvOpVariable:
+			{
+				u32 TypeId      = Binary[Offset + 1];
+				    ResultId    = Binary[Offset + 2];
+				u32 StorageType = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].StorageClass = StorageType;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypeVoid:
+			{
+				    ResultId = Binary[Offset + 1];
+				Info[ResultId].OpCode = OpCode;
+			} break;
+			case SpvOpTypeBool:
+			{
+				    ResultId = Binary[Offset + 1];
+				Info[ResultId].OpCode = OpCode;
+			} break;
+			case SpvOpTypeInt:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 Width    = Binary[Offset + 2];
+				u32 IsSigned = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Width  = Width;
+				Info[ResultId].IsSigned = IsSigned;
+			} break;
+			case SpvOpTypeFloat:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 Width    = Binary[Offset + 2];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Width  = Width;
+			} break;
+			case SpvOpTypeVector:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				u32 Count    = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Width  = Count;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypeMatrix:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				u32 Count    = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Width  = Count;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypeStruct:
+			{
+				    ResultId  = Binary[Offset + 1];
+				u32 TypeCount = OpSize - 2;
+
+				for(u32 TypeIdIdx = 0; TypeIdIdx < TypeCount; ++TypeIdIdx)
+					Info[ResultId].TypeId.push_back(Binary[Offset + 2 + TypeIdIdx]);
+
+				Info[ResultId].OpCode = OpCode;
+			} break;
+			case SpvOpTypeImage:
+			case SpvOpTypeSampler:
+			case SpvOpTypeSampledImage:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypePointer:
+			{
+				    ResultId    = Binary[Offset + 1];
+				u32 StorageType = Binary[Offset + 2];
+				u32 TypeId      = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].TypeId.push_back(TypeId);
+				Info[ResultId].StorageClass = StorageType;
+			} break;
+			case SpvOpTypeArray:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				u32 SizeId   = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].SizeId = SizeId;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpTypeRuntimeArray:
+			{
+				    ResultId = Binary[Offset + 1];
+				u32 TypeId   = Binary[Offset + 2];
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].SizeId = ~0u;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+			case SpvOpConstant:
+			{
+				u32 TypeId   = Binary[Offset + 1];
+				    ResultId = Binary[Offset + 2];
+				u32 Constant = Binary[Offset + 3];
+
+				Info[ResultId].OpCode = OpCode;
+				Info[ResultId].Constant = Constant;
+				Info[ResultId].TypeId.push_back(TypeId);
+			} break;
+		}
+
+		assert(Offset < Binary.size());
+		Offset += OpSize;
+	}
 }

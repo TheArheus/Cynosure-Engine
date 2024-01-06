@@ -38,6 +38,10 @@ class window;
 #include "core/gfx/renderer_utils.hpp"
 #include "core/gfx/vulkan/vulkan_gfx.hpp"
 
+#if _WIN32
+	#include "core/gfx/dx12/directx12_gfx.hpp"
+#endif
+
 #include "core/gfx/renderer.h"
 #include "core/platform/window.hpp"
 
@@ -68,7 +72,6 @@ u32 PreviousPowerOfTwo(u32 x)
 struct indirect_draw_indexed_command
 {
 	VkDrawIndexedIndirectCommand DrawArg; // 5
-	u32 CommandIdx;
 };
 
 struct point_shadow_input
