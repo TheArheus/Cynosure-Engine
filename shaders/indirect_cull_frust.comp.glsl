@@ -34,6 +34,7 @@ struct mesh_draw_command
 	vec4 Scale;
 	vec4 Rotate;
 	uint MeshIndex;
+
 };
 
 struct plane
@@ -63,7 +64,6 @@ struct indirect_draw_indexed_command
     uint FirstIndex;
     int  VertexOffset;
     uint FirstInstance;
-	uint CommandIdx;
 };
 
 layout(binding = 0) buffer readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };

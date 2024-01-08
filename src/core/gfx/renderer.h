@@ -14,24 +14,24 @@ public:
 	global_graphics_context(global_graphics_context&& Oth) noexcept;
 	global_graphics_context& operator=(global_graphics_context&& Oth) noexcept;
 
-	buffer* PushBuffer(u64 DataSize, bool NewWithCounter, u32 Flags)
+	buffer* PushBuffer(std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
 	{
-		return GlobalHeap->PushBuffer(Backend, DataSize, NewWithCounter, Flags);
+		return GlobalHeap->PushBuffer(Backend, DebugName, DataSize, Count, NewWithCounter, Flags);
 	}
 
-	buffer* PushBuffer(void* Data, u64 DataSize, bool NewWithCounter, u32 Flags)
+	buffer* PushBuffer(std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
 	{
-		return GlobalHeap->PushBuffer(Backend, Data, DataSize, NewWithCounter, Flags);
+		return GlobalHeap->PushBuffer(Backend, DebugName, Data, DataSize, Count, NewWithCounter, Flags);
 	}
 
-	texture* PushTexture(u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
+	texture* PushTexture(std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
-		return GlobalHeap->PushTexture(Backend, Width, Height, Depth, InputData);
+		return GlobalHeap->PushTexture(Backend, DebugName, Width, Height, Depth, InputData);
 	}
 
-	texture* PushTexture(void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
+	texture* PushTexture(std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
-		return GlobalHeap->PushTexture(Backend, Data, Width, Height, Depth, InputData);
+		return GlobalHeap->PushTexture(Backend, DebugName, Data, Width, Height, Depth, InputData);
 	}
 
 	memory_heap* CreateMemoryHeap()
@@ -40,6 +40,8 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_memory_heap(Backend);
+			case backend_type::directx12:
+				return new directx12_memory_heap(Backend);
 			default:
 				return nullptr;
 		}
@@ -51,6 +53,8 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_global_pipeline_context(Backend);
+			case backend_type::directx12:
+				return new directx12_global_pipeline_context(Backend);
 			default:
 				return nullptr;
 		}
@@ -63,6 +67,8 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_render_context(Backend, ShaderList, ColorTargets, InputData, ShaderDefines);
+			case backend_type::directx12:
+				return new directx12_render_context(Backend, ShaderList, ColorTargets, InputData, ShaderDefines);
 			default:
 				return nullptr;
 		}
@@ -74,6 +80,8 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_compute_context(Backend, Shader, ShaderDefines);
+			case backend_type::directx12:
+				return new directx12_compute_context(Backend, Shader, ShaderDefines);
 			default:
 				return nullptr;
 		}

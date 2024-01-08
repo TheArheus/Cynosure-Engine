@@ -11,13 +11,13 @@ public:
 
 	void CreateResource(renderer_backend* Backend) override;
 
-	buffer* PushBuffer(renderer_backend* Backend, u64 DataSize, bool NewWithCounter, u32 Flags) override;
+	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) override;
 
-	buffer* PushBuffer(renderer_backend* Backend, void* Data, u64 DataSize, bool NewWithCounter, u32 Flags) override;
+	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) override;
 
-	texture* PushTexture(renderer_backend* Backend, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
+	texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
 
-	texture* PushTexture(renderer_backend* Backend, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
+	texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
 
 	VmaAllocator Handle;
 };
@@ -28,16 +28,16 @@ struct vulkan_buffer : public buffer
 	vulkan_buffer() = default;
 	~vulkan_buffer() override = default;
 
-	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, void* Data, u64 NewSize, bool NewWithCounter, u32 Flags)
+	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, bool NewWithCounter, u32 Flags)
 	{
 		Flags |= resource_flags::RF_CopyDst;
-		CreateResource(Backend, Heap, NewSize, NewWithCounter, Flags);
+		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, Flags);
 		Update(Backend, Data);
 	}
 
-	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, u64 NewSize, bool NewWithCounter, u32 Flags)
+	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 Flags)
 	{
-		CreateResource(Backend, Heap, NewSize, NewWithCounter, Flags);
+		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, Flags);
 	}
 
 	void Update(renderer_backend* Backend, void* Data) override
@@ -195,15 +195,15 @@ struct vulkan_buffer : public buffer
 		vkUnmapMemory(Device, TempMemory);
 	}
 
-	void CreateResource(renderer_backend* Backend, memory_heap* Heap, u64 NewSize, bool NewWithCounter, u32 Flags) override
+	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 Flags) override
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 		vulkan_memory_heap* VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
 		WithCounter = NewWithCounter;
 
 		Device = Gfx->Device;
-		Size = NewSize + WithCounter * sizeof(u32);
-		CounterOffset = NewSize;
+		Size = NewSize * Count + WithCounter * sizeof(u32);
+		CounterOffset = NewSize * Count;
 
 		VkBufferCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
 		CreateInfo.size = Size;
@@ -228,6 +228,12 @@ struct vulkan_buffer : public buffer
 		VmaAllocationInfo AllocationInfo;
 		VK_CHECK(vmaCreateBuffer(VulkanHeap->Handle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
 		Memory = AllocationInfo.deviceMemory;
+
+		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+		DebugNameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
+		DebugNameInfo.objectHandle = (u64)Handle;
+		DebugNameInfo.pObjectName = DebugName.c_str();
+		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
 
 		CreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		CreateInfo.size = Size;
@@ -273,11 +279,11 @@ private:
 // TODO: Better image view handling
 struct vulkan_texture : public texture
 {
-	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_transparent, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average})
+	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_transparent, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average})
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
-		CreateResource(Backend, Heap, NewWidth, NewHeight, DepthOrArraySize, InputData);
+		CreateResource(Backend, Heap, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
 		if(Data || Info.UseStagingBuffer)
 		{
 			CreateStagingResource();
@@ -364,7 +370,7 @@ struct vulkan_texture : public texture
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	}
 
-	void CreateResource(renderer_backend* Backend, memory_heap* Heap, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
+	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 		vulkan_memory_heap* VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
@@ -420,6 +426,12 @@ struct vulkan_texture : public texture
 		VK_CHECK(vmaCreateImage(VulkanHeap->Handle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
 		Memory = AllocationInfo.deviceMemory;
 		Size = AllocationInfo.size;
+
+		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+		DebugNameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
+		DebugNameInfo.objectHandle = (u64)Handle;
+		DebugNameInfo.pObjectName = DebugName.c_str();
+		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
 
 		VkImageViewCreateInfo ViewCreateInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
 		ViewCreateInfo.format = CreateInfo.format;
@@ -532,29 +544,29 @@ CreateResource(renderer_backend* Backend)
 }
 
 buffer* vulkan_memory_heap::
-PushBuffer(renderer_backend* Backend, u64 DataSize, bool NewWithCounter, u32 Flags)
+PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
 {
-	buffer* Buffer = new vulkan_buffer(Backend, this, DataSize, NewWithCounter, Flags);
+	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, DataSize, Count, NewWithCounter, Flags);
 	return Buffer;
 }
 
 buffer* vulkan_memory_heap::
-PushBuffer(renderer_backend* Backend, void* Data, u64 DataSize, bool NewWithCounter, u32 Flags)
+PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
 {
-	buffer* Buffer = new vulkan_buffer(Backend, this, Data, DataSize, NewWithCounter, Flags);
+	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, Data, DataSize, Count, NewWithCounter, Flags);
 	return Buffer;
 }
 
 texture* vulkan_memory_heap::
-PushTexture(renderer_backend* Backend, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
+PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 {
-	texture* Texture = new vulkan_texture(Backend, this, nullptr, Width, Height, Depth, InputData);
+	texture* Texture = new vulkan_texture(Backend, this, DebugName, nullptr, Width, Height, Depth, InputData);
 	return  Texture;
 }
 
 texture* vulkan_memory_heap::
-PushTexture(renderer_backend* Backend, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
+PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 {
-	texture* Texture = new vulkan_texture(Backend, this, Data, Width, Height, Depth, InputData);
+	texture* Texture = new vulkan_texture(Backend, this, DebugName, Data, Width, Height, Depth, InputData);
 	return  Texture;
 }

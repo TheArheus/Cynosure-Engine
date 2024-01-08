@@ -99,7 +99,7 @@ struct render_system : public entity_system
 			if(Diffuse)
 			{
 				Texture.Load(Diffuse->Data);
-				DiffuseTextures.push_back(Window.Gfx.PushTexture(Texture.Data, Texture.Width, Texture.Height, 1, TextureInputData));
+				DiffuseTextures.push_back(Window.Gfx.PushTexture("DiffuseTexture" + std::to_string(TextureIdx), Texture.Data, Texture.Width, Texture.Height, 1, TextureInputData));
 				NewMaterial.HasTexture = true;
 				NewMaterial.TextureIdx = TextureIdx++;
 				Texture.Delete();
@@ -107,7 +107,7 @@ struct render_system : public entity_system
 			if(NormalMap)
 			{
 				Texture.Load(NormalMap->Data);
-				NormalTextures.push_back(Window.Gfx.PushTexture(Texture.Data, Texture.Width, Texture.Height, 1, TextureInputData));
+				NormalTextures.push_back(Window.Gfx.PushTexture("NormalTexture" + std::to_string(NormalMapIdx), Texture.Data, Texture.Width, Texture.Height, 1, TextureInputData));
 				NewMaterial.HasNormalMap = true;
 				NewMaterial.NormalMapIdx = NormalMapIdx++;
 				Texture.Delete();
@@ -115,7 +115,7 @@ struct render_system : public entity_system
 			if(SpecularMap)
 			{
 				Texture.Load(SpecularMap->Data);
-				SpecularTextures.push_back(Window.Gfx.PushTexture(Texture.Data, Texture.Width, Texture.Height, 1, TextureInputData));
+				SpecularTextures.push_back(Window.Gfx.PushTexture("SpecularTexture" + std::to_string(SpecularIdx), Texture.Data, Texture.Width, Texture.Height, 1, TextureInputData));
 				NewMaterial.HasSpecularMap = true;
 				NewMaterial.SpecularMapIdx = SpecularIdx++;
 				Texture.Delete();
@@ -123,7 +123,7 @@ struct render_system : public entity_system
 			if(HeightMap)
 			{
 				Texture.Load(HeightMap->Data);
-				HeightTextures.push_back(Window.Gfx.PushTexture(Texture.Data, Texture.Width, Texture.Height, 1, TextureInputData));
+				HeightTextures.push_back(Window.Gfx.PushTexture("HeightTexture" + std::to_string(HeightMapIdx), Texture.Data, Texture.Width, Texture.Height, 1, TextureInputData));
 				NewMaterial.HasHeightMap = true;
 				NewMaterial.HeightMapIdx = HeightMapIdx++;
 				Texture.Delete();
@@ -150,38 +150,38 @@ struct render_system : public entity_system
 		MeshCommonCullingInput.MeshCount = Geometries.MeshCount;
 
 		// TODO: Initial buffer setup. Recreate them if needed
-		GeometryOffsets = Window.Gfx.PushBuffer(Geometries.Offsets.data(), Geometries.Offsets.size() * sizeof(mesh::offset), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		GeometryOffsets = Window.Gfx.PushBuffer("GeometryOffsets", Geometries.Offsets.data(), sizeof(mesh::offset), Geometries.Offsets.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		MeshDrawCommandDataBuffer = Window.Gfx.PushBuffer(StaticMeshInstances.data(), sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
-		MeshDrawVisibilityDataBuffer = Window.Gfx.PushBuffer(StaticMeshVisibility.data(), sizeof(u32) * StaticMeshVisibility.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
+		MeshDrawCommandDataBuffer = Window.Gfx.PushBuffer("MeshDrawCommandDataBuffer", StaticMeshInstances.data(), sizeof(mesh_draw_command), StaticMeshInstances.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
+		MeshDrawVisibilityDataBuffer = Window.Gfx.PushBuffer("MeshDrawVisibilityDataBuffer", StaticMeshVisibility.data(), sizeof(u32), StaticMeshVisibility.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
 
-		IndirectDrawIndexedCommands = Window.Gfx.PushBuffer(sizeof(indirect_draw_indexed_command) * StaticMeshInstances.size(), true, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
-		ShadowIndirectDrawIndexedCommands = Window.Gfx.PushBuffer(sizeof(indirect_draw_indexed_command) * StaticMeshInstances.size(), true, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
+		IndirectDrawIndexedCommands = Window.Gfx.PushBuffer("IndirectDrawIndexedCommands", sizeof(indirect_draw_indexed_command), StaticMeshInstances.size(), true, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
+		ShadowIndirectDrawIndexedCommands = Window.Gfx.PushBuffer("ShadowIndirectDrawIndexedCommands", sizeof(indirect_draw_indexed_command), StaticMeshInstances.size(), true, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
 
-		MeshMaterialsBuffer = Window.Gfx.PushBuffer(Materials.data(), Materials.size() * sizeof(mesh::material), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshMaterialsBuffer = Window.Gfx.PushBuffer("MeshMaterialsBuffer", Materials.data(), sizeof(mesh::material), Materials.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		VertexBuffer = Window.Gfx.PushBuffer(Geometries.Vertices.data(), Geometries.Vertices.size() * sizeof(vertex), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		IndexBuffer = Window.Gfx.PushBuffer(Geometries.VertexIndices.data(), Geometries.VertexIndices.size() * sizeof(u32), false, resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
+		VertexBuffer = Window.Gfx.PushBuffer("VertexBuffer", Geometries.Vertices.data(), sizeof(vertex), Geometries.Vertices.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		IndexBuffer = Window.Gfx.PushBuffer("IndexBuffer", Geometries.VertexIndices.data(), sizeof(u32), Geometries.VertexIndices.size(), false, resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
 
-		MeshDrawCommandBuffer = Window.Gfx.PushBuffer(sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		MeshDrawShadowCommandBuffer = Window.Gfx.PushBuffer(sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		LightSourcesBuffer = Window.Gfx.PushBuffer(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT, false, resource_flags::RF_ConstantBuffer | resource_flags::RF_CopyDst);
+		MeshDrawCommandBuffer = Window.Gfx.PushBuffer("MeshDrawCommandBuffer", sizeof(mesh_draw_command), StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshDrawShadowCommandBuffer = Window.Gfx.PushBuffer("MeshDrawShadowCommandBuffer", sizeof(mesh_draw_command), StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		LightSourcesBuffer = Window.Gfx.PushBuffer("LightSourcesBuffer", sizeof(light_source), LIGHT_SOURCES_MAX_COUNT, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		WorldUpdateBuffer = Window.Gfx.PushBuffer(sizeof(global_world_data), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer(sizeof(mesh_comp_culling_common_input), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		WorldUpdateBuffer = Window.Gfx.PushBuffer("WorldUpdateBuffer", sizeof(global_world_data), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer("MeshCommonCullingInputBuffer", sizeof(mesh_comp_culling_common_input), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 	}
 
 	void UpdateResources(window& Window, alloc_vector<light_source>& GlobalLightSources, global_world_data& WorldUpdate)
 	{
 		Window.Gfx.ColorPassContext->SetStorageBufferView(WorldUpdateBuffer);
-		Window.Gfx.ColorPassContext->SetUniformBufferView(LightSourcesBuffer);
+		Window.Gfx.ColorPassContext->SetStorageBufferView(LightSourcesBuffer);
 		Window.Gfx.ColorPassContext->SetStorageBufferView(Window.Gfx.PoissonDiskBuffer);
-		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.RandomAnglesTexture}, image_barrier_state::shader_read);
-		//Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.GfxDepthTarget}, image_barrier_state::shader_read);
-		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GBuffer, image_barrier_state::shader_read);
-		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.AmbientOcclusionData}, image_barrier_state::shader_read);
-		Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.GfxColorTarget}, image_barrier_state::general);
-		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GlobalShadow, image_barrier_state::shader_read);
+		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.RandomAnglesTexture}, barrier_state::shader_read);
+		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GBuffer, barrier_state::shader_read);
+		Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.GfxColorTarget}, barrier_state::general);
+
+		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.AmbientOcclusionData}, barrier_state::shader_read, 0, 1);
+		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GlobalShadow, barrier_state::shader_read, 0, 2);
 
 		u32 PointLightSourceCount = 0;
 		u32 SpotLightSourceCount = 0;
@@ -203,7 +203,7 @@ struct render_system : public entity_system
 					TextureInputData.MipLevels = 1;
 					TextureInputData.Layers    = 6;
 					if(WorldUpdate.LightSourceShadowsEnabled)
-						PointLightShadows.push_back(Window.Gfx.PushTexture(nullptr, Window.Width, Window.Width, 1, TextureInputData));
+						PointLightShadows.push_back(Window.Gfx.PushTexture("PointLightShadow" + std::to_string(PointLightSourceCount), nullptr, Window.Width, Window.Width, 1, TextureInputData));
 					PointLightSourceCount++;
 				}
 				else if(LightSource.Type == light_type_spot)
@@ -211,14 +211,14 @@ struct render_system : public entity_system
 					TextureInputData.MipLevels = 1;
 					TextureInputData.Layers    = 1;
 					if(WorldUpdate.LightSourceShadowsEnabled)
-						LightShadows.push_back(Window.Gfx.PushTexture(nullptr, Window.Width, Window.Height, 1, TextureInputData));
+						LightShadows.push_back(Window.Gfx.PushTexture("LightShadow" + std::to_string(SpotLightSourceCount), nullptr, Window.Width, Window.Height, 1, TextureInputData));
 					SpotLightSourceCount++;
 				}
 			}
 
 			// TODO: Think about abstracting this usage???
-			Window.Gfx.ColorPassContext->SetImageSampler(LightShadows, image_barrier_state::shader_read, 0, 1);
-			Window.Gfx.ColorPassContext->SetImageSampler(PointLightShadows, image_barrier_state::shader_read, 0, 1);
+			Window.Gfx.ColorPassContext->SetImageSampler(LightShadows, barrier_state::shader_read, 0, 3);
+			Window.Gfx.ColorPassContext->SetImageSampler(PointLightShadows, barrier_state::shader_read, 0, 4);
 		}
 		Window.Gfx.ColorPassContext->StaticUpdate();
 
@@ -251,8 +251,8 @@ struct render_system : public entity_system
 
 		for(u32 MipIdx = 0; MipIdx < Window.Gfx.DepthReduceContext.size(); ++MipIdx)
 		{
-			Window.Gfx.DepthReduceContext[MipIdx]->SetImageSampler({MipIdx == 0 ? Window.Gfx.DebugCameraViewDepthTarget : Window.Gfx.DepthPyramid}, MipIdx == 0 ? image_barrier_state::shader_read: image_barrier_state::general, MipIdx == 0 ? MipIdx : (MipIdx - 1));
-			Window.Gfx.DepthReduceContext[MipIdx]->SetStorageImage({Window.Gfx.DepthPyramid}, image_barrier_state::general, MipIdx);
+			Window.Gfx.DepthReduceContext[MipIdx]->SetImageSampler({MipIdx == 0 ? Window.Gfx.DebugCameraViewDepthTarget : Window.Gfx.DepthPyramid}, MipIdx == 0 ? barrier_state::shader_read: barrier_state::general, MipIdx == 0 ? MipIdx : (MipIdx - 1));
+			Window.Gfx.DepthReduceContext[MipIdx]->SetStorageImage({Window.Gfx.DepthPyramid}, barrier_state::general, MipIdx);
 			Window.Gfx.DepthReduceContext[MipIdx]->StaticUpdate();
 		}
 
@@ -269,29 +269,28 @@ struct render_system : public entity_system
 		Window.Gfx.GfxContext->SetStorageBufferView(VertexBuffer);
 		Window.Gfx.GfxContext->SetStorageBufferView(MeshDrawCommandBuffer);
 		Window.Gfx.GfxContext->SetStorageBufferView(MeshMaterialsBuffer);
-		Window.Gfx.GfxContext->SetImageSampler(DiffuseTextures, image_barrier_state::shader_read, 0, 1);
-		Window.Gfx.GfxContext->SetImageSampler(NormalTextures, image_barrier_state::shader_read, 0, 1);
-		Window.Gfx.GfxContext->SetImageSampler(SpecularTextures, image_barrier_state::shader_read, 0, 1);
-		Window.Gfx.GfxContext->SetImageSampler(HeightTextures, image_barrier_state::shader_read, 0, 1);
+		Window.Gfx.GfxContext->SetImageSampler(DiffuseTextures, barrier_state::shader_read, 0, 1);
+		Window.Gfx.GfxContext->SetImageSampler(NormalTextures, barrier_state::shader_read, 0, 2);
+		Window.Gfx.GfxContext->SetImageSampler(SpecularTextures, barrier_state::shader_read, 0, 3);
+		Window.Gfx.GfxContext->SetImageSampler(HeightTextures, barrier_state::shader_read, 0, 4);
 		Window.Gfx.GfxContext->StaticUpdate();
 
 		Window.Gfx.AmbientOcclusionContext->SetStorageBufferView(WorldUpdateBuffer);
 		Window.Gfx.AmbientOcclusionContext->SetStorageBufferView(Window.Gfx.RandomSamplesBuffer);
-		Window.Gfx.AmbientOcclusionContext->SetImageSampler({Window.Gfx.NoiseTexture}, image_barrier_state::shader_read);
-		//Window.Gfx.AmbientOcclusionContext->SetImageSampler({Window.Gfx.GfxDepthTarget}, image_barrier_state::shader_read);
-		Window.Gfx.AmbientOcclusionContext->SetImageSampler(Window.Gfx.GBuffer, image_barrier_state::shader_read);
-		Window.Gfx.AmbientOcclusionContext->SetStorageImage({Window.Gfx.AmbientOcclusionData}, image_barrier_state::general);
+		Window.Gfx.AmbientOcclusionContext->SetImageSampler({Window.Gfx.NoiseTexture}, barrier_state::shader_read);
+		Window.Gfx.AmbientOcclusionContext->SetImageSampler(Window.Gfx.GBuffer, barrier_state::shader_read);
+		Window.Gfx.AmbientOcclusionContext->SetStorageImage({Window.Gfx.AmbientOcclusionData}, barrier_state::general);
 		Window.Gfx.AmbientOcclusionContext->StaticUpdate();
 
-		Window.Gfx.BlurContext->SetImageSampler({Window.Gfx.AmbientOcclusionData}, image_barrier_state::general);
-		Window.Gfx.BlurContext->SetStorageImage({Window.Gfx.AmbientOcclusionData}, image_barrier_state::general);
+		Window.Gfx.BlurContext->SetImageSampler({Window.Gfx.AmbientOcclusionData}, barrier_state::general);
+		Window.Gfx.BlurContext->SetStorageImage({Window.Gfx.AmbientOcclusionData}, barrier_state::general);
 		Window.Gfx.BlurContext->StaticUpdate();
 
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(GeometryOffsets);
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshDrawCommandDataBuffer);
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshDrawVisibilityDataBuffer);
-		Window.Gfx.OcclCullingContext->SetImageSampler({Window.Gfx.DepthPyramid}, image_barrier_state::general);
+		Window.Gfx.OcclCullingContext->SetImageSampler({Window.Gfx.DepthPyramid}, barrier_state::general);
 		Window.Gfx.OcclCullingContext->StaticUpdate();
 	}
 
@@ -330,12 +329,14 @@ struct render_system : public entity_system
 			Window.Gfx.FrustCullingContext->Begin(PipelineContext);
 			Window.Gfx.FrustCullingContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.FrustCullingContext->End();
+			Window.Gfx.FrustCullingContext->Clear();
 		}
 
 		{
 			Window.Gfx.ShadowComputeContext->Begin(PipelineContext);
 			Window.Gfx.ShadowComputeContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.ShadowComputeContext->End();
+			Window.Gfx.ShadowComputeContext->Clear();
 		}
 
 		// TODO: this should be moved to directional light calculations I guess
@@ -344,7 +345,7 @@ struct render_system : public entity_system
 		{
 			mat4 Shadow = WorldUpdate.LightView[CascadeIdx] * WorldUpdate.LightProj[CascadeIdx];
 
-			PipelineContext->SetImageBarriers({{Window.Gfx.GlobalShadow, 0, AF_DepthStencilAttachmentWrite, image_barrier_state::undefined, image_barrier_state::depth_stencil_attachment}}, 
+			PipelineContext->SetImageBarriers({{Window.Gfx.GlobalShadow, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment}}, 
 											PSF_Compute, PSF_EarlyFragment);
 
 			PipelineContext->SetBufferBarriers({{MeshDrawShadowCommandBuffer, AF_ShaderWrite, AF_ShaderRead}}, 
@@ -352,13 +353,13 @@ struct render_system : public entity_system
 			PipelineContext->SetBufferBarriers({{ShadowIndirectDrawIndexedCommands, AF_ShaderWrite, AF_IndirectCommandRead}}, 
 											  PSF_Compute, PSF_DrawIndirect);
 
-			Window.Gfx.CascadeShadowContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.GlobalShadow[CascadeIdx]->Width, Window.Gfx.GlobalShadow[CascadeIdx]->Height, Window.Gfx.GlobalShadow[CascadeIdx], {1, 0});
-
 			Window.Gfx.CascadeShadowContext->Begin(PipelineContext, Window.Gfx.GlobalShadow[CascadeIdx]->Width, Window.Gfx.GlobalShadow[CascadeIdx]->Height);
+			Window.Gfx.CascadeShadowContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.GlobalShadow[CascadeIdx]->Width, Window.Gfx.GlobalShadow[CascadeIdx]->Height, Window.Gfx.GlobalShadow[CascadeIdx], {1, 0});
 			Window.Gfx.CascadeShadowContext->SetConstant((void*)&Shadow, sizeof(mat4));
 			Window.Gfx.CascadeShadowContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.CascadeShadowContext->End();
 		}
+		Window.Gfx.CascadeShadowContext->Clear();
 
 		// TODO: something better or/and efficient here
 		// TODO: render only when the actual light source have been changed
@@ -372,7 +373,7 @@ struct render_system : public entity_system
 				{
 					texture* ShadowMapTexture = PointLightShadows[PointLightSourceIdx];
 
-					PipelineContext->SetImageBarriers({{ShadowMapTexture, 0, AF_DepthStencilAttachmentWrite, image_barrier_state::undefined, image_barrier_state::depth_stencil_attachment}}, 
+					PipelineContext->SetImageBarriers({{ShadowMapTexture, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment}}, 
 													PSF_Compute, PSF_EarlyFragment);
 
 					for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
@@ -387,9 +388,9 @@ struct render_system : public entity_system
 						PointShadowInput.LightMat = Shadow;
 						PointShadowInput.FarZ = WorldUpdate.FarZ;
 
-						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetDepthTarget(load_op::clear, store_op::store, ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0}, CubeMapFaceIdx, true);
 
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->Begin(PipelineContext, ShadowMapTexture->Width, ShadowMapTexture->Height);
+						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetDepthTarget(load_op::clear, store_op::store, ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0}, CubeMapFaceIdx, true);
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetConstant((void*)&PointShadowInput, sizeof(point_shadow_input));
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->DrawIndirect(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->End();
@@ -400,16 +401,15 @@ struct render_system : public entity_system
 				{
 					texture* ShadowMapTexture = LightShadows[SpotLightSourceIdx];
 
-					PipelineContext->SetImageBarriers({{ShadowMapTexture, 0, AF_DepthStencilAttachmentWrite, image_barrier_state::undefined, image_barrier_state::depth_stencil_attachment}}, 
+					PipelineContext->SetImageBarriers({{ShadowMapTexture, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment}}, 
 												  PSF_Compute, PSF_EarlyFragment);
 
 					mat4 ShadowMapProj = PerspRH(LightSource.Pos.w, ShadowMapTexture->Width, ShadowMapTexture->Height, WorldUpdate.NearZ, WorldUpdate.FarZ);
 					mat4 ShadowMapView = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + vec3(LightSource.Dir), vec3(0, 1, 0));
 					mat4 Shadow = ShadowMapView * ShadowMapProj;
 
-					Window.Gfx.ShadowContext->SetDepthTarget(load_op::clear, store_op::store, ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0});
-
 					Window.Gfx.ShadowContext->Begin(PipelineContext, ShadowMapTexture->Width, ShadowMapTexture->Height);
+					Window.Gfx.ShadowContext->SetDepthTarget(load_op::clear, store_op::store, ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0});
 					Window.Gfx.ShadowContext->SetConstant((void*)&Shadow, sizeof(mat4));
 					Window.Gfx.ShadowContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 					Window.Gfx.ShadowContext->End();
@@ -419,65 +419,66 @@ struct render_system : public entity_system
 		}
 		for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
 		{
-			Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->End();
+			Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->Clear();
 		}
-		Window.Gfx.ShadowContext->End();
+		Window.Gfx.ShadowContext->Clear();
 
 		// NOTE: This is only for debug. Maybe not compile on release mode???
 		{
 			mat4 Shadow = WorldUpdate.DebugView * WorldUpdate.Proj;
 
-			PipelineContext->SetImageBarriers({{Window.Gfx.DebugCameraViewDepthTarget, 0, AF_DepthStencilAttachmentWrite, image_barrier_state::undefined, image_barrier_state::depth_stencil_attachment}}, 
+			PipelineContext->SetImageBarriers({{Window.Gfx.DebugCameraViewDepthTarget, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment}}, 
 										  PSF_Compute, PSF_EarlyFragment);
 
 			PipelineContext->SetBufferBarriers({{MeshDrawCommandBuffer, AF_ShaderWrite, AF_ShaderRead}}, PSF_Compute, PSF_VertexShader);
 			PipelineContext->SetBufferBarriers({{IndirectDrawIndexedCommands, AF_ShaderWrite, AF_IndirectCommandRead}}, PSF_Compute, PSF_DrawIndirect);
 
-			Window.Gfx.DebugCameraViewContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.DebugCameraViewDepthTarget->Width, Window.Gfx.DebugCameraViewDepthTarget->Height, Window.Gfx.DebugCameraViewDepthTarget, {1, 0});
-
-
 			Window.Gfx.DebugCameraViewContext->Begin(PipelineContext, Window.Gfx.DebugCameraViewDepthTarget->Width, Window.Gfx.DebugCameraViewDepthTarget->Height);
+			Window.Gfx.DebugCameraViewContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.DebugCameraViewDepthTarget->Width, Window.Gfx.DebugCameraViewDepthTarget->Height, Window.Gfx.DebugCameraViewDepthTarget, {1, 0});
 			Window.Gfx.DebugCameraViewContext->SetConstant((void*)&Shadow, sizeof(mat4));
 			Window.Gfx.DebugCameraViewContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.DebugCameraViewContext->End();
+			Window.Gfx.DebugCameraViewContext->Clear();
 		}
 
 		{
-			PipelineContext->SetImageBarriers({{DiffuseTextures, 0, AF_ShaderRead, image_barrier_state::undefined, image_barrier_state::shader_read}, 
-											  {NormalTextures, 0, AF_ShaderRead, image_barrier_state::undefined, image_barrier_state::shader_read},
-											  {SpecularTextures, 0, AF_ShaderRead, image_barrier_state::undefined, image_barrier_state::shader_read},
-											  {HeightTextures, 0, AF_ShaderRead, image_barrier_state::undefined, image_barrier_state::shader_read},
-											  {Window.Gfx.GBuffer, 0, AF_ColorAttachmentWrite, image_barrier_state::undefined, image_barrier_state::color_attachment},
-											  {{Window.Gfx.GfxDepthTarget}, 0, AF_DepthStencilAttachmentWrite, image_barrier_state::undefined, image_barrier_state::depth_stencil_attachment}},
+			PipelineContext->SetImageBarriers({{DiffuseTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read}, 
+											  {NormalTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read},
+											  {SpecularTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read},
+											  {HeightTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read},
+											  {Window.Gfx.GBuffer, 0, AF_ColorAttachmentWrite, barrier_state::undefined, barrier_state::color_attachment},
+											  {{Window.Gfx.GfxDepthTarget}, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment}},
 											 PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
 
 			PipelineContext->SetBufferBarrier({WorldUpdateBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_VertexShader|PSF_FragmentShader);
 			PipelineContext->SetBufferBarrier({MeshMaterialsBuffer, AF_TransferWrite, AF_ShaderRead}, PSF_Transfer, PSF_VertexShader|PSF_FragmentShader);
 
-			Window.Gfx.GfxContext->SetColorTarget(load_op::clear, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GBuffer, {0, 0, 0, 0});
+			Window.Gfx.GfxContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
+			Window.Gfx.GfxContext->SetColorTarget(load_op::clear, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GBuffer, {0, 0, 0, 1});
 			Window.Gfx.GfxContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
 
-			Window.Gfx.GfxContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.GfxContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.GfxContext->End();
+			Window.Gfx.GfxContext->Clear();
 		}
 
 		{
-			PipelineContext->SetImageBarriers({{Window.Gfx.GBuffer, AF_ColorAttachmentWrite, AF_ShaderRead, image_barrier_state::color_attachment, image_barrier_state::shader_read},
-										   {{Window.Gfx.NoiseTexture}, 0, AF_ShaderRead, image_barrier_state::undefined, image_barrier_state::shader_read},
-										   {{Window.Gfx.AmbientOcclusionData}, 0, AF_ShaderWrite, image_barrier_state::undefined, image_barrier_state::general},
-										   {{Window.Gfx.GfxDepthTarget}, 0, AF_ShaderRead, image_barrier_state::depth_stencil_attachment, image_barrier_state::shader_read}}, 
+			PipelineContext->SetImageBarriers({{Window.Gfx.GBuffer, AF_ColorAttachmentWrite, AF_ShaderRead, barrier_state::color_attachment, barrier_state::shader_read},
+										   {{Window.Gfx.NoiseTexture}, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read},
+										   {{Window.Gfx.AmbientOcclusionData}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general},
+										   {{Window.Gfx.GfxDepthTarget}, 0, AF_ShaderRead, barrier_state::depth_stencil_attachment, barrier_state::shader_read}}, 
 										  PSF_ColorAttachment, PSF_Compute);
 
 			Window.Gfx.AmbientOcclusionContext->Begin(PipelineContext);
 			Window.Gfx.AmbientOcclusionContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.AmbientOcclusionContext->End();
+			Window.Gfx.AmbientOcclusionContext->Clear();
 		}
 
 		// NOTE: Horizontal blur
 		{
 
-			PipelineContext->SetImageBarriers({{Window.Gfx.AmbientOcclusionData, AF_ShaderWrite, AF_ShaderWrite|AF_ShaderRead, image_barrier_state::general, image_barrier_state::general}}, 
+			PipelineContext->SetImageBarriers({{Window.Gfx.AmbientOcclusionData, AF_ShaderWrite, AF_ShaderWrite|AF_ShaderRead, barrier_state::general, barrier_state::general}}, 
 											 PSF_Compute, PSF_Compute);
 
 			vec3 BlurInput(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, 1.0);
@@ -491,7 +492,7 @@ struct render_system : public entity_system
 		// NOTE: Vertical blur
 		{
 
-			PipelineContext->SetImageBarriers({{Window.Gfx.AmbientOcclusionData, AF_ShaderWrite|AF_ShaderRead, AF_ShaderWrite|AF_ShaderRead, image_barrier_state::general, image_barrier_state::general}}, 
+			PipelineContext->SetImageBarriers({{Window.Gfx.AmbientOcclusionData, AF_ShaderWrite|AF_ShaderRead, AF_ShaderWrite|AF_ShaderRead, barrier_state::general, barrier_state::general}}, 
 											 PSF_Compute, PSF_Compute);
 
 			vec3 BlurInput(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, 0.0);
@@ -500,17 +501,18 @@ struct render_system : public entity_system
 			Window.Gfx.BlurContext->SetConstant((void*)BlurInput.E, sizeof(vec3));
 			Window.Gfx.BlurContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.BlurContext->End();
+			Window.Gfx.BlurContext->Clear();
 		}
 
 		{
-			std::vector<std::tuple<std::vector<texture*>, u32, u32, image_barrier_state, image_barrier_state>> ColorPassBarrier = 
+			std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state>> ColorPassBarrier = 
 			{
-				{{Window.Gfx.GfxColorTarget}, 0, AF_ShaderWrite, image_barrier_state::undefined, image_barrier_state::general},
-				{{Window.Gfx.AmbientOcclusionData}, AF_ShaderWrite|AF_ShaderRead, AF_ShaderRead, image_barrier_state::general, image_barrier_state::shader_read},
-				{{Window.Gfx.RandomAnglesTexture}, 0, AF_ShaderRead, image_barrier_state::undefined, image_barrier_state::shader_read},
-				{Window.Gfx.GlobalShadow, AF_DepthStencilAttachmentWrite, AF_ShaderRead, image_barrier_state::depth_stencil_attachment, image_barrier_state::shader_read},
-				{LightShadows, AF_DepthStencilAttachmentWrite, AF_ShaderRead, image_barrier_state::depth_stencil_attachment, image_barrier_state::shader_read},
-				{PointLightShadows, AF_DepthStencilAttachmentWrite, AF_ShaderRead, image_barrier_state::depth_stencil_attachment, image_barrier_state::shader_read},
+				{{Window.Gfx.GfxColorTarget}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general},
+				{{Window.Gfx.AmbientOcclusionData}, AF_ShaderWrite|AF_ShaderRead, AF_ShaderRead, barrier_state::general, barrier_state::shader_read},
+				{{Window.Gfx.RandomAnglesTexture}, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read},
+				{Window.Gfx.GlobalShadow, AF_DepthStencilAttachmentWrite, AF_ShaderRead, barrier_state::depth_stencil_attachment, barrier_state::shader_read},
+				{LightShadows, AF_DepthStencilAttachmentWrite, AF_ShaderRead, barrier_state::depth_stencil_attachment, barrier_state::shader_read},
+				{PointLightShadows, AF_DepthStencilAttachmentWrite, AF_ShaderRead, barrier_state::depth_stencil_attachment, barrier_state::shader_read},
 			};
 			PipelineContext->SetImageBarriers(ColorPassBarrier, PSF_EarlyFragment|PSF_Compute, PSF_Compute);
 
@@ -519,11 +521,12 @@ struct render_system : public entity_system
 			Window.Gfx.ColorPassContext->Begin(PipelineContext);
 			Window.Gfx.ColorPassContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.ColorPassContext->End();
+			Window.Gfx.ColorPassContext->Clear();
 		}
 
 		{
-			PipelineContext->SetImageBarriers({{Window.Gfx.DebugCameraViewDepthTarget, AF_DepthStencilAttachmentWrite, AF_ShaderRead, image_barrier_state::depth_stencil_attachment, image_barrier_state::shader_read},
-											  {Window.Gfx.DepthPyramid, 0, AF_ShaderWrite|AF_ShaderRead, image_barrier_state::undefined, image_barrier_state::general}}, 
+			PipelineContext->SetImageBarriers({{Window.Gfx.DebugCameraViewDepthTarget, AF_DepthStencilAttachmentWrite, AF_ShaderRead, barrier_state::depth_stencil_attachment, barrier_state::shader_read},
+											  {Window.Gfx.DepthPyramid, 0, AF_ShaderWrite|AF_ShaderRead, barrier_state::undefined, barrier_state::general}}, 
 											  PSF_LateFragment, PSF_Compute);
 
 			for(u32 MipIdx = 0;
@@ -537,8 +540,9 @@ struct render_system : public entity_system
 				Window.Gfx.DepthReduceContext[MipIdx]->SetConstant((void*)VecDims.E, sizeof(vec2));
 				Window.Gfx.DepthReduceContext[MipIdx]->Execute(VecDims.x, VecDims.y);
 				Window.Gfx.DepthReduceContext[MipIdx]->End();
+				Window.Gfx.DepthReduceContext[MipIdx]->Clear();
 
-				PipelineContext->SetImageBarriers({{Window.Gfx.DepthPyramid, AF_ShaderWrite|AF_ShaderRead, AF_ShaderWrite|AF_ShaderRead, image_barrier_state::general, image_barrier_state::general}}, 
+				PipelineContext->SetImageBarriers({{Window.Gfx.DepthPyramid, AF_ShaderWrite|AF_ShaderRead, AF_ShaderWrite|AF_ShaderRead, barrier_state::general, barrier_state::general}}, 
 												 PSF_Compute, PSF_Compute);
 			}
 		}
@@ -547,6 +551,7 @@ struct render_system : public entity_system
 			Window.Gfx.OcclCullingContext->Begin(PipelineContext);
 			Window.Gfx.OcclCullingContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.OcclCullingContext->End();
+			Window.Gfx.OcclCullingContext->Clear();
 		}
 	}
 };

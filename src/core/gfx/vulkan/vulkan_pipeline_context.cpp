@@ -67,8 +67,8 @@ EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture)
 
 	std::vector<VkImageMemoryBarrier> ImageCopyBarriers = 
 	{
-		CreateImageBarrier(Texture->Handle, GetVKAccessMask(AF_ColorAttachmentWrite), GetVKAccessMask(AF_TransferRead), GetVKImageLayout(image_barrier_state::color_attachment), GetVKImageLayout(image_barrier_state::transfer_src)),
-		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], 0, GetVKAccessMask(AF_TransferWrite), GetVKImageLayout(image_barrier_state::undefined), GetVKImageLayout(image_barrier_state::transfer_dst)),
+		CreateImageBarrier(Texture->Handle, GetVKAccessMask(AF_ColorAttachmentWrite), GetVKAccessMask(AF_TransferRead), GetVKLayout(barrier_state::color_attachment), GetVKLayout(barrier_state::transfer_src)),
+		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], 0, GetVKAccessMask(AF_TransferWrite), GetVKLayout(barrier_state::undefined), GetVKLayout(barrier_state::transfer_dst)),
 	};
 	ImageBarrier(*CommandList, GetVKPipelineStage(PSF_ColorAttachment), GetVKPipelineStage(PSF_Transfer), ImageCopyBarriers);
 
@@ -79,7 +79,7 @@ EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture)
 	ImageCopyRegion.dstSubresource.layerCount = 1;
 	ImageCopyRegion.extent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
 
-	vkCmdCopyImage(*CommandList, Texture->Handle, GetVKImageLayout(image_barrier_state::transfer_src), Gfx->SwapchainImages[BackBufferIndex], GetVKImageLayout(image_barrier_state::transfer_dst), 1, &ImageCopyRegion);
+	vkCmdCopyImage(*CommandList, Texture->Handle, GetVKLayout(barrier_state::transfer_src), Gfx->SwapchainImages[BackBufferIndex], GetVKLayout(barrier_state::transfer_dst), 1, &ImageCopyRegion);
 }
 
 void vulkan_global_pipeline_context::
@@ -90,7 +90,7 @@ Present(renderer_backend* Backend)
 
 	std::vector<VkImageMemoryBarrier> ImageEndRenderBarriers = 
 	{
-		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], GetVKAccessMask(AF_TransferWrite), 0, GetVKImageLayout(image_barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], GetVKAccessMask(AF_TransferWrite), 0, GetVKLayout(barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
 	};
 	ImageBarrier(*CommandList, GetVKPipelineStage(PSF_Transfer), GetVKPipelineStage(PSF_BottomOfPipe), ImageEndRenderBarriers);
 
@@ -120,8 +120,8 @@ CopyImage(texture* Dst, texture* Src)
 	vulkan_texture* SrcTexture = static_cast<vulkan_texture*>(Src);
 	vulkan_texture* DstTexture = static_cast<vulkan_texture*>(Dst);
 
-	SetImageBarriers({{SrcTexture, 0, AF_TransferWrite, image_barrier_state::undefined, image_barrier_state::transfer_src}, 
-					  {DstTexture, 0, AF_TransferWrite, image_barrier_state::undefined, image_barrier_state::transfer_dst}}, 
+	SetImageBarriers({{SrcTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_src}, 
+					  {DstTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_dst}}, 
 					 PSF_ColorAttachment, PSF_Transfer);
 
 	VkImageCopy ImageCopyRegion = {};
@@ -131,7 +131,7 @@ CopyImage(texture* Dst, texture* Src)
 	ImageCopyRegion.dstSubresource.layerCount = 1;
 	ImageCopyRegion.extent = {(u32)Src->Width, (u32)Src->Height, 1};
 
-	vkCmdCopyImage(*CommandList, SrcTexture->Handle, GetVKImageLayout(image_barrier_state::transfer_src), DstTexture->Handle, GetVKImageLayout(image_barrier_state::transfer_dst), 1, &ImageCopyRegion);
+	vkCmdCopyImage(*CommandList, SrcTexture->Handle, GetVKLayout(barrier_state::transfer_src), DstTexture->Handle, GetVKLayout(barrier_state::transfer_dst), 1, &ImageCopyRegion);
 }
 
 void vulkan_global_pipeline_context::
@@ -147,7 +147,7 @@ SetMemoryBarrier(u32 SrcAccess, u32 DstAccess,
 
 void vulkan_global_pipeline_context::
 SetBufferBarrier(const std::tuple<buffer*, u32, u32>& BarrierData, 
-					  u32 SrcStageMask, u32 DstStageMask)
+				 u32 SrcStageMask, u32 DstStageMask)
 {
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(std::get<0>(BarrierData));
 	VkBufferMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
@@ -186,19 +186,19 @@ SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData,
 }
 
 void vulkan_global_pipeline_context::
-SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, image_barrier_state, image_barrier_state>>& BarrierData, 
+SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state>>& BarrierData, 
 					  u32 SrcStageMask, u32 DstStageMask)
 {
 	std::vector<VkImageMemoryBarrier> Barriers;
-	for(const std::tuple<texture*, u32, u32, image_barrier_state, image_barrier_state>& Data : BarrierData)
+	for(const std::tuple<texture*, u32, u32, barrier_state, barrier_state>& Data : BarrierData)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(std::get<0>(Data));
 
 		VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
 		Barrier.srcAccessMask = GetVKAccessMask(std::get<1>(Data));
 		Barrier.dstAccessMask = GetVKAccessMask(std::get<2>(Data));
-		Barrier.oldLayout = GetVKImageLayout(std::get<3>(Data));
-		Barrier.newLayout = GetVKImageLayout(std::get<4>(Data));
+		Barrier.oldLayout = GetVKLayout(std::get<3>(Data));
+		Barrier.newLayout = GetVKLayout(std::get<4>(Data));
 		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.image = Texture->Handle;
@@ -220,11 +220,11 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, image_barrier_
 }
 
 void vulkan_global_pipeline_context::
-SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, image_barrier_state, image_barrier_state>>& BarrierData, 
+SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state>>& BarrierData, 
 					  u32 SrcStageMask, u32 DstStageMask)
 {
 	std::vector<VkImageMemoryBarrier> Barriers;
-	for(const std::tuple<std::vector<texture*>, u32, u32, image_barrier_state, image_barrier_state>& Data : BarrierData)
+	for(const std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state>& Data : BarrierData)
 	{
 		const std::vector<texture*>& Textures = std::get<0>(Data);
 		if(!Textures.size()) continue;
@@ -235,8 +235,8 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, i
 			VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
 			Barrier.srcAccessMask = GetVKAccessMask(std::get<1>(Data));
 			Barrier.dstAccessMask = GetVKAccessMask(std::get<2>(Data));
-			Barrier.oldLayout = GetVKImageLayout(std::get<3>(Data));
-			Barrier.newLayout = GetVKImageLayout(std::get<4>(Data));
+			Barrier.oldLayout = GetVKLayout(std::get<3>(Data));
+			Barrier.newLayout = GetVKLayout(std::get<4>(Data));
 			Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			Barrier.image = Texture->Handle;
@@ -343,7 +343,6 @@ vulkan_render_context(renderer_backend* Backend,
 		//BindingFlagsCreateInfo.pBindingFlags = ParametersFlags[Space].data();
 
 		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
-		//DescriptorSetLayoutCreateInfo.flags = IsPush * VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
 		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
 		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
 		//DescriptorSetLayoutCreateInfo.pNext = &BindingFlagsCreateInfo;
@@ -371,7 +370,6 @@ vulkan_render_context(renderer_backend* Backend,
 
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
-		//if(IsSetPush[LayoutIdx]) continue;
 		VkDescriptorSetAllocateInfo AllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
 		AllocInfo.descriptorPool = Pool;
 		AllocInfo.descriptorSetCount = 1;
@@ -494,8 +492,6 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 		if(DescriptorSet) SetsToBind.push_back(DescriptorSet);
 	}
 
-	vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
-
 	vkCmdBindPipeline(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
 	if(SetsToBind.size())
 		vkCmdBindDescriptorSets(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, 0, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
@@ -508,6 +504,11 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 
 void vulkan_render_context::
 End()
+{
+}
+
+void vulkan_render_context::
+Clear()
 {
 	SetIndices.clear();
 	PushDescriptorBindings.clear();
@@ -532,7 +533,7 @@ SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeig
 
 		ColorInfo[AttachmentIdx].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
 		ColorInfo[AttachmentIdx].imageView = Attachment->Views[0];
-		ColorInfo[AttachmentIdx].imageLayout = GetVKImageLayout(image_barrier_state::color_attachment);
+		ColorInfo[AttachmentIdx].imageLayout = GetVKLayout(barrier_state::color_attachment);
 		ColorInfo[AttachmentIdx].loadOp = GetVKLoadOp(LoadOp);
 		ColorInfo[AttachmentIdx].storeOp = GetVKStoreOp(StoreOp);
 		memcpy(ColorInfo[AttachmentIdx].clearValue.color.float32, Clear.E, 4 * sizeof(float));
@@ -555,7 +556,7 @@ SetDepthTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeig
 	std::unique_ptr<VkRenderingAttachmentInfoKHR> DepthInfo = std::make_unique<VkRenderingAttachmentInfoKHR>();
 	DepthInfo->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
 	DepthInfo->imageView = Attachment->Views[0];
-	DepthInfo->imageLayout = GetVKImageLayout(image_barrier_state::depth_stencil_attachment);
+	DepthInfo->imageLayout = GetVKLayout(barrier_state::depth_stencil_attachment);
 	DepthInfo->loadOp = GetVKLoadOp(LoadOp);
 	DepthInfo->storeOp = GetVKStoreOp(StoreOp);
 	DepthInfo->clearValue.depthStencil.depth   = Clear.E[0];
@@ -577,7 +578,7 @@ SetStencilTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHe
 	std::unique_ptr<VkRenderingAttachmentInfoKHR> StencilInfo = std::make_unique<VkRenderingAttachmentInfoKHR>();
 	StencilInfo->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
 	StencilInfo->imageView = Attachment->Views[0];
-	StencilInfo->imageLayout = GetVKImageLayout(image_barrier_state::depth_stencil_attachment);
+	StencilInfo->imageLayout = GetVKLayout(barrier_state::depth_stencil_attachment);
 	StencilInfo->loadOp = GetVKLoadOp(LoadOp);
 	StencilInfo->storeOp = GetVKStoreOp(StoreOp);
 	StencilInfo->clearValue.depthStencil.depth   = Clear.E[0];
@@ -598,10 +599,9 @@ Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount)
 {
 	vulkan_buffer* VertexAttachment = static_cast<vulkan_buffer*>(VertexBuffer);
 
-	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
+	vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
 	vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
 	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
-	SetIndices.clear();
 }
 
 void vulkan_render_context::
@@ -609,11 +609,10 @@ DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffse
 {
 	vulkan_buffer* IndexAttachment = static_cast<vulkan_buffer*>(IndexBuffer);
 
-	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
+	vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
 	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexed(*PipelineContext->CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
-	SetIndices.clear();
 }
 
 void vulkan_render_context::
@@ -622,11 +621,10 @@ DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands,
 	vulkan_buffer* IndexAttachment = static_cast<vulkan_buffer*>(IndexBuffer);
 	vulkan_buffer* IndirectCommandsAttachment = static_cast<vulkan_buffer*>(IndirectCommands);
 
-	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
+	vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
 	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 0, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
 	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
-	SetIndices.clear();
 }
 
 void vulkan_render_context::
@@ -641,7 +639,6 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 	BufferInfo->buffer = Attachment->Handle;
@@ -651,18 +648,12 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	VkWriteDescriptorSet CounterDescriptorSet = {};
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferInfos.push_back(std::move(BufferInfo));
@@ -674,18 +665,12 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 		CounterBufferInfo->range  = sizeof(u32);
 
 		CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		//if(!IsPush)
-			CounterDescriptorSet.dstSet = Sets[Set];
+		CounterDescriptorSet.dstSet = Sets[Set];
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
-#if 0
-		if(IsPush)
-			PushDescriptorBindings.push_back(CounterDescriptorSet);
-		else
-#endif
-			StaticDescriptorBindings.push_back(CounterDescriptorSet);
+		StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
 
 		BufferInfos.push_back(std::move(CounterBufferInfo));
@@ -697,7 +682,6 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 	BufferInfo->buffer = Attachment->Handle;
@@ -707,18 +691,12 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	VkWriteDescriptorSet CounterDescriptorSet = {};
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferInfos.push_back(std::move(BufferInfo));
@@ -730,18 +708,12 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 		CounterBufferInfo->range  = sizeof(u32);
 
 		CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		//if(!IsPush)
-			CounterDescriptorSet.dstSet = Sets[Set];
+		CounterDescriptorSet.dstSet = Sets[Set];
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
-#if 0
-		if(IsPush)
-			PushDescriptorBindings.push_back(CounterDescriptorSet);
-		else
-#endif
-			StaticDescriptorBindings.push_back(CounterDescriptorSet);
+		StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
 
 		BufferInfos.push_back(std::move(CounterBufferInfo));
@@ -750,112 +722,91 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 
 // TODO: Remove image layouts and move them inside texture structure
 void vulkan_render_context::
-SetSampledImage(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx, u32 Set)
+SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	if(Textures.size() == 0)
 	{
 		SetIndices[Set] += 1;
 		return;
 	}
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
-		ImageInfo[TextureIdx].imageLayout = GetVKImageLayout(State);
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
 		ImageInfo[TextureIdx].imageView = Texture->Views[ViewIdx];
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferArrayInfos.push_back(std::move(ImageInfo));
 }
 
 void vulkan_render_context::
-SetStorageImage(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx, u32 Set)
+SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	if(Textures.size() == 0)
 	{
 		SetIndices[Set] += 1;
 		return;
 	}
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
-		ImageInfo[TextureIdx].imageLayout = GetVKImageLayout(State);
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
 		ImageInfo[TextureIdx].imageView = Texture->Views[ViewIdx];
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferArrayInfos.push_back(std::move(ImageInfo));
 }
 
 void vulkan_render_context::
-SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx, u32 Set)
+SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	if(Textures.size() == 0)
 	{
 		SetIndices[Set] += 1;
 		return;
 	}
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
-		ImageInfo[TextureIdx].imageLayout = GetVKImageLayout(State);
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
 		ImageInfo[TextureIdx].imageView = Texture->Views[ViewIdx];
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferArrayInfos.push_back(std::move(ImageInfo));
@@ -894,7 +845,6 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 		//BindingFlagsCreateInfo.pBindingFlags = ParametersFlags[Space].data();
 
 		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
-		//DescriptorSetLayoutCreateInfo.flags = IsPush * VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
 		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
 		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
 		//DescriptorSetLayoutCreateInfo.pNext = &BindingFlagsCreateInfo;
@@ -981,6 +931,11 @@ Begin(global_pipeline_context* GlobalPipelineContext)
 void vulkan_compute_context::
 End()
 {
+}
+
+void vulkan_compute_context::
+Clear()
+{
 	SetIndices.clear();
 	PushDescriptorBindings.clear();
 	StaticDescriptorBindings.clear();
@@ -997,9 +952,7 @@ StaticUpdate()
 void vulkan_compute_context::
 Execute(u32 X, u32 Y, u32 Z)
 {
-	//vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, InputSignature->Handle, InputSignature->PushDescriptorSetIdx, PushDescriptorBindings.size(), PushDescriptorBindings.data());
 	vkCmdDispatch(*PipelineContext->CommandList, (X + 31) / 32, (Y + 31) / 32, (Z + 31) / 32);
-	SetIndices.clear();
 }
 
 void vulkan_compute_context::
@@ -1013,7 +966,6 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 	BufferInfo->buffer = Attachment->Handle;
@@ -1023,18 +975,12 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	VkWriteDescriptorSet CounterDescriptorSet = {};
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferInfos.push_back(std::move(BufferInfo));
@@ -1046,18 +992,12 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 		CounterBufferInfo->range  = sizeof(u32);
 
 		CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		//if(!IsPush)
-			CounterDescriptorSet.dstSet = Sets[Set];
+		CounterDescriptorSet.dstSet = Sets[Set];
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
-#if 0
-		if(IsPush)
-			PushDescriptorBindings.push_back(CounterDescriptorSet);
-		else
-#endif
-			StaticDescriptorBindings.push_back(CounterDescriptorSet);
+		StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
 
 		BufferInfos.push_back(std::move(CounterBufferInfo));
@@ -1069,7 +1009,6 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
 	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
 	BufferInfo->buffer = Attachment->Handle;
@@ -1079,18 +1018,12 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	VkWriteDescriptorSet CounterDescriptorSet = {};
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferInfos.push_back(std::move(BufferInfo));
@@ -1102,18 +1035,12 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 		CounterBufferInfo->range  = sizeof(u32);
 
 		CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		//if(!IsPush)
-			CounterDescriptorSet.dstSet = Sets[Set];
+		CounterDescriptorSet.dstSet = Sets[Set];
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
-#if 0
-		if(IsPush)
-			PushDescriptorBindings.push_back(CounterDescriptorSet);
-		else
-#endif
-			StaticDescriptorBindings.push_back(CounterDescriptorSet);
+		StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
 
 		BufferInfos.push_back(std::move(CounterBufferInfo));
@@ -1122,111 +1049,90 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 
 // TODO: Remove image layouts and move them inside texture structure
 void vulkan_compute_context::
-SetSampledImage(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx, u32 Set)
+SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	if(Textures.size() == 0)
 	{
 		SetIndices[Set] += 1;
 		return;
 	}
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
-		ImageInfo[TextureIdx].imageLayout = GetVKImageLayout(State);
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
 		ImageInfo[TextureIdx].imageView = Texture->Views[ViewIdx];
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferArrayInfos.push_back(std::move(ImageInfo));
 }
 
 void vulkan_compute_context::
-SetStorageImage(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx, u32 Set)
+SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	if(Textures.size() == 0)
 	{
 		SetIndices[Set] += 1;
 		return;
 	}
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
-		ImageInfo[TextureIdx].imageLayout = GetVKImageLayout(State);
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
 		ImageInfo[TextureIdx].imageView = Texture->Views[ViewIdx];
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferArrayInfos.push_back(std::move(ImageInfo));
 }
 
 void vulkan_compute_context::
-SetImageSampler(const std::vector<texture*>& Textures, image_barrier_state State, u32 ViewIdx, u32 Set)
+SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	if(Textures.size() == 0)
 	{
 		SetIndices[Set] += 1;
 		return;
 	}
-	//bool IsPush = InputSignature->IsSetPush.at(Set);
 	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
-		ImageInfo[TextureIdx].imageLayout = GetVKImageLayout(State);
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
 		ImageInfo[TextureIdx].imageView = Texture->Views[ViewIdx];
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//if(!IsPush)
-		DescriptorSet.dstSet = Sets[Set];
+	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
-#if 0
-	if(IsPush)
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-#endif
-		StaticDescriptorBindings.push_back(DescriptorSet);
+	StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
 
 	BufferArrayInfos.push_back(std::move(ImageInfo));

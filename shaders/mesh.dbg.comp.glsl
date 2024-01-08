@@ -49,7 +49,6 @@ struct indirect_draw_indexed_command
     uint FirstIndex;
     int  VertexOffset;
     uint FirstInstance;
-	uint CommandIdx;
 };
 
 struct mesh_comp_culling_common_input

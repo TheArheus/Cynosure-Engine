@@ -63,7 +63,6 @@ struct indirect_draw_indexed_command
     uint FirstIndex;
     int  VertexOffset;
     uint FirstInstance;
-	uint CommandIdx;
 };
 
 

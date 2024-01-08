@@ -32,7 +32,7 @@ layout(binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 layout(binding = 1) readonly buffer b1 { vec4 HemisphereSamples[SAMPLES_COUNT]; };
 layout(binding = 2) uniform sampler2D NoiseTexture;
 layout(binding = 3) uniform sampler2D GBuffer[GBUFFER_COUNT];
-layout(binding = 4, r32f) uniform writeonly image2D OcclusionTarget;
+layout(binding = 4) uniform writeonly image2D OcclusionTarget;
 
 
 void main()

@@ -75,21 +75,21 @@ struct render_debug_system : public entity_system
 
 		if (!Geometries.MeshCount) return;
 
-		GeometryDebugOffsets = Window.Gfx.PushBuffer(Geometries.Offsets.data(), Geometries.Offsets.size() * sizeof(mesh::offset), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		GeometryDebugOffsets = Window.Gfx.PushBuffer("GeometryDebugOffsets", Geometries.Offsets.data(), sizeof(mesh::offset), Geometries.Offsets.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		DebugMeshDrawCommandDataBuffer = Window.Gfx.PushBuffer(StaticMeshInstances.data(), sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
-		DebugMeshDrawVisibilityDataBuffer = Window.Gfx.PushBuffer(StaticMeshVisibility.data(), sizeof(u32) * StaticMeshVisibility.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
+		DebugMeshDrawCommandDataBuffer = Window.Gfx.PushBuffer("DebugMeshDrawCommandDataBuffer", StaticMeshInstances.data(), sizeof(mesh_draw_command), StaticMeshInstances.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
+		DebugMeshDrawVisibilityDataBuffer = Window.Gfx.PushBuffer("DebugMeshDrawVisibilityDataBuffer", StaticMeshVisibility.data(), sizeof(u32), StaticMeshVisibility.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
 
-		DebugIndirectDrawIndexedCommands = Window.Gfx.PushBuffer(sizeof(indirect_draw_indexed_command) * StaticMeshInstances.size(), true, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
+		DebugIndirectDrawIndexedCommands = Window.Gfx.PushBuffer("DebugIndirectDrawIndexedCommands", sizeof(indirect_draw_indexed_command), StaticMeshInstances.size(), true, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
 
-		MeshDebugMaterialsBuffer = Window.Gfx.PushBuffer(Materials.data(), Materials.size() * sizeof(mesh::material), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshDebugMaterialsBuffer = Window.Gfx.PushBuffer("MeshDebugMaterialsBuffer", Materials.data(), sizeof(mesh::material), Materials.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		DebugVertexBuffer = Window.Gfx.PushBuffer(Geometries.Vertices.data(), Geometries.Vertices.size() * sizeof(vertex), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		DebugIndexBuffer = Window.Gfx.PushBuffer(Geometries.VertexIndices.data(), Geometries.VertexIndices.size() * sizeof(u32), false, resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
-		MeshDrawDebugCommandBuffer = Window.Gfx.PushBuffer(sizeof(mesh_draw_command) * StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		DebugVertexBuffer = Window.Gfx.PushBuffer("DebugVertexBuffer", Geometries.Vertices.data(), sizeof(vertex), Geometries.Vertices.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		DebugIndexBuffer = Window.Gfx.PushBuffer("DebugIndexBuffer", Geometries.VertexIndices.data(), sizeof(u32), Geometries.VertexIndices.size(), false, resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
+		MeshDrawDebugCommandBuffer = Window.Gfx.PushBuffer("MeshDrawDebugCommandBuffer", sizeof(mesh_draw_command), StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		WorldUpdateBuffer = Window.Gfx.PushBuffer(sizeof(global_world_data), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer(sizeof(mesh_comp_culling_common_input), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		WorldUpdateBuffer = Window.Gfx.PushBuffer("WorldUpdateBuffer", sizeof(global_world_data), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer("MeshCommonCullingInputBuffer", sizeof(mesh_comp_culling_common_input), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 	}
 
 	void UpdateResources(window& Window, alloc_vector<light_source>& GlobalLightSources, global_world_data& WorldUpdate)
@@ -140,17 +140,15 @@ struct render_debug_system : public entity_system
 		}
 #endif
 
-#if 0
 		{
-			PipelineContext.SetBufferBarriers({
-												{WorldUpdateBuffer, AF_TransferWrite},
-												{MeshCommonCullingInputBuffer, AF_TransferWrite},
-											  }, PSF_Transfer);
+			PipelineContext->SetBufferBarriers({
+												{WorldUpdateBuffer, 0, AF_TransferWrite},
+												{MeshCommonCullingInputBuffer, 0, AF_TransferWrite},
+											  }, PSF_TopOfPipe, PSF_Transfer);
 
-			WorldUpdateBuffer.UpdateSize(Window.Gfx, &WorldData, sizeof(global_world_data), PipelineContext);
-			MeshCommonCullingInputBuffer.UpdateSize(Window.Gfx, &MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), PipelineContext);
+			WorldUpdateBuffer->UpdateSize(&WorldData, sizeof(global_world_data), PipelineContext);
+			MeshCommonCullingInputBuffer->UpdateSize(&MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), PipelineContext);
 		}
-#endif
 
 		{
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_Compute);
@@ -158,32 +156,33 @@ struct render_debug_system : public entity_system
 			Window.Gfx.DebugComputeContext->Begin(PipelineContext);
 			Window.Gfx.DebugComputeContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.DebugComputeContext->End();
+			Window.Gfx.DebugComputeContext->Clear();
 		}
 
 		{
 			u32 ColorSrcAccessMask = AF_ShaderWrite;
 			u32 DepthSrcAccessMask = AF_ShaderRead;
 
-			image_barrier_state ColorOldLayout = image_barrier_state::general;
-			image_barrier_state DepthOldLayout = image_barrier_state::shader_read;
+			barrier_state ColorOldLayout = barrier_state::general;
+			barrier_state DepthOldLayout = barrier_state::shader_read;
 
 			u32 SrcStageMask = PSF_Compute;
 			u32 DstStageMask = PSF_ColorAttachment | PSF_EarlyFragment | PSF_LateFragment;
 
-			PipelineContext->SetImageBarriers({{Window.Gfx.GfxColorTarget, ColorSrcAccessMask, AF_ColorAttachmentWrite, ColorOldLayout, image_barrier_state::color_attachment},
-											  {Window.Gfx.GfxDepthTarget, DepthSrcAccessMask, AF_DepthStencilAttachmentWrite, DepthOldLayout, image_barrier_state::depth_stencil_attachment}}, 
+			PipelineContext->SetImageBarriers({{Window.Gfx.GfxColorTarget, ColorSrcAccessMask, AF_ColorAttachmentWrite, ColorOldLayout, barrier_state::color_attachment},
+											  {Window.Gfx.GfxDepthTarget, DepthSrcAccessMask, AF_DepthStencilAttachmentWrite, DepthOldLayout, barrier_state::depth_stencil_attachment}}, 
 											 SrcStageMask, DstStageMask);
 
 			PipelineContext->SetBufferBarrier({WorldUpdateBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_VertexShader|PSF_FragmentShader);
 			PipelineContext->SetBufferBarriers({{MeshDrawDebugCommandBuffer, AF_ShaderWrite, AF_ShaderRead}}, PSF_Compute, PSF_VertexShader);
 			PipelineContext->SetBufferBarriers({{DebugIndirectDrawIndexedCommands, AF_ShaderWrite, AF_IndirectCommandRead}}, PSF_Compute, PSF_DrawIndirect);
 
+			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.DebugContext->SetColorTarget(load_op::load, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget}, {0, 0, 0, 1});
 			Window.Gfx.DebugContext->SetDepthTarget(load_op::load, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
-
-			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.DebugContext->DrawIndirect(Geometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.DebugContext->End();
+			Window.Gfx.DebugContext->Clear();
 		}
 	}
 };

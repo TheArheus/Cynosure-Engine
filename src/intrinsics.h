@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <bitset>
+#include <codecvt>
 #include <cassert>
 #include <cstdint>
 #include <filesystem>

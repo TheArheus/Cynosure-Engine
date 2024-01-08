@@ -54,6 +54,7 @@ public:
 	void EmitEvents();
 
 	void InitVulkanGraphics();
+	void InitDirectx12Graphics();
 
 	void SetTitle(std::string& Title);
 	bool IsRunning(){return WindowClass.IsRunning;}
