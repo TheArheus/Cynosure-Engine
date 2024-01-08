@@ -71,7 +71,11 @@ u32 PreviousPowerOfTwo(u32 x)
 
 struct indirect_draw_indexed_command
 {
-	VkDrawIndexedIndirectCommand DrawArg; // 5
+	union
+	{
+		D3D12_DRAW_INDEXED_ARGUMENTS DxDrawArg;
+		VkDrawIndexedIndirectCommand VkDrawArg; // 5
+	};
 };
 
 struct point_shadow_input

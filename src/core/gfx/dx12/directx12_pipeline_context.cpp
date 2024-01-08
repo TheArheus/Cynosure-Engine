@@ -66,9 +66,10 @@ Present(renderer_backend* Backend)
 	Gfx->SwapchainCurrentState[BackBufferIndex] = GetDXLayout(barrier_state::present);
 
 	Gfx->CommandQueue->Execute(CommandList);
+	Fence.Flush(Gfx->CommandQueue);
+
 	Gfx->SwapChain->Present(0, 0);
 	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
-	Fence.Flush(Gfx->CommandQueue);
 }
 
 void directx12_global_pipeline_context::
@@ -255,18 +256,22 @@ directx12_render_context(renderer_backend* Backend,
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] != 0)
 	{
 		ResourceHeap = descriptor_heap(Gfx->Device.Get(), DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+#if 0
 		NAME_DX12_OBJECT_CSTR(ResourceHeap.Handle.Get(), (GlobalName + ".resource_heap").c_str());
+#endif
 		IsResourceHeapInited = true;
 	}
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] != 0)
 	{
 		SamplersHeap = descriptor_heap(Gfx->Device.Get(), DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER], D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+#if 0
 		NAME_DX12_OBJECT_CSTR(SamplersHeap.Handle.Get(), (GlobalName + ".samplers_heap").c_str());
+#endif
 		IsSamplersHeapInited = true;
 	}
 
 	CD3DX12_ROOT_SIGNATURE_DESC RootSignatureDesc;
-	RootSignatureDesc.Init(Parameters.size(), Parameters.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED);
+	RootSignatureDesc.Init(Parameters.size(), Parameters.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE);
 
 	ComPtr<ID3DBlob> Signature;
 	ComPtr<ID3DBlob> Error;
@@ -298,7 +303,7 @@ directx12_render_context(renderer_backend* Backend,
 	IndirectArgs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
 
 	D3D12_COMMAND_SIGNATURE_DESC IndirectDesc = {};
-	IndirectDesc.ByteStride = 36;
+	IndirectDesc.ByteStride = 20;
 	IndirectDesc.NumArgumentDescs = 1;
 	IndirectDesc.pArgumentDescs = IndirectArgs;
 	Gfx->Device->CreateCommandSignature(&IndirectDesc, nullptr, IID_PPV_ARGS(&IndirectSignatureHandle));
@@ -309,13 +314,14 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 {
 	PipelineContext = static_cast<directx12_global_pipeline_context*>(GlobalPipelineContext);
 
-	PipelineContext->CommandList->SetGraphicsRootSignature(RootSignatureHandle.Get());
 	PipelineContext->CommandList->SetPipelineState(Pipeline.Get());
 
 	std::vector<ID3D12DescriptorHeap*> Heaps;
 	if (IsResourceHeapInited) Heaps.push_back(ResourceHeap.Handle.Get());
 	if (IsSamplersHeapInited) Heaps.push_back(SamplersHeap.Handle.Get());
 	PipelineContext->CommandList->SetDescriptorHeaps(Heaps.size(), Heaps.data());
+
+	PipelineContext->CommandList->SetGraphicsRootSignature(RootSignatureHandle.Get());
 
 	for(u32 BindingIdx = 0; BindingIdx < BindingDescriptions.size(); ++BindingIdx)
 	{
@@ -354,6 +360,11 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 
 void directx12_render_context::
 End()  
+{
+}
+
+void directx12_render_context::
+Clear()
 {
 	SetIndices.clear();
 	ColorTargets.clear();
@@ -474,24 +485,26 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	}
 	RootResourceBindingIdx += 1;
 	SetIndices[Set] += 1;
+
 	if(UseCounter && Buffer->WithCounter)
 	{
 		DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx++);
 		if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
 		{
 			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterShaderResourceView, ResourceHeap.Type);
-			BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
+			BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
 		else if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
 		{
 			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterUnorderedAccessView, ResourceHeap.Type);
-			BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
+			BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
 		RootResourceBindingIdx += 1;
 		SetIndices[Set] += 1;
 	}
 }
 
+// TODO: Implement constant buffer views
 void directx12_render_context::
 SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)  
 {
@@ -600,18 +613,22 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] != 0)
 	{
 		ResourceHeap = descriptor_heap(Gfx->Device.Get(), DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+#if 0
 		NAME_DX12_OBJECT_CSTR(ResourceHeap.Handle.Get(), (GlobalName + ".resource_heap").c_str());
+#endif
 		IsResourceHeapInited = true;
 	}
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] != 0)
 	{
 		SamplersHeap = descriptor_heap(Gfx->Device.Get(), DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER], D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+#if 0
 		NAME_DX12_OBJECT_CSTR(SamplersHeap.Handle.Get(), (GlobalName + ".samplers_heap").c_str());
+#endif
 		IsSamplersHeapInited = true;
 	}
 
 	CD3DX12_ROOT_SIGNATURE_DESC RootSignatureDesc;
-	RootSignatureDesc.Init(Parameters.size(), Parameters.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED);
+	RootSignatureDesc.Init(Parameters.size(), Parameters.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE);
 
 	ComPtr<ID3DBlob> Signature;
 	ComPtr<ID3DBlob> Error;
@@ -632,13 +649,14 @@ Begin(global_pipeline_context* GlobalPipelineContext)
 {
 	PipelineContext = static_cast<directx12_global_pipeline_context*>(GlobalPipelineContext);
 
-	PipelineContext->CommandList->SetComputeRootSignature(RootSignatureHandle.Get());
 	PipelineContext->CommandList->SetPipelineState(Pipeline.Get());
 
 	std::vector<ID3D12DescriptorHeap*> Heaps;
 	if (IsResourceHeapInited) Heaps.push_back(ResourceHeap.Handle.Get());
 	if (IsSamplersHeapInited) Heaps.push_back(SamplersHeap.Handle.Get());
 	PipelineContext->CommandList->SetDescriptorHeaps(Heaps.size(), Heaps.data());
+
+	PipelineContext->CommandList->SetComputeRootSignature(RootSignatureHandle.Get());
 
 	for(u32 BindingIdx = 0; BindingIdx < BindingDescriptions.size(); ++BindingIdx)
 	{
@@ -670,6 +688,11 @@ Begin(global_pipeline_context* GlobalPipelineContext)
 
 void directx12_compute_context::
 End()
+{
+}
+
+void directx12_compute_context::
+Clear()
 {
 	SetIndices.clear();
 	BindingDescriptions.clear();
@@ -715,24 +738,26 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	}
 	RootResourceBindingIdx += 1;
 	SetIndices[Set] += 1;
+
 	if(UseCounter && Buffer->WithCounter)
 	{
 		DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx++);
 		if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
 		{
 			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterShaderResourceView, ResourceHeap.Type);
-			BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
+			BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
 		else if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
 		{
 			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterUnorderedAccessView, ResourceHeap.Type);
-			BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
+			BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
 		RootResourceBindingIdx += 1;
 		SetIndices[Set] += 1;
 	}
 }
 
+// TODO: Implement constant buffer views
 void directx12_compute_context::
 SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)  
 {

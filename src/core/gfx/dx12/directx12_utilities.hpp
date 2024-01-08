@@ -14,42 +14,11 @@ const wchar_t* CharToWChar(const char* ch)
 	return WideStrCopy;
 }
 
-#define NAME_DX12_OBJECT_CSTR(x, NAME)       \
-{\
-    const wchar_t* WcharConverted = CharToWChar(NAME); \
-    x->SetName(WcharConverted);              \
-    delete[] WcharConverted;\
-}
-
-inline std::string HrToString(HRESULT hr)
-{
-	char s_str[64] = {};
-	sprintf_s(s_str, "HRESULT of 0x%08X", static_cast<u32>(hr));
-	return std::string(s_str);
-}
-
-class hr_exception : public std::runtime_error
-{
-public:
-	hr_exception(HRESULT hr)
-		: std::runtime_error(HrToString(hr).c_str()), m_hr(hr)
-	{
-	}
-	HRESULT Error() const
-	{
-		return m_hr;
-	}
-
-private:
-	const HRESULT m_hr;
-};
-
-inline void ThrowIfFailed(HRESULT hr)
-{
-	if (FAILED(hr))
-	{
-		throw hr_exception(hr);
-	}
+#define NAME_DX12_OBJECT_CSTR(x, NAME)					\
+{														\
+    const wchar_t* WcharConverted = CharToWChar(NAME);	\
+    x->SetName(WcharConverted);							\
+    delete[] WcharConverted;							\
 }
 
 void MessageCallback(D3D12_MESSAGE_CATEGORY MessageType, D3D12_MESSAGE_SEVERITY Severity, D3D12_MESSAGE_ID MessageId, LPCSTR Desc, void* Context)
@@ -553,9 +522,9 @@ D3D12_RESOURCE_STATES GetDXLayoutFromAccessFlag(u32 Layouts)
     if (Layouts & AF_UniformRead)
         Result |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
     if (Layouts & AF_InputAttachmentRead)
-        Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     if (Layouts & AF_ShaderRead)
-        Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
     if (Layouts & AF_ShaderWrite)
         Result |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     if (Layouts & AF_ColorAttachmentRead)
@@ -589,7 +558,7 @@ D3D12_RESOURCE_STATES GetDXLayout(barrier_state State)
     case barrier_state::depth_stencil_attachment:
         return D3D12_RESOURCE_STATE_DEPTH_WRITE;
     case barrier_state::shader_read:
-        return D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        return D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
     case barrier_state::depth_read:
         return D3D12_RESOURCE_STATE_DEPTH_READ;
     case barrier_state::stencil_read:

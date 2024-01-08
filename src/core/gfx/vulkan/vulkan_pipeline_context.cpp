@@ -505,6 +505,11 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 void vulkan_render_context::
 End()
 {
+}
+
+void vulkan_render_context::
+Clear()
+{
 	SetIndices.clear();
 	PushDescriptorBindings.clear();
 	StaticDescriptorBindings.clear();
@@ -597,7 +602,6 @@ Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount)
 	vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
 	vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
 	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
-	SetIndices.clear();
 }
 
 void vulkan_render_context::
@@ -609,7 +613,6 @@ DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffse
 	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexed(*PipelineContext->CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
-	SetIndices.clear();
 }
 
 void vulkan_render_context::
@@ -622,7 +625,6 @@ DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands,
 	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 0, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
 	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
-	SetIndices.clear();
 }
 
 void vulkan_render_context::
@@ -929,6 +931,11 @@ Begin(global_pipeline_context* GlobalPipelineContext)
 void vulkan_compute_context::
 End()
 {
+}
+
+void vulkan_compute_context::
+Clear()
+{
 	SetIndices.clear();
 	PushDescriptorBindings.clear();
 	StaticDescriptorBindings.clear();
@@ -946,7 +953,6 @@ void vulkan_compute_context::
 Execute(u32 X, u32 Y, u32 Z)
 {
 	vkCmdDispatch(*PipelineContext->CommandList, (X + 31) / 32, (Y + 31) / 32, (Z + 31) / 32);
-	SetIndices.clear();
 }
 
 void vulkan_compute_context::

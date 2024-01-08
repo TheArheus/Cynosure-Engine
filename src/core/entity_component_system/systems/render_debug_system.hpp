@@ -140,17 +140,15 @@ struct render_debug_system : public entity_system
 		}
 #endif
 
-#if 0
 		{
-			PipelineContext.SetBufferBarriers({
-												{WorldUpdateBuffer, AF_TransferWrite},
-												{MeshCommonCullingInputBuffer, AF_TransferWrite},
-											  }, PSF_Transfer);
+			PipelineContext->SetBufferBarriers({
+												{WorldUpdateBuffer, 0, AF_TransferWrite},
+												{MeshCommonCullingInputBuffer, 0, AF_TransferWrite},
+											  }, PSF_TopOfPipe, PSF_Transfer);
 
-			WorldUpdateBuffer.UpdateSize(Window.Gfx, &WorldData, sizeof(global_world_data), PipelineContext);
-			MeshCommonCullingInputBuffer.UpdateSize(Window.Gfx, &MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), PipelineContext);
+			WorldUpdateBuffer->UpdateSize(&WorldData, sizeof(global_world_data), PipelineContext);
+			MeshCommonCullingInputBuffer->UpdateSize(&MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), PipelineContext);
 		}
-#endif
 
 		{
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_Compute);
@@ -158,6 +156,7 @@ struct render_debug_system : public entity_system
 			Window.Gfx.DebugComputeContext->Begin(PipelineContext);
 			Window.Gfx.DebugComputeContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.DebugComputeContext->End();
+			Window.Gfx.DebugComputeContext->Clear();
 		}
 
 		{
@@ -183,6 +182,7 @@ struct render_debug_system : public entity_system
 			Window.Gfx.DebugContext->SetDepthTarget(load_op::load, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
 			Window.Gfx.DebugContext->DrawIndirect(Geometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.DebugContext->End();
+			Window.Gfx.DebugContext->Clear();
 		}
 	}
 };

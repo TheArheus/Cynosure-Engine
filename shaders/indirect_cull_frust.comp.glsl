@@ -34,6 +34,7 @@ struct mesh_draw_command
 	vec4 Scale;
 	vec4 Rotate;
 	uint MeshIndex;
+
 };
 
 struct plane

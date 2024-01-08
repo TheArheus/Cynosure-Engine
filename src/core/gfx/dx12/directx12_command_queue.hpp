@@ -61,32 +61,6 @@ public:
 		CommandList->Close();
 		ID3D12CommandList* CmdLists[] = { CommandList };
 		Handle->ExecuteCommandLists(_countof(CmdLists), CmdLists);
-
-		D3D12_FEATURE_DATA_ARCHITECTURE ArchitectureData = {};
-		HRESULT hr = Device->CheckFeatureSupport(D3D12_FEATURE_ARCHITECTURE, &ArchitectureData, sizeof(ArchitectureData));
-
-		ComPtr<ID3D12DeviceRemovedExtendedData> pDred;
-		Device->QueryInterface(IID_PPV_ARGS(&pDred));
-		D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT DredAutoBreadcrumbsOutput = {};
-		D3D12_DRED_PAGE_FAULT_OUTPUT DredPageFaultOutput = {};
-		pDred->GetAutoBreadcrumbsOutput(&DredAutoBreadcrumbsOutput);
-		pDred->GetPageFaultAllocationOutput(&DredPageFaultOutput);
-
-		if(!DredAutoBreadcrumbsOutput.pHeadAutoBreadcrumbNode) return;
-
-		const D3D12_AUTO_BREADCRUMB_NODE* Node = DredAutoBreadcrumbsOutput.pHeadAutoBreadcrumbNode;
-		u32 LastOpIdx = (Node->BreadcrumbCount - 1) % 65536;
-		for(u32 Idx = 0; Idx < 65536; ++Idx)
-		{
-			if(Node->pNext)
-				Node = Node->pNext;
-			else
-				break;
-			if(Idx == LastOpIdx)
-				break;
-		}
-
-		int fin = 5;
 	}
 
 	void ExecuteAndRemove(ID3D12GraphicsCommandList* CommandList)
@@ -116,6 +90,12 @@ public:
 		CommandQueue->Handle->Signal(Fence.Get(), ++CurrentFence);
 	}
 
+	void Flush(directx12_command_queue* CommandQueue)
+	{
+		Signal(CommandQueue);
+		Wait();
+	}
+
 	void Wait()
 	{
 		if(Fence->GetCompletedValue() < CurrentFence)
@@ -125,12 +105,6 @@ public:
 			WaitForSingleObject(Event, INFINITE);
 			CloseHandle(Event);
 		}
-	}
-
-	void Flush(directx12_command_queue* CommandQueue)
-	{
-		Signal(CommandQueue);
-		Wait();
 	}
 
 private:

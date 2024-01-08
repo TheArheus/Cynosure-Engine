@@ -81,8 +81,8 @@ public:
 	void DestroyObject() override {}
 
 	void Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 RenderHeight) override;
-
-	void End() override;
+	void End()   override;
+	void Clear() override;
 
 	void SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face = 0, bool EnableMultiview = false) override;
 	void SetDepthTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) override;
@@ -149,7 +149,8 @@ public:
 	void DestroyObject() override {}
 
 	void Begin(global_pipeline_context* GlobalPipelineContext) override;
-	void End() override;
+	void End()   override;
+	void Clear() override;
 
 	void StaticUpdate() override {};
 	void Execute(u32 X = 1, u32 Y = 1, u32 Z = 1) override;

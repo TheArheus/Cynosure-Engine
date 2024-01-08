@@ -118,6 +118,7 @@ struct directx12_backend : public renderer_backend
 	std::vector<D3D12_RESOURCE_STATES> SwapchainCurrentState;
 
 	directx12_command_queue* CommandQueue;
+	directx12_command_queue* CmpCommandQueue;
 
 	ComPtr<IDXGISwapChain4> SwapChain;
 	ComPtr<IDXGIAdapter1> Adapter;

@@ -329,12 +329,14 @@ struct render_system : public entity_system
 			Window.Gfx.FrustCullingContext->Begin(PipelineContext);
 			Window.Gfx.FrustCullingContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.FrustCullingContext->End();
+			Window.Gfx.FrustCullingContext->Clear();
 		}
 
 		{
 			Window.Gfx.ShadowComputeContext->Begin(PipelineContext);
 			Window.Gfx.ShadowComputeContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.ShadowComputeContext->End();
+			Window.Gfx.ShadowComputeContext->Clear();
 		}
 
 		// TODO: this should be moved to directional light calculations I guess
@@ -355,8 +357,9 @@ struct render_system : public entity_system
 			Window.Gfx.CascadeShadowContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.GlobalShadow[CascadeIdx]->Width, Window.Gfx.GlobalShadow[CascadeIdx]->Height, Window.Gfx.GlobalShadow[CascadeIdx], {1, 0});
 			Window.Gfx.CascadeShadowContext->SetConstant((void*)&Shadow, sizeof(mat4));
 			Window.Gfx.CascadeShadowContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
+			Window.Gfx.CascadeShadowContext->End();
 		}
-		Window.Gfx.CascadeShadowContext->End();
+		Window.Gfx.CascadeShadowContext->Clear();
 
 		// TODO: something better or/and efficient here
 		// TODO: render only when the actual light source have been changed
@@ -390,6 +393,7 @@ struct render_system : public entity_system
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetDepthTarget(load_op::clear, store_op::store, ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0}, CubeMapFaceIdx, true);
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetConstant((void*)&PointShadowInput, sizeof(point_shadow_input));
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->DrawIndirect(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
+						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->End();
 					}
 					PointLightSourceIdx++;
 				}
@@ -408,15 +412,16 @@ struct render_system : public entity_system
 					Window.Gfx.ShadowContext->SetDepthTarget(load_op::clear, store_op::store, ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0});
 					Window.Gfx.ShadowContext->SetConstant((void*)&Shadow, sizeof(mat4));
 					Window.Gfx.ShadowContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
+					Window.Gfx.ShadowContext->End();
 					SpotLightSourceIdx++;
 				}
 			}
 		}
 		for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
 		{
-			Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->End();
+			Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->Clear();
 		}
-		Window.Gfx.ShadowContext->End();
+		Window.Gfx.ShadowContext->Clear();
 
 		// NOTE: This is only for debug. Maybe not compile on release mode???
 		{
@@ -433,6 +438,7 @@ struct render_system : public entity_system
 			Window.Gfx.DebugCameraViewContext->SetConstant((void*)&Shadow, sizeof(mat4));
 			Window.Gfx.DebugCameraViewContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.DebugCameraViewContext->End();
+			Window.Gfx.DebugCameraViewContext->Clear();
 		}
 
 		{
@@ -453,6 +459,7 @@ struct render_system : public entity_system
 
 			Window.Gfx.GfxContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.GfxContext->End();
+			Window.Gfx.GfxContext->Clear();
 		}
 
 		{
@@ -465,6 +472,7 @@ struct render_system : public entity_system
 			Window.Gfx.AmbientOcclusionContext->Begin(PipelineContext);
 			Window.Gfx.AmbientOcclusionContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.AmbientOcclusionContext->End();
+			Window.Gfx.AmbientOcclusionContext->Clear();
 		}
 
 		// NOTE: Horizontal blur
@@ -478,6 +486,7 @@ struct render_system : public entity_system
 			Window.Gfx.BlurContext->Begin(PipelineContext);
 			Window.Gfx.BlurContext->SetConstant((void*)BlurInput.E, sizeof(vec3));
 			Window.Gfx.BlurContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
+			Window.Gfx.BlurContext->End();
 		}
 
 		// NOTE: Vertical blur
@@ -492,6 +501,7 @@ struct render_system : public entity_system
 			Window.Gfx.BlurContext->SetConstant((void*)BlurInput.E, sizeof(vec3));
 			Window.Gfx.BlurContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.BlurContext->End();
+			Window.Gfx.BlurContext->Clear();
 		}
 
 		{
@@ -511,6 +521,7 @@ struct render_system : public entity_system
 			Window.Gfx.ColorPassContext->Begin(PipelineContext);
 			Window.Gfx.ColorPassContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.ColorPassContext->End();
+			Window.Gfx.ColorPassContext->Clear();
 		}
 
 		{
@@ -528,15 +539,11 @@ struct render_system : public entity_system
 				Window.Gfx.DepthReduceContext[MipIdx]->Begin(PipelineContext);
 				Window.Gfx.DepthReduceContext[MipIdx]->SetConstant((void*)VecDims.E, sizeof(vec2));
 				Window.Gfx.DepthReduceContext[MipIdx]->Execute(VecDims.x, VecDims.y);
+				Window.Gfx.DepthReduceContext[MipIdx]->End();
+				Window.Gfx.DepthReduceContext[MipIdx]->Clear();
 
 				PipelineContext->SetImageBarriers({{Window.Gfx.DepthPyramid, AF_ShaderWrite|AF_ShaderRead, AF_ShaderWrite|AF_ShaderRead, barrier_state::general, barrier_state::general}}, 
 												 PSF_Compute, PSF_Compute);
-			}
-			for(u32 MipIdx = 0;
-				MipIdx < Window.Gfx.DepthReduceContext.size();
-				++MipIdx)
-			{
-				Window.Gfx.DepthReduceContext[MipIdx]->End();
 			}
 		}
 
@@ -544,6 +551,7 @@ struct render_system : public entity_system
 			Window.Gfx.OcclCullingContext->Begin(PipelineContext);
 			Window.Gfx.OcclCullingContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.OcclCullingContext->End();
+			Window.Gfx.OcclCullingContext->Clear();
 		}
 	}
 };

@@ -107,7 +107,8 @@ public:
 	virtual void DestroyObject() = 0;
 
 	virtual void Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 RenderHeight) = 0;
-	virtual void End() = 0;
+	virtual void End()   = 0;
+	virtual void Clear() = 0;
 
 	virtual void SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
 	virtual void SetDepthTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
@@ -147,7 +148,8 @@ public:
 	virtual void DestroyObject() = 0;
 
 	virtual void Begin(global_pipeline_context* GlobalPipelineContext) = 0;
-	virtual void End() = 0;
+	virtual void End()   = 0;
+	virtual void Clear() = 0;
 
 	virtual void StaticUpdate() = 0;
 

@@ -440,7 +440,7 @@ u32 GetPixelSize(image_format Format)
         case image_format::R10G0B10A2_INT:
         case image_format::BC3_BLOCK_SRGB:
         case image_format::BC3_BLOCK_UNORM:
-            return 0;
+            return 4;
 
         default:
             return 0;

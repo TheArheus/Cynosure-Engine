@@ -64,6 +64,7 @@ directx12_backend(window* Window)
 	Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &DataFormatSupport, sizeof(DataFormatSupport));
 
 	CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT);
+	//CmpCommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_COMPUTE);
 
 	{
 		ComPtr<IDXGISwapChain1> _SwapChain;
@@ -89,10 +90,12 @@ directx12_backend(window* Window)
 	ResourcesHeap    = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	SamplersHeap     = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
 
+#if 0
 	NAME_DX12_OBJECT_CSTR(ColorTargetHeap.Handle.Get(), "GlobalColorTargetHeap");
 	NAME_DX12_OBJECT_CSTR(DepthStencilHeap.Handle.Get(), "GlobalDepthStencilHeap");
 	NAME_DX12_OBJECT_CSTR(ResourcesHeap.Handle.Get(), "GlobalResourcesHeap");
 	NAME_DX12_OBJECT_CSTR(SamplersHeap.Handle.Get(), "GlobalSamplersHeap");
+#endif
 
 	{
 		D3D12_RENDER_TARGET_VIEW_DESC ColorTargetViewDesc = {};
@@ -664,7 +667,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 			Result.BytecodeLength  = Code->GetBufferSize();
 			Result.pShaderBytecode = new u8[Result.BytecodeLength];
 			memcpy((void*)Result.pShaderBytecode, Code->GetBufferPointer(), Result.BytecodeLength);
-			Code->Release();
+			//Code->Release();
 		}
 		else
 		{
@@ -672,7 +675,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 			return {};
 		}
 
-		SourceBlob->Release();
+		//SourceBlob->Release();
 	}
 
 	File.close();
