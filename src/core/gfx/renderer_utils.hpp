@@ -12,7 +12,7 @@ namespace utils
 			bool UseBackFace;
 			bool UseOutline;
 			bool UseMultiview;
-			uint8_t ViewMask;
+			u32  ViewMask;
 		};
 	};
 
@@ -92,6 +92,9 @@ struct global_pipeline_context
 	virtual void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state>>& BarrierData, 
 								  u32 SrcStageMask, u32 DstStageMask) = 0;
 
+	virtual void DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget) = 0;
+	virtual void DebugGuiEnd(renderer_backend* Backend)   = 0;
+
 	u32 BackBufferIndex = 0;
 };
 
@@ -110,9 +113,9 @@ public:
 	virtual void End()   = 0;
 	virtual void Clear() = 0;
 
-	virtual void SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
-	virtual void SetDepthTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
-	virtual void SetStencilTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
+	virtual void SetColorTarget(u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
+	virtual void SetDepthTarget(u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
+	virtual void SetStencilTarget(u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
 
 	virtual void StaticUpdate() = 0;
 

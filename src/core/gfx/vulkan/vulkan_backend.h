@@ -48,6 +48,7 @@ struct vulkan_backend : public renderer_backend
 	VkSwapchainKHR Swapchain;
 	VkSurfaceFormatKHR SurfaceFormat;
 	VkDescriptorPool ImGuiPool;
+	VkRenderPass ImGuiRenderPass;
 
 	vulkan_command_queue* CommandQueue;
 };

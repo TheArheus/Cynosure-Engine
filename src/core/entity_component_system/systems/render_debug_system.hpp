@@ -178,8 +178,8 @@ struct render_debug_system : public entity_system
 			PipelineContext->SetBufferBarriers({{DebugIndirectDrawIndexedCommands, AF_ShaderWrite, AF_IndirectCommandRead}}, PSF_Compute, PSF_DrawIndirect);
 
 			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
-			Window.Gfx.DebugContext->SetColorTarget(load_op::load, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget}, {0, 0, 0, 1});
-			Window.Gfx.DebugContext->SetDepthTarget(load_op::load, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
+			Window.Gfx.DebugContext->SetColorTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget}, {0, 0, 0, 1});
+			Window.Gfx.DebugContext->SetDepthTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
 			Window.Gfx.DebugContext->DrawIndirect(Geometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.DebugContext->End();
 			Window.Gfx.DebugContext->Clear();
