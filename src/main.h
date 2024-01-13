@@ -85,8 +85,10 @@ struct point_shadow_input
 	float FarZ;
 };
 
-struct alignas(16) mesh_comp_culling_common_input
+struct mesh_comp_culling_common_input
 {
+	mat4  Proj;
+	mat4  View;
 	plane CullingPlanes[6];
 	u32   FrustrumCullingEnabled;
 	u32   OcclusionCullingEnabled;
@@ -95,8 +97,6 @@ struct alignas(16) mesh_comp_culling_common_input
 	u32   MeshCount;
 	u32   DebugDrawCount;
 	u32   DebugMeshCount;
-	mat4  Proj;
-	mat4  View;
 };
 
 #include "core/scene_manager/scene_manager.h"

@@ -483,6 +483,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		TBuiltInResource DefaultBuiltInResource = GetDefaultBuiltInResource();
 		if (!ShaderModule.parse(&DefaultBuiltInResource, 100, false, static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgDefault)))
 		{
+			std::cerr << "Shader: " << std::string(Path) << std::endl;
 			std::cerr << ShaderModule.getInfoLog() << std::endl;
 			std::cerr << ShaderModule.getInfoDebugLog() << std::endl;
 			return VK_NULL_HANDLE;
@@ -493,6 +494,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 
 		if (!Program.link(static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules)))
 		{
+			std::cerr << "Shader: " << std::string(Path) << std::endl;
 			std::cerr << Program.getInfoLog() << std::endl;
 			std::cerr << Program.getInfoDebugLog() << std::endl;
 			return VK_NULL_HANDLE;
@@ -521,110 +523,12 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 			if (Var.OpCode == SpvOpVariable && Var.StorageClass == SpvStorageClassPushConstant)
 			{
 				const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
+				const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
 
 				CompiledShaders[Path].HavePushConstant = true;
 				HavePushConstant = true;
-				PushConstantSize = 0;
 
-				u32 NewSize = 0;
-				if(VariableType.OpCode == SpvOpTypePointer)
-				{
-					const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
-
-					switch(PointerType.OpCode)
-					{
-					case SpvOpTypeStruct:
-					{
-						for(u32 TypeIdIdx = 0; TypeIdIdx < PointerType.TypeId.size(); TypeIdIdx++)
-						{
-							const op_info& StructType = ShaderInfo[PointerType.TypeId[TypeIdIdx]];
-
-							switch(StructType.OpCode)
-							{
-							case SpvOpTypeArray:
-							{
-								const op_info& ArrayInfo = ShaderInfo[StructType.TypeId[0]];
-								const op_info& SizeInfo  = ShaderInfo[StructType.SizeId];
-								switch(ArrayInfo.OpCode)
-								{
-								case SpvOpTypeMatrix:
-								{
-									NewSize = ArrayInfo.Width;
-									const op_info& MatrixType = ShaderInfo[ArrayInfo.TypeId[0]];
-									const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
-									if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-									{
-										NewSize *= VectorType.Width / 8;
-									}
-								} break;
-								case SpvOpTypeVector:
-								{
-									NewSize = ArrayInfo.Width;
-									const op_info& VectorType = ShaderInfo[ArrayInfo.TypeId[0]];
-									if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-									{
-										NewSize *= VectorType.Width / 8;
-									}
-								} break;
-								case SpvOpTypeInt:
-								case SpvOpTypeFloat:
-								{
-									NewSize = ArrayInfo.Width / 8;
-								} break;
-								}
-								PushConstantSize += NewSize * SizeInfo.Constant;
-							} break;
-							case SpvOpTypeMatrix:
-							{
-								const op_info& MatrixType = ShaderInfo[StructType.TypeId[0]];
-								const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
-								if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-								{
-									PushConstantSize += StructType.Width * MatrixType.Width * VectorType.Width / 8;
-								}
-							} break;
-							case SpvOpTypeVector:
-							{
-								const op_info& VectorType = ShaderInfo[StructType.TypeId[0]];
-								if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-								{
-									PushConstantSize += StructType.Width * VectorType.Width / 8;
-								}
-							} break;
-							case SpvOpTypeInt:
-							case SpvOpTypeFloat:
-							{
-								PushConstantSize += StructType.Width / 8;
-							} break;
-							}
-						}
-					} break;
-					case SpvOpTypeMatrix:
-					{
-						NewSize = PointerType.Width;
-						const op_info& MatrixType = ShaderInfo[PointerType.TypeId[0]];
-						const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
-						if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-						{
-							PushConstantSize += NewSize * VectorType.Width / 8;
-						}
-					} break;
-					case SpvOpTypeVector:
-					{
-						NewSize = PointerType.Width;
-						const op_info& VectorType = ShaderInfo[PointerType.TypeId[0]];
-						if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-						{
-							PushConstantSize += NewSize * VectorType.Width / 8;
-						}
-					} break;
-					case SpvOpTypeInt:
-					case SpvOpTypeFloat:
-					{
-						PushConstantSize += PointerType.Width / 8;
-					} break;
-					}
-				}
+				PushConstantSize += GetSpvVariableSize(ShaderInfo, PointerType);
 			}
 			else if (Var.OpCode == SpvOpVariable && Var.IsDescriptor)
 			{

@@ -74,6 +74,18 @@ struct mesh
 		vec4 Max;
 	};
 
+	struct alignas(16) offset
+	{
+		aabb   AABB;
+		sphere BoundingSphere;
+
+		u32 VertexOffset;
+		u32 VertexCount;
+
+		u32 IndexOffset;
+		u32 IndexCount;
+	};
+
 	struct alignas(16) material
 	{
 		vec4 LightEmmit;
@@ -86,18 +98,6 @@ struct mesh
 		u32  HasHeightMap;
 		u32  HeightMapIdx;
 		u32  LightType;
-	};
-
-	struct alignas(16) offset
-	{
-		aabb   AABB;
-		sphere BoundingSphere;
-
-		u32 VertexOffset;
-		u32 VertexCount;
-
-		u32 IndexOffset;
-		u32 IndexCount;
 	};
 
 	mesh() = default;

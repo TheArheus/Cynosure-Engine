@@ -1005,3 +1005,50 @@ void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std:
 		Offset += OpSize;
 	}
 }
+
+u32 GetSpvVariableSize(const std::vector<op_info>& ShaderInfo, const op_info& TypeInfo)
+{
+	u32 Result = 0;
+	switch(TypeInfo.OpCode)
+	{
+		case SpvOpTypeStruct:
+		{
+			for(u32 TypeIdIdx = 0; TypeIdIdx < TypeInfo.TypeId.size(); TypeIdIdx++)
+			{
+				const op_info& StructType = ShaderInfo[TypeInfo.TypeId[TypeIdIdx]];
+
+				if(StructType.OpCode == SpvOpTypeArray)
+				{
+					const op_info& ArrayInfo = ShaderInfo[StructType.TypeId[0]];
+					const op_info& SizeInfo  = ShaderInfo[StructType.SizeId];
+
+					Result += GetSpvVariableSize(ShaderInfo, ArrayInfo) * SizeInfo.Constant;
+				}
+				else
+				{
+					Result += GetSpvVariableSize(ShaderInfo, StructType);
+				}
+			}
+		} break;
+		case SpvOpTypeMatrix:
+		{
+			const op_info& MatrixType = ShaderInfo[TypeInfo.TypeId[0]];
+			const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
+			Result = TypeInfo.Width * MatrixType.Width * VectorType.Width / 8;
+		} break;
+		case SpvOpTypeVector:
+		{
+			const op_info& VectorType = ShaderInfo[TypeInfo.TypeId[0]];
+			Result = TypeInfo.Width * VectorType.Width / 8;
+		} break;
+		case SpvOpTypeInt:
+		case SpvOpTypeFloat:
+		{
+			Result = TypeInfo.Width / 8;
+		} break;
+		default:
+			Result = 1;
+	}
+
+	return Result;
+}

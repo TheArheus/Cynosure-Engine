@@ -30,8 +30,9 @@
 
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {
-	window Window("3D Renderer");
-	Window.InitVulkanGraphics();
+	window Window(1280, 720, "3D Renderer");
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
 	global_pipeline_context* PipelineContext = Window.Gfx.CreateGlobalPipelineContext();
 
@@ -78,9 +79,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
-			PipelineContext->DebugGuiBegin(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
-			SceneManager.RenderUI();
-			PipelineContext->DebugGuiEnd(Window.Gfx.Backend);
+			//PipelineContext->DebugGuiBegin(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
+			//SceneManager.RenderUI();
+			//PipelineContext->DebugGuiEnd(Window.Gfx.Backend);
 
 			PipelineContext->EmplaceColorTarget(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
 			PipelineContext->Present(Window.Gfx.Backend);
