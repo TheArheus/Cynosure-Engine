@@ -87,8 +87,8 @@ directx12_backend(window* Window)
 
 	ColorTargetHeap  = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	DepthStencilHeap = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
-	ResourcesHeap    = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	SamplersHeap     = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+	ResourcesHeap    = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+	SamplersHeap     = descriptor_heap(Device.Get(), DX12_TEXTURES_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 
 #if 0
 	NAME_DX12_OBJECT_CSTR(ColorTargetHeap.Handle.Get(), "GlobalColorTargetHeap");
@@ -318,114 +318,13 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
 		{
 			const op_info& Var = ShaderInfo[VariableIdx];
-			// TODO: Better type size calculation
 			if (Var.OpCode == SpvOpVariable && Var.StorageClass == SpvStorageClassPushConstant)
 			{
 				const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
-
-				//CompiledShaders[Path].HavePushConstant = true;
+				const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
 				HavePushConstant = true;
-				PushConstantSize = 0;
 
-				u32 NewSize = 0;
-				if(VariableType.OpCode == SpvOpTypePointer)
-				{
-					const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
-
-					switch(PointerType.OpCode)
-					{
-					case SpvOpTypeStruct:
-					{
-						for(u32 TypeIdIdx = 0; TypeIdIdx < PointerType.TypeId.size(); TypeIdIdx++)
-						{
-							const op_info& StructType = ShaderInfo[PointerType.TypeId[TypeIdIdx]];
-
-							switch(StructType.OpCode)
-							{
-							case SpvOpTypeArray:
-							{
-								const op_info& ArrayInfo = ShaderInfo[StructType.TypeId[0]];
-								const op_info& SizeInfo  = ShaderInfo[StructType.SizeId];
-								switch(ArrayInfo.OpCode)
-								{
-								case SpvOpTypeMatrix:
-								{
-									NewSize = ArrayInfo.Width;
-									const op_info& MatrixType = ShaderInfo[ArrayInfo.TypeId[0]];
-									const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
-									if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-									{
-										NewSize *= VectorType.Width / 8;
-									}
-								} break;
-								case SpvOpTypeVector:
-								{
-									NewSize = ArrayInfo.Width;
-									const op_info& VectorType = ShaderInfo[ArrayInfo.TypeId[0]];
-									if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-									{
-										NewSize *= VectorType.Width / 8;
-									}
-								} break;
-								case SpvOpTypeInt:
-								case SpvOpTypeFloat:
-								{
-									NewSize = ArrayInfo.Width / 8;
-								} break;
-								}
-								PushConstantSize += NewSize * SizeInfo.Constant;
-							} break;
-							case SpvOpTypeMatrix:
-							{
-								const op_info& MatrixType = ShaderInfo[StructType.TypeId[0]];
-								const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
-								if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-								{
-									PushConstantSize += StructType.Width * MatrixType.Width * VectorType.Width / 8;
-								}
-							} break;
-							case SpvOpTypeVector:
-							{
-								const op_info& VectorType = ShaderInfo[StructType.TypeId[0]];
-								if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-								{
-									PushConstantSize += StructType.Width * VectorType.Width / 8;
-								}
-							} break;
-							case SpvOpTypeInt:
-							case SpvOpTypeFloat:
-							{
-								PushConstantSize += StructType.Width / 8;
-							} break;
-							}
-						}
-					} break;
-					case SpvOpTypeMatrix:
-					{
-						NewSize = PointerType.Width;
-						const op_info& MatrixType = ShaderInfo[PointerType.TypeId[0]];
-						const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
-						if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-						{
-							PushConstantSize += NewSize * VectorType.Width / 8;
-						}
-					} break;
-					case SpvOpTypeVector:
-					{
-						NewSize = PointerType.Width;
-						const op_info& VectorType = ShaderInfo[PointerType.TypeId[0]];
-						if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-						{
-							PushConstantSize += NewSize * VectorType.Width / 8;
-						}
-					} break;
-					case SpvOpTypeInt:
-					case SpvOpTypeFloat:
-					{
-						PushConstantSize += PointerType.Width / 8;
-					} break;
-					}
-				}
+				PushConstantSize += GetSpvVariableSize(ShaderInfo, PointerType);
 			}
 			else if (Var.OpCode == SpvOpVariable && Var.IsDescriptor)
 			{
@@ -611,32 +510,40 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 
 		Arguments.push_back(L"-T");
 		Arguments.push_back(TargetProfile);
-		Arguments.push_back(DXC_ARG_WARNINGS_ARE_ERRORS); //-WX
-		Arguments.push_back(L"-HV 2021");                 //-WX
-
+		//Arguments.push_back(DXC_ARG_WARNINGS_ARE_ERRORS); //-WX
+		//Arguments.push_back(L"-HV 2021");
 #if 0
-		{
-			Arguments.push_back(DXC_ARG_DEBUG);
-			Arguments.push_back(DXC_ARG_SKIP_OPTIMIZATIONS);
-			Arguments.push_back(DXC_ARG_PREFER_FLOW_CONTROL);
-		}
+		Arguments.push_back(DXC_ARG_DEBUG);
+		Arguments.push_back(DXC_ARG_SKIP_OPTIMIZATIONS);
+		Arguments.push_back(DXC_ARG_PREFER_FLOW_CONTROL);
+		Arguments.push_back(DXC_ARG_DEBUG_NAME_FOR_SOURCE);
 #endif
-		{
-			Arguments.push_back(L"-Qstrip_debug");
-			Arguments.push_back(L"-Qstrip_reflect");
-			Arguments.push_back(DXC_ARG_OPTIMIZATION_LEVEL3);
-		}
+		//Arguments.push_back(L"-Qstrip_debug");
+		//Arguments.push_back(L"-Qstrip_reflect");
+		Arguments.push_back(DXC_ARG_OPTIMIZATION_LEVEL3);
 
 		ComPtr<IDxcBlobUtf8> Errors;
+		ComPtr<IDxcBlobUtf8> DebugData;
+		ComPtr<IDxcBlobUtf16> DebugPath;
 		ComPtr<IDxcResult> CompileResult;
 
 		{
 			IDxcOperationResult* OperationResult = nullptr;
-			DxcCompiler->Compile(static_cast<IDxcBlob*>(SourceBlob.Get()), nullptr, L"main", TargetProfile, nullptr, 0, nullptr, 0, nullptr, &OperationResult);
+			DxcCompiler->Compile(static_cast<IDxcBlob*>(SourceBlob.Get()), nullptr, L"main", TargetProfile, Arguments.data(), Arguments.size(), nullptr, 0, nullptr, &OperationResult);
 
 			CompileResult.Attach(static_cast<IDxcResult*>(OperationResult));
 		}
+
 		CompileResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(Errors.GetAddressOf()), nullptr);
+		CompileResult->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(DebugData.GetAddressOf()), DebugPath.GetAddressOf());
+
+		if(DebugData)
+		{
+			std::wstring OutputPath(reinterpret_cast<const wchar_t*>(DebugPath->GetBufferPointer()));
+			std::wofstream PDBFile(OutputPath, std::ios::binary);
+			PDBFile.write(reinterpret_cast<const wchar_t*>(DebugData->GetBufferPointer()), DebugData->GetBufferSize());
+			PDBFile.close();
+		}
 
 		if (Errors && Errors->GetStringLength() > 0)
 		{
@@ -667,7 +574,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 			Result.BytecodeLength  = Code->GetBufferSize();
 			Result.pShaderBytecode = new u8[Result.BytecodeLength];
 			memcpy((void*)Result.pShaderBytecode, Code->GetBufferPointer(), Result.BytecodeLength);
-			//Code->Release();
+			Code->Release();
 		}
 		else
 		{
@@ -675,7 +582,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 			return {};
 		}
 
-		//SourceBlob->Release();
+		SourceBlob->Release();
 	}
 
 	File.close();

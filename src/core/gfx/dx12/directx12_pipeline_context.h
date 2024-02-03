@@ -57,10 +57,16 @@ struct directx12_global_pipeline_context : public global_pipeline_context
 	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
+	void DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget) override;
+	void DebugGuiEnd(renderer_backend* Backend) override;
+
 	directx12_fence Fence;
 
 	ID3D12Device6* Device;
 	ID3D12GraphicsCommandList* CommandList;
+
+	std::unordered_set<buffer*>  BuffersToCommon;
+	std::unordered_set<texture*> TexturesToCommon;
 };
 
 class directx12_render_context : public render_context
@@ -70,8 +76,8 @@ class directx12_render_context : public render_context
 public:
 	directx12_render_context() = default;
 
-	directx12_render_context(renderer_backend* Backend,
-						     std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
+	directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::initializer_list<const std::string> ShaderList, 
+			const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
 
 	directx12_render_context(const directx12_render_context&) = delete;
 	directx12_render_context& operator=(const directx12_render_context&) = delete;
@@ -84,11 +90,11 @@ public:
 	void End()   override;
 	void Clear() override;
 
-	void SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face = 0, bool EnableMultiview = false) override;
-	void SetDepthTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) override;
+	void SetColorTarget(u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face = 0, bool EnableMultiview = false) override;
+	void SetDepthTarget(u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) override;
 
 	// NOTE: Binding depth/stencil targets or combined target is possible only via SetDepthTarget function
-	void SetStencilTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) override;
+	void SetStencilTarget(u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) override;
 
 	void StaticUpdate() override {}
 
@@ -113,6 +119,9 @@ private:
 	ComPtr<ID3D12CommandSignature> IndirectSignatureHandle;
 	D3D12_PRIMITIVE_TOPOLOGY PipelineTopology;
 
+	std::unordered_set<buffer*>  BuffersToCommon;
+	std::unordered_set<texture*> TexturesToCommon;
+
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> ColorTargets;
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilTarget;
 
@@ -128,6 +137,9 @@ private:
 	bool HavePushConstant = false;
 	bool IsResourceHeapInited = false;
 	bool IsSamplersHeapInited = false;
+
+	load_op  LoadOp;
+	store_op StoreOp;
 
 	directx12_global_pipeline_context* PipelineContext = nullptr;
 	descriptor_heap ResourceHeap;
@@ -165,8 +177,8 @@ private:
 	ComPtr<ID3D12PipelineState> Pipeline;
 	ComPtr<ID3D12RootSignature> RootSignatureHandle;
 
-	std::set<buffer*>  BuffersToCommon;
-	std::set<texture*> TexturesToCommon;
+	std::unordered_set<buffer*>  BuffersToCommon;
+	std::unordered_set<texture*> TexturesToCommon;
 
 	std::map<u32, u32> SetIndices;
 	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;

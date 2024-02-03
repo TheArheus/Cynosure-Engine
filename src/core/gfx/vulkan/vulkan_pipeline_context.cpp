@@ -258,13 +258,55 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, b
 	}
 }
 
-vulkan_render_context::
-vulkan_render_context(renderer_backend* Backend,
-			   std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData, const std::vector<shader_define>& ShaderDefines) 
+void vulkan_global_pipeline_context::
+DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget)
 {
-	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
+	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+	vulkan_texture* Clr = static_cast<vulkan_texture*>(RenderTarget);
+
+	ImGui_ImplVulkan_NewFrame();
+
+	VkRenderingInfoKHR RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
+	RenderingInfo.renderArea = {{}, {u32(Gfx->Width), u32(Gfx->Height)}};
+	RenderingInfo.layerCount = 1;
+	RenderingInfo.viewMask   = 0;
+
+	VkRenderingAttachmentInfoKHR ColorInfo = {VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR};
+	ColorInfo.imageView = Clr->Views[0];
+	ColorInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	ColorInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+	ColorInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	ColorInfo.clearValue = {0, 0, 0, 0};
+	RenderingInfo.colorAttachmentCount = 1;
+	RenderingInfo.pColorAttachments = &ColorInfo;
+
+	if(Gfx->Features13.dynamicRendering)
+		vkCmdBeginRenderingKHR(*CommandList, &RenderingInfo);
+}
+
+void vulkan_global_pipeline_context::
+DebugGuiEnd(renderer_backend* Backend)
+{
+	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *CommandList);
+
+	if(Gfx->Features13.dynamicRendering)
+		vkCmdEndRenderingKHR(*CommandList);
+}
+
+vulkan_render_context::
+vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::initializer_list<const std::string> ShaderList, 
+					  const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData, const std::vector<shader_define>& ShaderDefines)
+	: LoadOp(NewLoadOp), StoreOp(NewStoreOp)
+{
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	Device = Gfx->Device;
+
+	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
+	RenderPassInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+	FramebufferCreateInfo = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+	UseFramebuffer = !Gfx->Features13.dynamicRendering;
 
 	u32 PushConstantStage = 0;
 	std::map<VkDescriptorType, u32> DescriptorTypeCounts;
@@ -334,18 +376,13 @@ vulkan_render_context(renderer_backend* Backend,
 
 	// TODO: Check if binding partially bound
 	// TODO: Binding flags
-	Layouts.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
+	std::vector<VkDescriptorSetLayout> Layouts(ShaderRootLayout.size());
 	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
 	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)
 	{
-		//VkDescriptorSetLayoutBindingFlagsCreateInfoEXT BindingFlagsCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT};
-		//BindingFlagsCreateInfo.bindingCount = static_cast<uint32_t>(ParametersFlags[Space].size());
-		//BindingFlagsCreateInfo.pBindingFlags = ParametersFlags[Space].data();
-
 		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
 		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
 		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
-		//DescriptorSetLayoutCreateInfo.pNext = &BindingFlagsCreateInfo;
 
 		VkDescriptorSetLayout DescriptorSetLayout;
 		VK_CHECK(vkCreateDescriptorSetLayout(Device, &DescriptorSetLayoutCreateInfo, 0, &DescriptorSetLayout));
@@ -401,7 +438,85 @@ vulkan_render_context(renderer_backend* Backend,
 	CreateInfo.stageCount = ShaderStages.size();
 
 	std::vector<VkFormat> ColorTargetFormats;
-	for(u32 FormatIdx = 0; FormatIdx < ColorTargets.size(); ++FormatIdx) ColorTargetFormats.push_back(GetVKFormat(ColorTargets[FormatIdx]->Info.Format));
+	std::vector<VkAttachmentReference> AttachmentReferences;
+	std::vector<VkAttachmentDescription> AttachmentDescriptions;
+	for(u32 FormatIdx = 0; FormatIdx < ColorTargets.size(); ++FormatIdx)
+	{
+		VkAttachmentReference AttachRef = {};
+		VkAttachmentDescription AttachDesc = {};
+		AttachDesc.format        = GetVKFormat(ColorTargets[FormatIdx]->Info.Format);
+		AttachDesc.samples       = VK_SAMPLE_COUNT_1_BIT;
+		AttachDesc.loadOp        = GetVKLoadOp(NewLoadOp);
+		AttachDesc.storeOp       = GetVKStoreOp(NewStoreOp);
+		AttachDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		AttachDesc.finalLayout   = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		AttachRef.attachment = FormatIdx;
+		AttachRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		ColorTargetFormats.push_back(AttachDesc.format);
+		AttachmentDescriptions.push_back(AttachDesc);
+		AttachmentReferences.push_back(AttachRef);
+	}
+
+	VkAttachmentReference DepthAttachRef = {};
+	DepthAttachRef.attachment = ColorTargets.size();
+	DepthAttachRef.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	std::vector<VkSubpassDependency> Dependencies;
+#if 0
+	VkSubpassDependency ColorDependency = {};
+	ColorDependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
+	ColorDependency.dstSubpass    = 0;
+	ColorDependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	ColorDependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	ColorDependency.srcAccessMask = 0;
+	ColorDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	if(InputData.UseColor)
+		Dependencies.push_back(ColorDependency);
+
+	VkSubpassDependency DepthDependency = {};
+	DepthDependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
+	DepthDependency.dstSubpass    = 0;
+	DepthDependency.srcStageMask  = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	DepthDependency.dstStageMask  = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	DepthDependency.srcAccessMask = 0;
+	DepthDependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	if(InputData.UseDepth)
+		Dependencies.push_back(DepthDependency);
+#endif
+
+	VkAttachmentDescription DepthAttachDesc = {};
+	DepthAttachDesc.format        = InputData.UseDepth ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED;
+	DepthAttachDesc.samples       = VK_SAMPLE_COUNT_1_BIT;
+	DepthAttachDesc.loadOp        = GetVKLoadOp(NewLoadOp);
+	DepthAttachDesc.storeOp       = GetVKStoreOp(NewStoreOp);
+	DepthAttachDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	DepthAttachDesc.finalLayout   = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	if(InputData.UseDepth)
+		AttachmentDescriptions.push_back(DepthAttachDesc);
+
+	VkRenderPassMultiviewCreateInfo MultiviewCreateInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO};
+	MultiviewCreateInfo.subpassCount         = 1;
+	MultiviewCreateInfo.dependencyCount      = Dependencies.size();
+	MultiviewCreateInfo.pViewMasks           = &InputData.ViewMask;
+	MultiviewCreateInfo.correlationMaskCount = 0;
+	MultiviewCreateInfo.pCorrelationMasks    = nullptr;
+
+	Subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	Subpass.colorAttachmentCount    = InputData.UseColor ? AttachmentReferences.size() : 0;
+	Subpass.pColorAttachments       = InputData.UseColor ? AttachmentReferences.data() : nullptr;
+	Subpass.pDepthStencilAttachment = InputData.UseDepth ? &DepthAttachRef : nullptr;
+
+	VkRenderPassCreateInfo RenderPassCreateInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+	RenderPassCreateInfo.pNext           = InputData.UseMultiview ? &MultiviewCreateInfo : nullptr;
+	RenderPassCreateInfo.attachmentCount = AttachmentDescriptions.size();
+	RenderPassCreateInfo.pAttachments    = AttachmentDescriptions.data();
+	RenderPassCreateInfo.subpassCount    = 1;
+	RenderPassCreateInfo.pSubpasses      = &Subpass;
+	RenderPassCreateInfo.dependencyCount = Dependencies.size();
+	RenderPassCreateInfo.pDependencies   = Dependencies.data();
+	VK_CHECK(vkCreateRenderPass(Device, &RenderPassCreateInfo, nullptr, &RenderPass));
 
 	VkPipelineRenderingCreateInfoKHR PipelineRenderingCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR};
 	PipelineRenderingCreateInfo.colorAttachmentCount    = ColorTargetFormats.size();
@@ -466,6 +581,8 @@ vulkan_render_context(renderer_backend* Backend,
 	CreateInfo.pViewportState = &ViewportState;
 	if(Gfx->Features13.dynamicRendering)
 		CreateInfo.pNext = &PipelineRenderingCreateInfo;
+	else
+		CreateInfo.renderPass = RenderPass;
 
 	VK_CHECK(vkCreateGraphicsPipelines(Device, nullptr, 1, &CreateInfo, 0, &Pipeline));
 }
@@ -485,6 +602,13 @@ void vulkan_render_context::
 Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 RenderHeight)
 {
 	PipelineContext = static_cast<vulkan_global_pipeline_context*>(GlobalPipelineContext);
+	FramebufferCreateInfo.renderPass = RenderPass;
+	FramebufferCreateInfo.width  = RenderWidth;
+	FramebufferCreateInfo.height = RenderHeight;
+	FramebufferCreateInfo.layers = 1; //EnableMultiview * (1 << Face);
+	RenderPassInfo.renderPass = RenderPass;
+	RenderPassInfo.renderArea.extent.width = RenderWidth;
+	RenderPassInfo.renderArea.extent.height = RenderHeight;
 
 	std::vector<VkDescriptorSet> SetsToBind;
 	for(const VkDescriptorSet& DescriptorSet : Sets)
@@ -505,13 +629,16 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 void vulkan_render_context::
 End()
 {
+	//vkDestroyFramebuffer(Device, FrameBuffer, nullptr);
 }
 
 void vulkan_render_context::
 Clear()
 {
+	FrameBufferIdx = 0;
 	SetIndices.clear();
-	PushDescriptorBindings.clear();
+	AttachmentViews.clear();
+	RenderTargetClears.clear();
 	StaticDescriptorBindings.clear();
 	std::vector<std::unique_ptr<descriptor_info>>().swap(BufferInfos);
 	std::vector<std::unique_ptr<descriptor_info[]>>().swap(BufferArrayInfos);
@@ -520,7 +647,7 @@ Clear()
 }
 
 void vulkan_render_context::
-SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face, bool EnableMultiview)
+SetColorTarget(u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face, bool EnableMultiview)
 {
 	RenderingInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
 	RenderingInfo.layerCount = 1;
@@ -537,6 +664,9 @@ SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeig
 		ColorInfo[AttachmentIdx].loadOp = GetVKLoadOp(LoadOp);
 		ColorInfo[AttachmentIdx].storeOp = GetVKStoreOp(StoreOp);
 		memcpy(ColorInfo[AttachmentIdx].clearValue.color.float32, Clear.E, 4 * sizeof(float));
+
+		AttachmentViews.push_back(Attachment->Views[0]);
+		RenderTargetClears.push_back(ColorInfo[AttachmentIdx].clearValue);
 	}
 	RenderingInfo.colorAttachmentCount = ColorAttachments.size();
 	RenderingInfo.pColorAttachments = ColorInfo.get();
@@ -545,7 +675,7 @@ SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeig
 }
 
 void vulkan_render_context::
-SetDepthTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face, bool EnableMultiview)
+SetDepthTarget(u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face, bool EnableMultiview)
 {
 	vulkan_texture* Attachment = static_cast<vulkan_texture*>(DepthAttachment);
 
@@ -563,11 +693,13 @@ SetDepthTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeig
 	DepthInfo->clearValue.depthStencil.stencil = Clear.E[1];
 	RenderingInfo.pDepthAttachment = DepthInfo.get();
 
+	AttachmentViews.push_back(Attachment->Views[0]);
+	RenderTargetClears.push_back(DepthInfo->clearValue);
 	RenderingAttachmentInfos.push_back(std::move(DepthInfo));
 }
 
 void vulkan_render_context::
-SetStencilTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face, bool EnableMultiview)
+SetStencilTarget(u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face, bool EnableMultiview)
 {
 	vulkan_texture* Attachment = static_cast<vulkan_texture*>(StencilAttachment);
 
@@ -585,6 +717,8 @@ SetStencilTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHe
 	StencilInfo->clearValue.depthStencil.stencil = Clear.E[1];
 	RenderingInfo.pStencilAttachment = StencilInfo.get();
 
+	AttachmentViews.push_back(Attachment->Views[0]);
+	RenderTargetClears.push_back(StencilInfo->clearValue);
 	RenderingAttachmentInfos.push_back(std::move(StencilInfo));
 }
 
@@ -599,9 +733,29 @@ Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount)
 {
 	vulkan_buffer* VertexAttachment = static_cast<vulkan_buffer*>(VertexBuffer);
 
-	vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
-	vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
-	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
+	if(UseFramebuffer)
+	{
+		FramebufferCreateInfo.attachmentCount = AttachmentViews.size();
+		FramebufferCreateInfo.pAttachments    = AttachmentViews.data();
+		RenderPassInfo.clearValueCount        = RenderTargetClears.size();
+		RenderPassInfo.pClearValues           = RenderTargetClears.data();
+
+		VkFramebuffer& FrameBuffer = FrameBuffers[FrameBufferIdx];
+		if(!FrameBuffer)
+			vkCreateFramebuffer(Device, &FramebufferCreateInfo, nullptr, &FrameBuffer);
+		FrameBufferIdx++;
+
+		RenderPassInfo.framebuffer = FrameBuffer;
+		vkCmdBeginRenderPass(*PipelineContext->CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
+		vkCmdEndRenderPass(*PipelineContext->CommandList);
+	}
+	else
+	{
+		vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
+		vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
+		vkCmdEndRenderingKHR(*PipelineContext->CommandList);
+	}
 }
 
 void vulkan_render_context::
@@ -609,10 +763,31 @@ DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffse
 {
 	vulkan_buffer* IndexAttachment = static_cast<vulkan_buffer*>(IndexBuffer);
 
-	vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
-	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdDrawIndexed(*PipelineContext->CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
-	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
+	if(UseFramebuffer)
+	{
+		FramebufferCreateInfo.attachmentCount = AttachmentViews.size();
+		FramebufferCreateInfo.pAttachments    = AttachmentViews.data();
+		RenderPassInfo.clearValueCount        = RenderTargetClears.size();
+		RenderPassInfo.pClearValues           = RenderTargetClears.data();
+
+		VkFramebuffer& FrameBuffer = FrameBuffers[FrameBufferIdx];
+		if(!FrameBuffer)
+			vkCreateFramebuffer(Device, &FramebufferCreateInfo, nullptr, &FrameBuffer);
+		FrameBufferIdx++;
+
+		RenderPassInfo.framebuffer = FrameBuffer;
+		vkCmdBeginRenderPass(*PipelineContext->CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(*PipelineContext->CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
+		vkCmdEndRenderPass(*PipelineContext->CommandList);
+	}
+	else
+	{
+		vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
+		vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(*PipelineContext->CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
+		vkCmdEndRenderingKHR(*PipelineContext->CommandList);
+	}
 }
 
 void vulkan_render_context::
@@ -621,10 +796,31 @@ DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands,
 	vulkan_buffer* IndexAttachment = static_cast<vulkan_buffer*>(IndexBuffer);
 	vulkan_buffer* IndirectCommandsAttachment = static_cast<vulkan_buffer*>(IndirectCommands);
 
-	vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
-	vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 0, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
-	vkCmdEndRenderingKHR(*PipelineContext->CommandList);
+	if(UseFramebuffer)
+	{
+		FramebufferCreateInfo.attachmentCount = AttachmentViews.size();
+		FramebufferCreateInfo.pAttachments    = AttachmentViews.data();
+		RenderPassInfo.clearValueCount        = RenderTargetClears.size();
+		RenderPassInfo.pClearValues           = RenderTargetClears.data();
+
+		VkFramebuffer& FrameBuffer = FrameBuffers[FrameBufferIdx];
+		if(!FrameBuffer)
+			vkCreateFramebuffer(Device, &FramebufferCreateInfo, nullptr, &FrameBuffer);
+		FrameBufferIdx++;
+
+		RenderPassInfo.framebuffer = FrameBuffer;
+		vkCmdBeginRenderPass(*PipelineContext->CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 0, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
+		vkCmdEndRenderPass(*PipelineContext->CommandList);
+	}
+	else
+	{
+		vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
+		vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 0, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
+		vkCmdEndRenderingKHR(*PipelineContext->CommandList);
+	}
 }
 
 void vulkan_render_context::
@@ -836,18 +1032,13 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 	}
 
 	// TODO: Check if binding partially bound
-	Layouts.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
+	std::vector<VkDescriptorSetLayout> Layouts(ShaderRootLayout.size());
 	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
 	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)
 	{
-		//VkDescriptorSetLayoutBindingFlagsCreateInfoEXT BindingFlagsCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT};
-		//BindingFlagsCreateInfo.bindingCount = static_cast<uint32_t>(ParametersFlags[Space].size());
-		//BindingFlagsCreateInfo.pBindingFlags = ParametersFlags[Space].data();
-
 		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
 		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
 		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
-		//DescriptorSetLayoutCreateInfo.pNext = &BindingFlagsCreateInfo;
 
 		VkDescriptorSetLayout DescriptorSetLayout;
 		VK_CHECK(vkCreateDescriptorSetLayout(Device, &DescriptorSetLayoutCreateInfo, 0, &DescriptorSetLayout));
@@ -872,7 +1063,6 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
-		//if(IsSetPush[LayoutIdx]) continue;
 		VkDescriptorSetAllocateInfo AllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
 		AllocInfo.descriptorPool = Pool;
 		AllocInfo.descriptorSetCount = 1;
@@ -937,7 +1127,6 @@ void vulkan_compute_context::
 Clear()
 {
 	SetIndices.clear();
-	PushDescriptorBindings.clear();
 	StaticDescriptorBindings.clear();
 	std::vector<std::unique_ptr<descriptor_info>>().swap(BufferInfos);
 	std::vector<std::unique_ptr<descriptor_info[]>>().swap(BufferArrayInfos);

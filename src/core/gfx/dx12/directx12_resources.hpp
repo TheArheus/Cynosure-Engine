@@ -192,6 +192,7 @@ struct directx12_buffer : public buffer
 		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
 		WithCounter = NewWithCounter;
 
+		Name = DebugName;
 		Size = NewSize * Count + WithCounter * sizeof(u32);
 		CounterOffset = NewSize * Count;
 
@@ -473,6 +474,7 @@ struct directx12_texture : public texture
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
 
+		Name   = DebugName;
 		Width  = NewWidth;
 		Height = NewHeight;
 		Depth  = DepthOrArraySize;

@@ -178,27 +178,27 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	RendererInputData.UseDepth	  = true;
 	RendererInputData.UseBackFace = true;
 	RendererInputData.UseOutline  = true;
-	GfxContext = CreateRenderContext({"..\\shaders\\mesh.vert.glsl", "..\\shaders\\mesh.frag.glsl"}, GBuffer, {true, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
-	DebugContext = CreateRenderContext({"..\\shaders\\mesh.dbg.vert.glsl", "..\\shaders\\mesh.dbg.frag.glsl"}, {GfxColorTarget}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	GfxContext = CreateRenderContext(load_op::clear, store_op::store, {"..\\shaders\\mesh.vert.glsl", "..\\shaders\\mesh.frag.glsl"}, GBuffer, {true, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
+	DebugContext = CreateRenderContext(load_op::load, store_op::store, {"..\\shaders\\mesh.dbg.vert.glsl", "..\\shaders\\mesh.dbg.frag.glsl"}, {GfxColorTarget}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	DebugComputeContext = CreateComputeContext("..\\shaders\\mesh.dbg.comp.glsl");
 
 	RendererInputData = {};
 	RendererInputData.UseDepth = true;
 	RendererInputData.UseBackFace  = true;
-	CascadeShadowContext = CreateRenderContext({"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	ShadowContext = CreateRenderContext({"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	CascadeShadowContext = CreateRenderContext(load_op::clear, store_op::store, {"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	ShadowContext = CreateRenderContext(load_op::clear, store_op::store, {"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 
 	RendererInputData.UseMultiview = true;
 	for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
 	{
 		RendererInputData.ViewMask = 1 << CubeMapFaceIdx;
-		CubeMapShadowContexts.push_back(CreateRenderContext({"..\\shaders\\mesh.pnt.sdw.vert.glsl", "..\\shaders\\mesh.pnt.sdw.frag.glsl"}, {}, RendererInputData));
+		CubeMapShadowContexts.push_back(CreateRenderContext(load_op::clear, store_op::store, {"..\\shaders\\mesh.pnt.sdw.vert.glsl", "..\\shaders\\mesh.pnt.sdw.frag.glsl"}, {}, RendererInputData));
 	}
 
 	RendererInputData.UseDepth	   = true;
 	RendererInputData.UseMultiview = false;
 	RendererInputData.ViewMask	   = 0;
-	DebugCameraViewContext = CreateRenderContext({"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData);
+	DebugCameraViewContext = CreateRenderContext(load_op::clear, store_op::store, {"..\\shaders\\mesh.sdw.vert.glsl", "..\\shaders\\mesh.sdw.frag.glsl"}, {}, RendererInputData);
 
 	ColorPassContext = CreateComputeContext("..\\shaders\\color_pass.comp.glsl", {{"GBUFFER_COUNT", std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	AmbientOcclusionContext = CreateComputeContext("..\\shaders\\screen_space_ambient_occlusion.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});

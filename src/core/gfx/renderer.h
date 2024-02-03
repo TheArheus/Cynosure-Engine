@@ -60,15 +60,15 @@ public:
 		}
 	}
 
-	render_context* CreateRenderContext(std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, 
+	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, 
 										const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
 	{
 		switch(BackendType)
 		{
 			case backend_type::vulkan:
-				return new vulkan_render_context(Backend, ShaderList, ColorTargets, InputData, ShaderDefines);
+				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
 			case backend_type::directx12:
-				return new directx12_render_context(Backend, ShaderList, ColorTargets, InputData, ShaderDefines);
+				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
 			default:
 				return nullptr;
 		}

@@ -513,6 +513,8 @@ D3D12_RESOURCE_STATES GetDXLayoutFromAccessFlag(u32 Layouts)
 {
     D3D12_RESOURCE_STATES Result = {};
 
+	if (!Layouts)
+		Result |= D3D12_RESOURCE_STATE_COMMON;
     if (Layouts & AF_IndirectCommandRead)
         Result |= D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
     if (Layouts & AF_IndexRead)
@@ -520,7 +522,7 @@ D3D12_RESOURCE_STATES GetDXLayoutFromAccessFlag(u32 Layouts)
     if (Layouts & AF_VertexAttributeRead)
         Result |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
     if (Layouts & AF_UniformRead)
-        Result |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+        Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
     if (Layouts & AF_InputAttachmentRead)
         Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     if (Layouts & AF_ShaderRead)

@@ -354,7 +354,7 @@ struct render_system : public entity_system
 											  PSF_Compute, PSF_DrawIndirect);
 
 			Window.Gfx.CascadeShadowContext->Begin(PipelineContext, Window.Gfx.GlobalShadow[CascadeIdx]->Width, Window.Gfx.GlobalShadow[CascadeIdx]->Height);
-			Window.Gfx.CascadeShadowContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.GlobalShadow[CascadeIdx]->Width, Window.Gfx.GlobalShadow[CascadeIdx]->Height, Window.Gfx.GlobalShadow[CascadeIdx], {1, 0});
+			Window.Gfx.CascadeShadowContext->SetDepthTarget(Window.Gfx.GlobalShadow[CascadeIdx]->Width, Window.Gfx.GlobalShadow[CascadeIdx]->Height, Window.Gfx.GlobalShadow[CascadeIdx], {1, 0});
 			Window.Gfx.CascadeShadowContext->SetConstant((void*)&Shadow, sizeof(mat4));
 			Window.Gfx.CascadeShadowContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.CascadeShadowContext->End();
@@ -390,7 +390,7 @@ struct render_system : public entity_system
 
 
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->Begin(PipelineContext, ShadowMapTexture->Width, ShadowMapTexture->Height);
-						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetDepthTarget(load_op::clear, store_op::store, ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0}, CubeMapFaceIdx, true);
+						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetDepthTarget(ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0}, CubeMapFaceIdx, true);
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->SetConstant((void*)&PointShadowInput, sizeof(point_shadow_input));
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->DrawIndirect(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 						Window.Gfx.CubeMapShadowContexts[CubeMapFaceIdx]->End();
@@ -409,7 +409,7 @@ struct render_system : public entity_system
 					mat4 Shadow = ShadowMapView * ShadowMapProj;
 
 					Window.Gfx.ShadowContext->Begin(PipelineContext, ShadowMapTexture->Width, ShadowMapTexture->Height);
-					Window.Gfx.ShadowContext->SetDepthTarget(load_op::clear, store_op::store, ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0});
+					Window.Gfx.ShadowContext->SetDepthTarget(ShadowMapTexture->Width, ShadowMapTexture->Height, ShadowMapTexture, {1, 0});
 					Window.Gfx.ShadowContext->SetConstant((void*)&Shadow, sizeof(mat4));
 					Window.Gfx.ShadowContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, ShadowIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 					Window.Gfx.ShadowContext->End();
@@ -434,7 +434,7 @@ struct render_system : public entity_system
 			PipelineContext->SetBufferBarriers({{IndirectDrawIndexedCommands, AF_ShaderWrite, AF_IndirectCommandRead}}, PSF_Compute, PSF_DrawIndirect);
 
 			Window.Gfx.DebugCameraViewContext->Begin(PipelineContext, Window.Gfx.DebugCameraViewDepthTarget->Width, Window.Gfx.DebugCameraViewDepthTarget->Height);
-			Window.Gfx.DebugCameraViewContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.DebugCameraViewDepthTarget->Width, Window.Gfx.DebugCameraViewDepthTarget->Height, Window.Gfx.DebugCameraViewDepthTarget, {1, 0});
+			Window.Gfx.DebugCameraViewContext->SetDepthTarget(Window.Gfx.DebugCameraViewDepthTarget->Width, Window.Gfx.DebugCameraViewDepthTarget->Height, Window.Gfx.DebugCameraViewDepthTarget, {1, 0});
 			Window.Gfx.DebugCameraViewContext->SetConstant((void*)&Shadow, sizeof(mat4));
 			Window.Gfx.DebugCameraViewContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.DebugCameraViewContext->End();
@@ -454,8 +454,8 @@ struct render_system : public entity_system
 			PipelineContext->SetBufferBarrier({MeshMaterialsBuffer, AF_TransferWrite, AF_ShaderRead}, PSF_Transfer, PSF_VertexShader|PSF_FragmentShader);
 
 			Window.Gfx.GfxContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
-			Window.Gfx.GfxContext->SetColorTarget(load_op::clear, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GBuffer, {0, 0, 0, 1});
-			Window.Gfx.GfxContext->SetDepthTarget(load_op::clear, store_op::store, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
+			Window.Gfx.GfxContext->SetColorTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GBuffer, {0, 0, 0, 1});
+			Window.Gfx.GfxContext->SetDepthTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
 
 			Window.Gfx.GfxContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.GfxContext->End();

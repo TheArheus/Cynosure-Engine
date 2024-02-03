@@ -23,6 +23,8 @@ void directx12_global_pipeline_context::
 End(renderer_backend* Backend)
 {
 	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
+
+	BuffersToCommon.clear();
 	Gfx->CommandQueue->Execute(CommandList);
 	Fence.Flush(Gfx->CommandQueue);
 }
@@ -32,6 +34,7 @@ EndOneTime(renderer_backend* Backend)
 {
 	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 
+	BuffersToCommon.clear();
 	Gfx->CommandQueue->Execute(CommandList);
 	Fence.Flush(Gfx->CommandQueue);
 }
@@ -60,9 +63,32 @@ Present(renderer_backend* Backend)
 {
 	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 
-	CD3DX12_RESOURCE_BARRIER Barrier = 
-		CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[BackBufferIndex].Get(), Gfx->SwapchainCurrentState[BackBufferIndex], GetDXLayout(barrier_state::present));
-	CommandList->ResourceBarrier(1, &Barrier);
+	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers = 
+	{
+		CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[BackBufferIndex].Get(), Gfx->SwapchainCurrentState[BackBufferIndex], GetDXLayout(barrier_state::present))
+	};
+
+	for(u32 Idx = 0; Idx < BuffersToCommon.size(); ++Idx)
+	{
+		directx12_buffer* Resource = static_cast<directx12_buffer*>(*std::next(BuffersToCommon.begin(), Idx));
+		if(Resource->CurrentState == D3D12_RESOURCE_STATE_COMMON) continue;
+
+		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), Resource->CurrentState, D3D12_RESOURCE_STATE_COMMON));
+		if(Resource->WithCounter)
+			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->CounterHandle.Get(), Resource->CurrentState, D3D12_RESOURCE_STATE_COMMON));
+		Resource->CurrentState = D3D12_RESOURCE_STATE_COMMON;
+	}
+
+	for(u32 Idx = 0; Idx < TexturesToCommon.size(); ++Idx)
+	{
+		directx12_texture* Resource = static_cast<directx12_texture*>(*std::next(TexturesToCommon.begin(), Idx));
+		if(Resource->CurrentState == D3D12_RESOURCE_STATE_COMMON) continue;
+
+		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), Resource->CurrentState, D3D12_RESOURCE_STATE_COMMON));
+		Resource->CurrentState = D3D12_RESOURCE_STATE_COMMON;
+	}
+
+	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
 	Gfx->SwapchainCurrentState[BackBufferIndex] = GetDXLayout(barrier_state::present);
 
 	Gfx->CommandQueue->Execute(CommandList);
@@ -98,7 +124,11 @@ SetBufferBarrier(const std::tuple<buffer*, u32, u32>& BarrierData,
 	D3D12_RESOURCE_STATES NextState = GetDXLayoutFromAccessFlag(std::get<2>(BarrierData));
 
 	if(Buffer->CurrentState != NextState)
+	{
 		Barrier.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Buffer->Handle.Get(), Buffer->CurrentState, NextState));
+		if(Buffer->WithCounter)
+			Barrier.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Buffer->CounterHandle.Get(), Buffer->CurrentState, NextState));
+	}
 
 	Buffer->CurrentState = NextState;
 	if(Barrier.size())
@@ -117,7 +147,11 @@ SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData,
 		D3D12_RESOURCE_STATES CurrState = GetDXLayoutFromAccessFlag(std::get<1>(Data));
 		D3D12_RESOURCE_STATES NextState = GetDXLayoutFromAccessFlag(std::get<2>(Data));
 		if(Buffer->CurrentState != NextState)
+		{
 			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Buffer->Handle.Get(), Buffer->CurrentState, NextState));
+			if(Buffer->WithCounter)
+				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Buffer->CounterHandle.Get(), Buffer->CurrentState, NextState));
+		}
 		Buffer->CurrentState = NextState;
 	}
 
@@ -170,9 +204,20 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, b
 		CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
 }
 
+void directx12_global_pipeline_context::
+DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget)
+{
+}
+
+void directx12_global_pipeline_context::
+DebugGuiEnd(renderer_backend* Backend) 
+{
+}
+
 directx12_render_context::
-directx12_render_context(renderer_backend* Backend,
-						 std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData, const std::vector<shader_define>& ShaderDefines)
+directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::initializer_list<const std::string> ShaderList, 
+						 const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData, const std::vector<shader_define>& ShaderDefines)
+	: LoadOp(NewLoadOp), StoreOp(NewStoreOp)
 {
 	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 	Device = Gfx->Device.Get();
@@ -297,13 +342,13 @@ directx12_render_context(renderer_backend* Backend,
 	PipelineDesc.DSVFormat = InputData.UseDepth ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_UNKNOWN;
 	PipelineDesc.SampleDesc.Count = 1;
 
-	Gfx->Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline));
+	Res = Gfx->Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline));
 
 	D3D12_INDIRECT_ARGUMENT_DESC IndirectArgs[1];
 	IndirectArgs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
 
 	D3D12_COMMAND_SIGNATURE_DESC IndirectDesc = {};
-	IndirectDesc.ByteStride = 20;
+	IndirectDesc.ByteStride = sizeof(indirect_draw_indexed_command);
 	IndirectDesc.NumArgumentDescs = 1;
 	IndirectDesc.pArgumentDescs = IndirectArgs;
 	Gfx->Device->CreateCommandSignature(&IndirectDesc, nullptr, IID_PPV_ARGS(&IndirectSignatureHandle));
@@ -361,6 +406,8 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 void directx12_render_context::
 End()  
 {
+	BuffersToCommon.clear();
+	TexturesToCommon.clear();
 }
 
 void directx12_render_context::
@@ -378,7 +425,7 @@ Clear()
 }
 
 void directx12_render_context::
-SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face, bool EnableMultiview)
+SetColorTarget(u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face, bool EnableMultiview)
 {
 
 	if(EnableMultiview)
@@ -407,7 +454,7 @@ SetColorTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeig
 }
 
 void directx12_render_context::
-SetDepthTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face, bool EnableMultiview)  
+SetDepthTarget(u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face, bool EnableMultiview)  
 {
 	directx12_texture* Attachment = static_cast<directx12_texture*>(DepthAttachment);
 
@@ -420,7 +467,7 @@ SetDepthTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeig
 }
 
 void directx12_render_context::
-SetStencilTarget(load_op LoadOp, store_op StoreOp, u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face, bool EnableMultiview)  
+SetStencilTarget(u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face, bool EnableMultiview)  
 {
 }
 
@@ -435,8 +482,8 @@ Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount)
 void directx12_render_context::
 DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount)
 {
-	directx12_buffer* Buffer = static_cast<directx12_buffer*>(IndexBuffer);
-	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {Buffer->Handle->GetGPUVirtualAddress(), (u32)Buffer->Size, DXGI_FORMAT_R32_UINT};
+	directx12_buffer* Indices  = static_cast<directx12_buffer*>(IndexBuffer);
+	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {Indices->Handle->GetGPUVirtualAddress(), (u32)Indices->Size, DXGI_FORMAT_R32_UINT};
 
 	PipelineContext->CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Info.UseDepth, &DepthStencilTarget);
 	PipelineContext->CommandList->IASetIndexBuffer(&IndexBufferView);
@@ -447,14 +494,18 @@ DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffse
 void directx12_render_context::
 DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands, u32 CommandStructureSize)  
 {
-	directx12_buffer* Buffer = static_cast<directx12_buffer*>(IndexBuffer);
+	directx12_buffer* Indices  = static_cast<directx12_buffer*>(IndexBuffer);
 	directx12_buffer* Indirect = static_cast<directx12_buffer*>(IndirectCommands);
-	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {Buffer->Handle->GetGPUVirtualAddress(), (u32)Buffer->Size, DXGI_FORMAT_R32_UINT};
+	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {Indices->Handle->GetGPUVirtualAddress(), (u32)Indices->Size, DXGI_FORMAT_R32_UINT};
 
 	PipelineContext->CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Info.UseDepth, &DepthStencilTarget);
 	PipelineContext->CommandList->IASetIndexBuffer(&IndexBufferView);
 	PipelineContext->CommandList->ExecuteIndirect(IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), 0, Indirect->CounterHandle.Get(), 0);
 	SetIndices.clear();
+
+	PipelineContext->TexturesToCommon.insert(TexturesToCommon.begin(), TexturesToCommon.end());
+	PipelineContext->BuffersToCommon.insert(BuffersToCommon.begin(), BuffersToCommon.end());
+	PipelineContext->BuffersToCommon.insert(IndirectCommands);
 }
 
 void directx12_render_context::
@@ -468,6 +519,7 @@ void directx12_render_context::
 SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
+	BuffersToCommon.insert(Buffer);
 
 	auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx++);
 	auto ParameterType = ShaderRootLayout[Set][SetIndices[Set]][0].ParameterType;
@@ -509,6 +561,7 @@ void directx12_render_context::
 SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)  
 {
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
+	BuffersToCommon.insert(Buffer);
 	SetIndices[Set] += 1;
 }
 
@@ -523,6 +576,8 @@ SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
+		TexturesToCommon.insert(Textures[Idx]);
+
 		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx++);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap.Type);
 	}
@@ -541,6 +596,8 @@ SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
+		TexturesToCommon.insert(Textures[Idx]);
+
 		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx++);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessViews[ViewIdx], ResourceHeap.Type);
 	}
@@ -559,6 +616,8 @@ SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
+		TexturesToCommon.insert(Textures[Idx]);
+
 		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx++);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceViews[ViewIdx], ResourceHeap.Type);
 	}
@@ -641,7 +700,9 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 
 	PipelineDesc.pRootSignature = RootSignatureHandle.Get();
 
-	Device->CreateComputePipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline));
+	Res = Device->CreateComputePipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline));
+
+	int fin = 5;
 }
 
 void directx12_compute_context::
@@ -689,6 +750,8 @@ Begin(global_pipeline_context* GlobalPipelineContext)
 void directx12_compute_context::
 End()
 {
+	BuffersToCommon.clear();
+	TexturesToCommon.clear();
 }
 
 void directx12_compute_context::
@@ -708,6 +771,8 @@ void directx12_compute_context::
 Execute(u32 X, u32 Y, u32 Z)
 {
 	PipelineContext->CommandList->Dispatch((X + 31) / 32, (Y + 31) / 32, (Z + 31) / 32);
+	PipelineContext->TexturesToCommon.insert(TexturesToCommon.begin(), TexturesToCommon.end());
+	PipelineContext->BuffersToCommon.insert(BuffersToCommon.begin(), BuffersToCommon.end());
 	SetIndices.clear();
 }
 
@@ -721,6 +786,7 @@ void directx12_compute_context::
 SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 {
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
+	BuffersToCommon.insert(Buffer);
 
 	auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx++);
 	auto ParameterType = ShaderRootLayout[Set][SetIndices[Set]][0].ParameterType;
@@ -762,6 +828,7 @@ void directx12_compute_context::
 SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)  
 {
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
+	BuffersToCommon.insert(Buffer);
 	SetIndices[Set] += 1;
 }
 
@@ -776,6 +843,8 @@ SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
+		TexturesToCommon.insert(Textures[Idx]);
+
 		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx++);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap.Type);
 	}
@@ -794,6 +863,8 @@ SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
+		TexturesToCommon.insert(Textures[Idx]);
+
 		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx++);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessViews[ViewIdx], ResourceHeap.Type);
 	}
@@ -812,6 +883,8 @@ SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
+		TexturesToCommon.insert(Textures[Idx]);
+
 		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx++);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceViews[ViewIdx], ResourceHeap.Type);
 	}
@@ -823,6 +896,7 @@ SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
+
 		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx++);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap.Type);
 	}

@@ -30,7 +30,7 @@
 
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {
-	window Window("3D Renderer");
+	window Window(1280, 720, "3D Renderer");
 	//Window.InitVulkanGraphics();
 	Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
@@ -79,32 +79,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
-			// TODO: Move this out to ui_context or something
-#if 0
-			ImGui_ImplVulkan_NewFrame();
-
-			VkRenderingInfoKHR RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
-			RenderingInfo.renderArea = {{}, {u32(Window.Gfx.GfxColorTarget->Width), u32(Window.Gfx.GfxColorTarget->Height)}};
-			RenderingInfo.layerCount = 1;
-			RenderingInfo.viewMask   = 0;
-
-			VkRenderingAttachmentInfoKHR ColorInfo = {VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR};
-			ColorInfo.imageView = static_cast<vulkan_texture*>(Window.Gfx.GfxColorTarget)->Views[0];
-			ColorInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			ColorInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			ColorInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			ColorInfo.clearValue = {0, 0, 0, 0};
-			RenderingInfo.colorAttachmentCount = 1;
-			RenderingInfo.pColorAttachments = &ColorInfo;
-
-			vkCmdBeginRenderingKHR(*static_cast<vulkan_global_pipeline_context*>(PipelineContext)->CommandList, &RenderingInfo);
-
-			SceneManager.RenderUI();
-
-			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *static_cast<vulkan_global_pipeline_context*>(PipelineContext)->CommandList);
-
-			vkCmdEndRenderingKHR(*static_cast<vulkan_global_pipeline_context*>(PipelineContext)->CommandList);
-#endif
+			//PipelineContext->DebugGuiBegin(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
+			//SceneManager.RenderUI();
+			//PipelineContext->DebugGuiEnd(Window.Gfx.Backend);
 
 			PipelineContext->EmplaceColorTarget(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
 			PipelineContext->Present(Window.Gfx.Backend);

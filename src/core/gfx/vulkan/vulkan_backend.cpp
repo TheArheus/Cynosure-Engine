@@ -306,9 +306,47 @@ vulkan_backend(window* Window)
 	InitInfo.MinImageCount = 2;
 	InitInfo.ImageCount = SwapchainImages.size();
 	InitInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT; //MsaaQuality;
-	InitInfo.UseDynamicRendering = true;
+	InitInfo.UseDynamicRendering = Features13.dynamicRendering;
 	InitInfo.ColorAttachmentFormat = SurfaceFormat.format;
-	ImGui_ImplVulkan_Init(&InitInfo, VK_NULL_HANDLE);
+
+	if(!Features13.dynamicRendering)
+	{
+        VkAttachmentDescription attachment = {};
+        attachment.format = SurfaceFormat.format;
+        attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        VkAttachmentReference color_attachment = {};
+        color_attachment.attachment = 0;
+        color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkSubpassDescription subpass = {};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &color_attachment;
+        VkSubpassDependency dependency = {};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        VkRenderPassCreateInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        info.attachmentCount = 1;
+        info.pAttachments = &attachment;
+        info.subpassCount = 1;
+        info.pSubpasses = &subpass;
+        info.dependencyCount = 1;
+        info.pDependencies = &dependency;
+        vkCreateRenderPass(Device, &info, nullptr, &ImGuiRenderPass);
+		ImGui_ImplVulkan_Init(&InitInfo, ImGuiRenderPass);
+	}
+	else
+		ImGui_ImplVulkan_Init(&InitInfo, VK_NULL_HANDLE);
 
 	ImGui_ImplVulkan_CreateFontsTexture();
 }
@@ -445,6 +483,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		TBuiltInResource DefaultBuiltInResource = GetDefaultBuiltInResource();
 		if (!ShaderModule.parse(&DefaultBuiltInResource, 100, false, static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgDefault)))
 		{
+			std::cerr << "Shader: " << std::string(Path) << std::endl;
 			std::cerr << ShaderModule.getInfoLog() << std::endl;
 			std::cerr << ShaderModule.getInfoDebugLog() << std::endl;
 			return VK_NULL_HANDLE;
@@ -455,6 +494,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 
 		if (!Program.link(static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules)))
 		{
+			std::cerr << "Shader: " << std::string(Path) << std::endl;
 			std::cerr << Program.getInfoLog() << std::endl;
 			std::cerr << Program.getInfoDebugLog() << std::endl;
 			return VK_NULL_HANDLE;
@@ -483,110 +523,12 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 			if (Var.OpCode == SpvOpVariable && Var.StorageClass == SpvStorageClassPushConstant)
 			{
 				const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
+				const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
 
 				CompiledShaders[Path].HavePushConstant = true;
 				HavePushConstant = true;
-				PushConstantSize = 0;
 
-				u32 NewSize = 0;
-				if(VariableType.OpCode == SpvOpTypePointer)
-				{
-					const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
-
-					switch(PointerType.OpCode)
-					{
-					case SpvOpTypeStruct:
-					{
-						for(u32 TypeIdIdx = 0; TypeIdIdx < PointerType.TypeId.size(); TypeIdIdx++)
-						{
-							const op_info& StructType = ShaderInfo[PointerType.TypeId[TypeIdIdx]];
-
-							switch(StructType.OpCode)
-							{
-							case SpvOpTypeArray:
-							{
-								const op_info& ArrayInfo = ShaderInfo[StructType.TypeId[0]];
-								const op_info& SizeInfo  = ShaderInfo[StructType.SizeId];
-								switch(ArrayInfo.OpCode)
-								{
-								case SpvOpTypeMatrix:
-								{
-									NewSize = ArrayInfo.Width;
-									const op_info& MatrixType = ShaderInfo[ArrayInfo.TypeId[0]];
-									const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
-									if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-									{
-										NewSize *= VectorType.Width / 8;
-									}
-								} break;
-								case SpvOpTypeVector:
-								{
-									NewSize = ArrayInfo.Width;
-									const op_info& VectorType = ShaderInfo[ArrayInfo.TypeId[0]];
-									if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-									{
-										NewSize *= VectorType.Width / 8;
-									}
-								} break;
-								case SpvOpTypeInt:
-								case SpvOpTypeFloat:
-								{
-									NewSize = ArrayInfo.Width / 8;
-								} break;
-								}
-								PushConstantSize += NewSize * SizeInfo.Constant;
-							} break;
-							case SpvOpTypeMatrix:
-							{
-								const op_info& MatrixType = ShaderInfo[StructType.TypeId[0]];
-								const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
-								if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-								{
-									PushConstantSize += StructType.Width * MatrixType.Width * VectorType.Width / 8;
-								}
-							} break;
-							case SpvOpTypeVector:
-							{
-								const op_info& VectorType = ShaderInfo[StructType.TypeId[0]];
-								if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-								{
-									PushConstantSize += StructType.Width * VectorType.Width / 8;
-								}
-							} break;
-							case SpvOpTypeInt:
-							case SpvOpTypeFloat:
-							{
-								PushConstantSize += StructType.Width / 8;
-							} break;
-							}
-						}
-					} break;
-					case SpvOpTypeMatrix:
-					{
-						NewSize = PointerType.Width;
-						const op_info& MatrixType = ShaderInfo[PointerType.TypeId[0]];
-						const op_info& VectorType = ShaderInfo[MatrixType.TypeId[0]];
-						if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-						{
-							PushConstantSize += NewSize * VectorType.Width / 8;
-						}
-					} break;
-					case SpvOpTypeVector:
-					{
-						NewSize = PointerType.Width;
-						const op_info& VectorType = ShaderInfo[PointerType.TypeId[0]];
-						if(VectorType.OpCode == SpvOpTypeInt || VectorType.OpCode == SpvOpTypeFloat)
-						{
-							PushConstantSize += NewSize * VectorType.Width / 8;
-						}
-					} break;
-					case SpvOpTypeInt:
-					case SpvOpTypeFloat:
-					{
-						PushConstantSize += PointerType.Width / 8;
-					} break;
-					}
-				}
+				PushConstantSize += GetSpvVariableSize(ShaderInfo, PointerType);
 			}
 			else if (Var.OpCode == SpvOpVariable && Var.IsDescriptor)
 			{
