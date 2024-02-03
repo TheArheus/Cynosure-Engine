@@ -205,6 +205,7 @@ struct buffer
 	virtual void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 Flags) = 0;
 	virtual void DestroyResource() = 0;
 
+	std::string Name;
 	u64  Size          = 0;
 	u64  Alignment     = 0;
 	u32  CounterOffset = 0;
@@ -225,6 +226,7 @@ struct texture
 	virtual void DestroyResource() = 0;
 	virtual void DestroyStagingResource() = 0;
 
+	std::string Name;
 	u64 Width;
 	u64 Height;
 	u64 Depth;

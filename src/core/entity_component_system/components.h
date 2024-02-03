@@ -126,13 +126,12 @@ struct dynamic_instances_component
 	}
 };
 
-struct light_component
+struct alignas(16) light_component
 {
 	vec4 Pos;
 	vec4 Dir;
 	vec4 Col;
 	u32  Type;
-	vec3 Pad;
 
 	void PointLight(vec3 Position, float Radius, vec3 Color, float Intensity)
 	{

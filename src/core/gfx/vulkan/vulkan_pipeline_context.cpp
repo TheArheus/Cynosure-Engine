@@ -376,18 +376,13 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 
 	// TODO: Check if binding partially bound
 	// TODO: Binding flags
-	Layouts.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
+	std::vector<VkDescriptorSetLayout> Layouts(ShaderRootLayout.size());
 	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
 	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)
 	{
-		//VkDescriptorSetLayoutBindingFlagsCreateInfoEXT BindingFlagsCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT};
-		//BindingFlagsCreateInfo.bindingCount = static_cast<uint32_t>(ParametersFlags[Space].size());
-		//BindingFlagsCreateInfo.pBindingFlags = ParametersFlags[Space].data();
-
 		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
 		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
 		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
-		//DescriptorSetLayoutCreateInfo.pNext = &BindingFlagsCreateInfo;
 
 		VkDescriptorSetLayout DescriptorSetLayout;
 		VK_CHECK(vkCreateDescriptorSetLayout(Device, &DescriptorSetLayoutCreateInfo, 0, &DescriptorSetLayout));
@@ -644,7 +639,6 @@ Clear()
 	SetIndices.clear();
 	AttachmentViews.clear();
 	RenderTargetClears.clear();
-	PushDescriptorBindings.clear();
 	StaticDescriptorBindings.clear();
 	std::vector<std::unique_ptr<descriptor_info>>().swap(BufferInfos);
 	std::vector<std::unique_ptr<descriptor_info[]>>().swap(BufferArrayInfos);
@@ -1038,18 +1032,13 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 	}
 
 	// TODO: Check if binding partially bound
-	Layouts.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
+	std::vector<VkDescriptorSetLayout> Layouts(ShaderRootLayout.size());
 	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
 	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)
 	{
-		//VkDescriptorSetLayoutBindingFlagsCreateInfoEXT BindingFlagsCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT};
-		//BindingFlagsCreateInfo.bindingCount = static_cast<uint32_t>(ParametersFlags[Space].size());
-		//BindingFlagsCreateInfo.pBindingFlags = ParametersFlags[Space].data();
-
 		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
 		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
 		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
-		//DescriptorSetLayoutCreateInfo.pNext = &BindingFlagsCreateInfo;
 
 		VkDescriptorSetLayout DescriptorSetLayout;
 		VK_CHECK(vkCreateDescriptorSetLayout(Device, &DescriptorSetLayoutCreateInfo, 0, &DescriptorSetLayout));
@@ -1074,7 +1063,6 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
-		//if(IsSetPush[LayoutIdx]) continue;
 		VkDescriptorSetAllocateInfo AllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
 		AllocInfo.descriptorPool = Pool;
 		AllocInfo.descriptorSetCount = 1;
@@ -1139,7 +1127,6 @@ void vulkan_compute_context::
 Clear()
 {
 	SetIndices.clear();
-	PushDescriptorBindings.clear();
 	StaticDescriptorBindings.clear();
 	std::vector<std::unique_ptr<descriptor_info>>().swap(BufferInfos);
 	std::vector<std::unique_ptr<descriptor_info[]>>().swap(BufferArrayInfos);

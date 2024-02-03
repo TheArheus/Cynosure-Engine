@@ -85,7 +85,6 @@ public:
 		RenderingInfo(std::move(other.RenderingInfo)),
 		SetIndices(std::move(other.SetIndices)),
 		ShaderStages(std::move(other.ShaderStages)),
-		PushDescriptorBindings(std::move(other.PushDescriptorBindings)),
 		StaticDescriptorBindings(std::move(other.StaticDescriptorBindings)),
 		BufferInfos(std::move(other.BufferInfos)),
 		BufferArrayInfos(std::move(other.BufferArrayInfos)),
@@ -103,7 +102,6 @@ public:
 			std::swap(RenderingInfo, other.RenderingInfo);
 			std::swap(SetIndices, other.SetIndices);
 			std::swap(ShaderStages, other.ShaderStages);
-			std::swap(PushDescriptorBindings, other.PushDescriptorBindings);
 			std::swap(StaticDescriptorBindings, other.StaticDescriptorBindings);
 			std::swap(BufferInfos, other.BufferInfos);
 			std::swap(BufferArrayInfos, other.BufferArrayInfos);
@@ -168,8 +166,8 @@ private:
 	std::vector<VkImageView> AttachmentViews;
 	std::vector<VkClearValue> RenderTargetClears;
 	std::vector<VkPipelineShaderStageCreateInfo> ShaderStages;
-	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;
 	std::vector<VkWriteDescriptorSet> StaticDescriptorBindings;
+	std::vector<VkDescriptorSet> Sets;
 	std::vector<std::unique_ptr<descriptor_info>>   BufferInfos;
 	std::vector<std::unique_ptr<descriptor_info[]>> BufferArrayInfos;
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>   RenderingAttachmentInfos;
@@ -182,8 +180,6 @@ private:
 	VkDescriptorPool Pool;
 	VkPipelineLayout RootSignatureHandle;
 	VkFramebufferCreateInfo FramebufferCreateInfo;
-	std::vector<VkDescriptorSet> Sets;
-	std::vector<VkDescriptorSetLayout> Layouts;
 	VkPushConstantRange ConstantRange = {};
 
 	VkSubpassDescription Subpass = {};
@@ -203,7 +199,6 @@ public:
 
     vulkan_compute_context(vulkan_compute_context&& other) noexcept : 
 		ComputeStage(std::move(other.ComputeStage)),
-		PushDescriptorBindings(std::move(other.PushDescriptorBindings)),
 		StaticDescriptorBindings(std::move(other.StaticDescriptorBindings)),
 		BufferInfos(std::move(other.BufferInfos)),
 		BufferArrayInfos(std::move(other.BufferArrayInfos)),
@@ -220,7 +215,6 @@ public:
 		{
 			std::swap(ComputeStage, other.ComputeStage);
 
-			std::swap(PushDescriptorBindings, other.PushDescriptorBindings);
 			std::swap(StaticDescriptorBindings, other.StaticDescriptorBindings);
 			std::swap(BufferInfos, other.BufferInfos);
 			std::swap(BufferArrayInfos, other.BufferArrayInfos);
@@ -262,8 +256,8 @@ private:
 	u32 PushConstantSize = 0;
 	bool HavePushConstant = false;
 
-	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;
 	std::vector<VkWriteDescriptorSet> StaticDescriptorBindings;
+	std::vector<VkDescriptorSet> Sets;
 	std::vector<std::unique_ptr<descriptor_info>> BufferInfos;
 	std::vector<std::unique_ptr<descriptor_info[]>> BufferArrayInfos;
 
@@ -275,7 +269,5 @@ private:
 	VkPipeline Pipeline;
 	VkDescriptorPool Pool;
 	VkPipelineLayout RootSignatureHandle;
-	std::vector<VkDescriptorSet> Sets;
-	std::vector<VkDescriptorSetLayout> Layouts;
 	VkPushConstantRange ConstantRange = {};
 };
