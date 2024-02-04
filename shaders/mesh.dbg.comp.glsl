@@ -53,6 +53,8 @@ struct indirect_draw_indexed_command
 
 struct mesh_comp_culling_common_input
 {
+	mat4  Proj;
+	mat4  View;
 	plane Planes[6];
 	bool  FrustrumCullingEnabled;
 	bool  OcclusionCullingEnabled;
@@ -61,8 +63,6 @@ struct mesh_comp_culling_common_input
 	uint  MeshCount;
 	uint  DebugDrawCount;
 	uint  DebugMeshCount;
-	mat4  Proj;
-	mat4  View;
 };
 
 layout(binding = 0) buffer readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };

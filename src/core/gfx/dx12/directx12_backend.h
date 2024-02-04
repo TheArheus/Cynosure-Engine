@@ -1,19 +1,6 @@
 #ifndef RENDERER_DIRECTX_12_H_
 
 
-enum class dx12_descriptor_type
-{
-	shader_resource,
-	unordered_access,
-	constant_buffer,
-	shader_resource_table,
-	unordered_access_table,
-	constant_buffer_table,
-	image,
-	combined_image_sampler,
-	sampler,
-};
-
 // TODO: Move this to pipeline bindings
 class descriptor_heap
 {

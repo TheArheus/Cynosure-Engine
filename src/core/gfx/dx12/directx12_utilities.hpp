@@ -3,6 +3,19 @@
 #define DX12_RESOURCE_LIMIT 65536
 #define DX12_TEXTURES_LIMIT 2048
 
+enum class dx12_descriptor_type
+{
+	shader_resource,
+	unordered_access,
+	constant_buffer,
+	shader_resource_table,
+	unordered_access_table,
+	constant_buffer_table,
+	image,
+	combined_image_sampler,
+	sampler,
+};
+
 const wchar_t* CharToWChar(const char* ch)
 {
 	std::wstring_convert<std::codecvt_utf8<wchar_t>> Converter;
