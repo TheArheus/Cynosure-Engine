@@ -44,13 +44,13 @@ for %%f in ("..\..\src\game_scenes\*.cpp") do (
     )
     
     set ExportName=!ExportName!Create
-	cl %CommonCompFlags% /I"..\..\src" "!FileName!" /LD /Fe"!BaseName!" %DepthCascades% -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName% -PDB:ce_!BaseName!_%random%.pdb
+	cl %CommonCompFlags% /I"..\..\src" /I"..\..\src\core\vendor" "!FileName!" assimp-vc143-mt.lib /LD /Fe"!BaseName!" %DepthCascades% -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName% /LIBPATH:"..\..\libs" -PDB:ce_!BaseName!_%random%.pdb
 )
 popd
 
 pushd ..\build\
 del *.pdb > NUL 2> NUL
-cl %CommonCompFlags% /I%VulkanInc% /I"..\src" user32.lib kernel32.lib gdi32.lib shell32.lib d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib dxcompiler.lib vulkan-1.lib glslang.lib HLSL.lib OGLCompiler.lib OSDependent.lib MachineIndependent.lib SPIRV.lib SPIRV-Tools.lib SPIRV-Tools-opt.lib GenericCodeGen.lib glslang-default-resource-limits.lib SPVRemapper.lib spirv-cross-core.lib spirv-cross-cpp.lib spirv-cross-glsl.lib spirv-cross-hlsl.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:"..\libs\" /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
+cl %CommonCompFlags% /I%VulkanInc% /I"..\src" /I"..\src\core\vendor" user32.lib kernel32.lib gdi32.lib shell32.lib d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib dxcompiler.lib vulkan-1.lib glslang.lib HLSL.lib OGLCompiler.lib OSDependent.lib MachineIndependent.lib SPIRV.lib SPIRV-Tools.lib SPIRV-Tools-opt.lib GenericCodeGen.lib glslang-default-resource-limits.lib SPVRemapper.lib spirv-cross-core.lib spirv-cross-cpp.lib spirv-cross-glsl.lib spirv-cross-hlsl.lib assimp-vc143-mt.lib %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:"..\libs\" /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
 popd
 
 goto :eof
