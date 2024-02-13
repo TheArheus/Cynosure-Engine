@@ -225,7 +225,7 @@ dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool N
 }
 
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines)
+LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, u32* ArgumentsCount, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines)
 {
 	D3D12_SHADER_BYTECODE Result = {};
 
@@ -255,6 +255,24 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		glslang::EShTargetLanguageVersion TargetLanguageVersion = glslang::EShTargetSpv_1_0;
 		switch (ShaderType)
 		{
+			case shader_stage::vertex:
+			{
+#if 0
+				size_t MainPos = ShaderCode.find("void main");
+				if (MainPos != std::string::npos)
+				{
+					ShaderCode = ShaderCode.substr(0, MainPos) + "\n" + "uint GetDrawID() { return 0; }\n\n" + ShaderCode.substr(MainPos);
+				}
+#endif
+
+				std::string ReplaceString = "gl_DrawID";
+				size_t DrawIdPos = ShaderCode.find(ReplaceString);
+				if (DrawIdPos != std::string::npos)
+				{
+					HaveDrawID = true;
+					ShaderCode.replace(DrawIdPos, ReplaceString.length(), "0");
+				}
+			} break;
 			case shader_stage::tessellation_control:
 				LanguageStage = EShLangTessControl;
 				break;
@@ -363,6 +381,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 				if((DescriptorType == dx12_descriptor_type::image || DescriptorType == dx12_descriptor_type::sampler || DescriptorType == dx12_descriptor_type::combined_image_sampler) && Size == ~0u)
 					Size = 1;
 
+				if(ArgumentsCount) (*ArgumentsCount)++;
 				if(Size != ~0u)
 				{
 					D3D12_DESCRIPTOR_RANGE* ParameterRange = new D3D12_DESCRIPTOR_RANGE;
@@ -470,12 +489,24 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		spirv_cross::CompilerHLSL::Options    HlslOptions;
 		spirv_cross::HLSLVertexAttributeRemap HlslAttribs;
 
-		HlslOptions.shader_model = 66; // SM6_0
+		HlslOptions.shader_model = 66; // SM6_6
 
 		Compiler.set_hlsl_options(HlslOptions);
 		Compiler.add_vertex_attribute_remap(HlslAttribs);
 
 		std::string HlslCode = Compiler.compile();
+
+		if(HaveDrawID)
+		{
+			HlslCode.insert(0, "cbuffer root_constant\n{\n\tuint RootDrawID : register(c0);\n};\n\n");
+
+			std::string ReplaceString = "DrawID = 0u";
+			size_t DrawIdPos = HlslCode.find(ReplaceString);
+			if (DrawIdPos != std::string::npos)
+			{
+				HlslCode.replace(DrawIdPos, ReplaceString.length(), "DrawID = RootDrawID");
+			}
+		}
 
 		ComPtr<IDxcCompiler> DxcCompiler;
 		ComPtr<IDxcLibrary> DxcLib;

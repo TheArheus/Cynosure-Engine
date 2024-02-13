@@ -32,6 +32,8 @@ struct offset
 
 	uint IndexOffset;
 	uint IndexCount;
+
+	uint InstanceOffset;
 };
 
 struct mesh_draw_command
@@ -44,6 +46,7 @@ struct mesh_draw_command
 
 struct indirect_draw_indexed_command
 {
+	uint DrawID;
     uint IndexCount;
     uint InstanceCount;
     uint FirstIndex;
@@ -66,7 +69,7 @@ struct mesh_comp_culling_common_input
 };
 
 layout(binding = 0) buffer readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };
-layout(binding = 1) buffer readonly b1 { offset MeshOffsets[]; };
+layout(binding = 1) buffer b1 { offset MeshOffsets[]; };
 layout(binding = 2) buffer readonly b2 { mesh_draw_command MeshDrawCommandData[]; };
 layout(binding = 3) buffer readonly b3 { bool MeshDrawVisibilityData[]; };
 layout(binding = 4) buffer b4 { indirect_draw_indexed_command IndirectDrawIndexedCommands[]; };
@@ -92,13 +95,17 @@ void main()
 	if(!MeshDrawVisibilityData[DrawIndex]) return;
 
 	uint InstanceIdx = atomicAdd(IndirectDrawIndexedCommands[CommandIdx].InstanceCount, 1);
+	barrier();
 
 	IndirectDrawIndexedCommands[CommandIdx].VertexOffset  = int(MeshOffsets[CommandIdx].VertexOffset);
-	IndirectDrawIndexedCommands[CommandIdx].FirstIndex    = MeshOffsets[CommandIdx].IndexOffset;
-	IndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[CommandIdx].IndexCount;
-	IndirectDrawIndexedCommands[CommandIdx].FirstInstance = CommandIdx == 0 ? 0 : IndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + IndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
+	IndirectDrawIndexedCommands[CommandIdx].FirstIndex    = 0; //MeshOffsets[CommandIdx].IndexOffset;
+	IndirectDrawIndexedCommands[CommandIdx].IndexCount    = 0; //MeshOffsets[CommandIdx].IndexCount;
+	IndirectDrawIndexedCommands[CommandIdx].FirstInstance = 0;
+	IndirectDrawIndexedCommands[CommandIdx].DrawID        = CommandIdx;
+	MeshOffsets[CommandIdx].InstanceOffset = CommandIdx == 0 ? 0 : IndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + IndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
 
-	InstanceIdx += IndirectDrawIndexedCommands[CommandIdx].FirstInstance;
+	barrier();
+	InstanceIdx += MeshOffsets[CommandIdx].InstanceOffset;
 	MeshDrawCommands[InstanceIdx].MeshIndex = CommandIdx;
 	MeshDrawCommands[InstanceIdx].Translate = MeshDrawCommandData[DrawIndex].Translate;
 	MeshDrawCommands[InstanceIdx].Scale     = MeshDrawCommandData[DrawIndex].Scale;

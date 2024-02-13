@@ -811,14 +811,14 @@ DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands,
 		RenderPassInfo.framebuffer = FrameBuffer;
 		vkCmdBeginRenderPass(*PipelineContext->CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 0, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
+		vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 4, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
 		vkCmdEndRenderPass(*PipelineContext->CommandList);
 	}
 	else
 	{
 		vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
 		vkCmdBindIndexBuffer(*PipelineContext->CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 0, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
+		vkCmdDrawIndexedIndirectCount(*PipelineContext->CommandList, IndirectCommandsAttachment->Handle, 4, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
 		vkCmdEndRenderingKHR(*PipelineContext->CommandList);
 	}
 }

@@ -269,6 +269,7 @@ struct render_system : public entity_system
 		Window.Gfx.GfxContext->SetStorageBufferView(VertexBuffer);
 		Window.Gfx.GfxContext->SetStorageBufferView(MeshDrawCommandBuffer);
 		Window.Gfx.GfxContext->SetStorageBufferView(MeshMaterialsBuffer);
+		Window.Gfx.GfxContext->SetStorageBufferView(GeometryOffsets);
 		Window.Gfx.GfxContext->SetImageSampler(DiffuseTextures, barrier_state::shader_read, 0, 1);
 		Window.Gfx.GfxContext->SetImageSampler(NormalTextures, barrier_state::shader_read, 0, 2);
 		Window.Gfx.GfxContext->SetImageSampler(SpecularTextures, barrier_state::shader_read, 0, 3);

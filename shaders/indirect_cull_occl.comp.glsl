@@ -26,6 +26,8 @@ struct offset
 
 	uint IndexOffset;
 	uint IndexCount;
+
+	uint InstanceOffset;
 };
 
 struct mesh_draw_command
@@ -63,6 +65,7 @@ struct indirect_draw_indexed_command
     uint FirstIndex;
     int  VertexOffset;
     uint FirstInstance;
+	uint DrawID;
 };
 
 

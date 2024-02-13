@@ -128,13 +128,15 @@ private:
 	std::map<u32, u32> SetIndices;
 	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 	std::vector<descriptor_binding> BindingDescriptions;
-	u32 ResourceBindingIdx = 0;
-	u32 SamplersBindingIdx = 0;
+
+	u32 PushConstantSize       = 0;
+	u32 ResourceBindingIdx     = 0;
+	u32 SamplersBindingIdx     = 0;
 	u32 RootResourceBindingIdx = 0;
 	u32 RootSamplersBindingIdx = 0;
 
-	u32 PushConstantSize  = 0;
-	bool HavePushConstant = false;
+	bool HaveDrawID           = false;
+	bool HavePushConstant     = false;
 	bool IsResourceHeapInited = false;
 	bool IsSamplersHeapInited = false;
 

@@ -40,6 +40,8 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_memory_heap(Backend);
+			case backend_type::directx12:
+				return new directx12_memory_heap(Backend);
 			default:
 				return nullptr;
 		}
@@ -51,6 +53,8 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_global_pipeline_context(Backend);
+			case backend_type::directx12:
+				return new directx12_global_pipeline_context(Backend);
 			default:
 				return nullptr;
 		}
@@ -63,6 +67,8 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
+			case backend_type::directx12:
+				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
 			default:
 				return nullptr;
 		}
@@ -74,6 +80,8 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_compute_context(Backend, Shader, ShaderDefines);
+			case backend_type::directx12:
+				return new directx12_compute_context(Backend, Shader, ShaderDefines);
 			default:
 				return nullptr;
 		}

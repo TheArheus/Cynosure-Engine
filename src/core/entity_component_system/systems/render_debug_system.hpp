@@ -106,6 +106,7 @@ struct render_debug_system : public entity_system
 		Window.Gfx.DebugContext->SetStorageBufferView(DebugVertexBuffer);
 		Window.Gfx.DebugContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
 		Window.Gfx.DebugContext->SetStorageBufferView(MeshDebugMaterialsBuffer);
+		Window.Gfx.DebugContext->SetStorageBufferView(GeometryDebugOffsets);
 		Window.Gfx.DebugContext->StaticUpdate();
 	}
 

@@ -29,11 +29,11 @@ struct cube_scene : scene
 		PlaneObject.AddComponent<static_instances_component>();
 		PlaneObject.AddComponent<debug_component>();
 
-		entity VampireEntity = Registry.CreateEntity();
-		VampireEntity.AddComponent<mesh_component>("..\\assets\\dancing vampire\\dancing_vampire.dae");
+		//entity VampireEntity = Registry.CreateEntity();
+		//VampireEntity.AddComponent<mesh_component>("..\\assets\\dancing vampire\\dancing_vampire.dae");
 
-		entity BobEntity = Registry.CreateEntity();
-		BobEntity.AddComponent<mesh_component>("..\\assets\\bob_lamp_update\\bob_lamp_update.md5mesh");
+		//entity BobEntity = Registry.CreateEntity();
+		//BobEntity.AddComponent<mesh_component>("..\\assets\\bob_lamp_update\\bob_lamp_update.md5mesh");
 
 		entity CameraObject = Registry.CreateEntity();
 		CameraObject.AddComponent<camera_component>(45.0f, 0.01f, 100.0f, false);

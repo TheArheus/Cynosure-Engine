@@ -251,6 +251,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	std::unordered_map<u32, u32> DescriptorHeapSizes;
 	D3D12_ROOT_PARAMETER PushConstantDesc = {};
 
+	u32 MaxArgsCount = 0;
 	std::string GlobalName;
 	std::vector<ComPtr<ID3DBlob>> ShadersBlob;
 	for(const std::string Shader : ShaderList)
@@ -258,27 +259,35 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 		GlobalName = Shader.substr(Shader.find("."));
 		if(Shader.find(".vert.") != std::string::npos)
 		{
-			PipelineDesc.VS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.VS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, HaveDrawID, &MaxArgsCount, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if(Shader.find(".doma.") != std::string::npos)
 		{
-			PipelineDesc.DS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.DS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, HaveDrawID, nullptr, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if(Shader.find(".hull.") != std::string::npos)
 		{
-			PipelineDesc.HS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.HS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, HaveDrawID, nullptr, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if (Shader.find(".geom.") != std::string::npos)
 		{
-			PipelineDesc.GS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.GS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, HaveDrawID, nullptr, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if(Shader.find(".frag.") != std::string::npos)
 		{
-			PipelineDesc.PS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.PS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, HaveDrawID, nullptr, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 	}
 
 	std::vector<D3D12_ROOT_PARAMETER> Parameters;
+
+	if(HaveDrawID)
+	{
+		PushConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+		PushConstantDesc.Constants.Num32BitValues = 1;
+		Parameters.push_back(PushConstantDesc);
+	}
+
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
@@ -294,7 +303,6 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	{
 		PushConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 		PushConstantDesc.Constants.Num32BitValues = PushConstantSize / sizeof(u32);
-		DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += PushConstantDesc.Constants.Num32BitValues;
 		Parameters.push_back(PushConstantDesc);
 	}
 
@@ -340,14 +348,21 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 
 	Res = Gfx->Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline));
 
-	D3D12_INDIRECT_ARGUMENT_DESC IndirectArgs[1];
-	IndirectArgs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
+	std::vector<D3D12_INDIRECT_ARGUMENT_DESC> IndirectArgs;
+	D3D12_INDIRECT_ARGUMENT_DESC IndirectArg = {};
+	IndirectArg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
+	IndirectArg.Constant.RootParameterIndex = 0;
+	IndirectArg.Constant.DestOffsetIn32BitValues = 0;
+	IndirectArg.Constant.Num32BitValuesToSet = 1;
+	if(HaveDrawID) IndirectArgs.push_back(IndirectArg);
+	IndirectArg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
+	IndirectArgs.push_back(IndirectArg);
 
 	D3D12_COMMAND_SIGNATURE_DESC IndirectDesc = {};
 	IndirectDesc.ByteStride = sizeof(indirect_draw_indexed_command);
-	IndirectDesc.NumArgumentDescs = 1;
-	IndirectDesc.pArgumentDescs = IndirectArgs;
-	Gfx->Device->CreateCommandSignature(&IndirectDesc, nullptr, IID_PPV_ARGS(&IndirectSignatureHandle));
+	IndirectDesc.NumArgumentDescs = IndirectArgs.size();
+	IndirectDesc.pArgumentDescs = IndirectArgs.data();
+	Gfx->Device->CreateCommandSignature(&IndirectDesc, HaveDrawID ? RootSignatureHandle.Get() : nullptr, IID_PPV_ARGS(&IndirectSignatureHandle));
 }
 
 void directx12_render_context::
@@ -374,19 +389,19 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 			case dx12_descriptor_type::constant_buffer_table:
 			case dx12_descriptor_type::sampler:
 			{
-				PipelineContext->CommandList->SetGraphicsRootDescriptorTable(BindingDesc.Idx, BindingDesc.TableBegin);
+				PipelineContext->CommandList->SetGraphicsRootDescriptorTable(HaveDrawID + BindingDesc.Idx, BindingDesc.TableBegin);
 			} break;
 			case dx12_descriptor_type::shader_resource:
 			{
-				PipelineContext->CommandList->SetGraphicsRootShaderResourceView(BindingDesc.Idx, BindingDesc.ResourceBegin);
+				PipelineContext->CommandList->SetGraphicsRootShaderResourceView(HaveDrawID + BindingDesc.Idx, BindingDesc.ResourceBegin);
 			} break;
 			case dx12_descriptor_type::unordered_access:
 			{
-				PipelineContext->CommandList->SetGraphicsRootUnorderedAccessView(BindingDesc.Idx, BindingDesc.ResourceBegin);
+				PipelineContext->CommandList->SetGraphicsRootUnorderedAccessView(HaveDrawID + BindingDesc.Idx, BindingDesc.ResourceBegin);
 			} break;
 			case dx12_descriptor_type::constant_buffer:
 			{
-				PipelineContext->CommandList->SetGraphicsRootConstantBufferView(BindingDesc.Idx, BindingDesc.ResourceBegin);
+				PipelineContext->CommandList->SetGraphicsRootConstantBufferView(HaveDrawID + BindingDesc.Idx, BindingDesc.ResourceBegin);
 			} break;
 		}
 	}
@@ -641,8 +656,9 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 	std::unordered_map<u32, u32> DescriptorHeapSizes;
 	D3D12_ROOT_PARAMETER PushConstantDesc = {};
 
+	bool HaveDrawID = false;
 	D3D12_COMPUTE_PIPELINE_STATE_DESC PipelineDesc = {};
-	PipelineDesc.CS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+	PipelineDesc.CS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, HaveDrawID, nullptr, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 
 	std::vector<D3D12_ROOT_PARAMETER> Parameters;
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)

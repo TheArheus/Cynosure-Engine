@@ -3,6 +3,11 @@
 #include "vulkan/vulkan_pipeline_context.cpp"
 #include "vulkan/vulkan_backend.cpp"
 
+#if _WIN32
+	#include "dx12/directx12_backend.cpp"
+	#include "dx12/directx12_pipeline_context.cpp"
+#endif
+
 // TODO: CLEAR THE RESOURCES!!!
 
 global_graphics_context::

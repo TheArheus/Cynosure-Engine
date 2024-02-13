@@ -249,6 +249,12 @@ void window::InitVulkanGraphics()
 	Gfx = global_graphics_context(NewBackend, backend_type::vulkan);
 }
 
+void window::InitDirectx12Graphics()
+{
+	renderer_backend* NewBackend = new directx12_backend(this);
+	Gfx = global_graphics_context(NewBackend, backend_type::directx12);
+}
+
 void* window::
 GetProcAddr(HMODULE& Library, const char* SourceName, const char* FuncName)
 {
