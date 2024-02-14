@@ -1,6 +1,10 @@
 #ifndef MESH_H_
 #define MESH_H_
 
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+#include <assimp/Importer.hpp>
+
 enum bounding_generation : u32
 {
 	generate_aabb   = BYTE(0), 
@@ -84,6 +88,8 @@ struct mesh
 
 		u32 IndexOffset;
 		u32 IndexCount;
+
+		u32 InstanceOffset;
 	};
 
 	struct alignas(16) material

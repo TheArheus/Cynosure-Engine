@@ -26,6 +26,8 @@ struct offset
 
 	uint IndexOffset;
 	uint IndexCount;
+
+	uint InstanceOffset;
 };
 
 struct mesh_draw_command
@@ -63,12 +65,13 @@ struct indirect_draw_indexed_command
     uint FirstIndex;
     int  VertexOffset;
     uint FirstInstance;
+	uint DrawID;
 };
 
 
 layout(binding = 0) buffer readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };
 layout(binding = 1) buffer readonly b1 { offset MeshOffsets[]; };
-layout(binding = 2) buffer b2 { mesh_draw_command MeshDrawCommandData[]; };
+layout(binding = 2) buffer readonly b2 { mesh_draw_command MeshDrawCommandData[]; };
 layout(binding = 3) buffer b3 { bool MeshDrawVisibilityData[]; };
 layout(binding = 4) uniform sampler2D DepthPyramid;
 

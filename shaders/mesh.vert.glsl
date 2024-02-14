@@ -1,4 +1,4 @@
-#version 450
+#version 460
 
 #extension GL_EXT_scalar_block_layout: require
 #extension GL_EXT_shader_16bit_storage: require
@@ -7,6 +7,33 @@
 #extension GL_EXT_shader_explicit_arithmetic_types:require
 #extension GL_EXT_shader_explicit_arithmetic_types_int16:require
 #extension GL_EXT_shader_explicit_arithmetic_types_int8:require
+
+
+struct sphere
+{
+	vec4  Center;
+	float Radius;
+};
+
+struct aabb
+{
+	vec4 Min;
+	vec4 Max;
+};
+
+struct offset
+{
+	aabb AABB;
+	sphere BoundingSphere;
+
+	uint VertexOffset;
+	uint VertexCount;
+
+	uint IndexOffset;
+	uint IndexCount;
+
+	uint InstanceOffset;
+};
 
 struct global_world_data
 {
@@ -78,6 +105,7 @@ layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate;
 layout(set = 0, binding = 1) readonly buffer b1 { vert_in In[]; };
 layout(set = 0, binding = 2) readonly buffer b2 { mesh_draw_command MeshDrawCommands[]; };
 layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
+layout(set = 0, binding = 4) readonly buffer b4 { offset Offsets[]; };
 
 layout(location = 0) out vert_out Out;
 layout(location = 4) out uint     MatIdx;
@@ -85,8 +113,9 @@ layout(location = 5) out mat3     TBN;
 
 void main()
 {
-	uint VertexIndex   = gl_VertexIndex;
-	uint InstanceIndex = gl_InstanceIndex;
+	uint DrawID        = gl_DrawID;
+	uint VertexIndex   = gl_VertexIndex   + Offsets[DrawID].VertexOffset;
+	uint InstanceIndex = gl_InstanceIndex + Offsets[DrawID].InstanceOffset;
 	MatIdx = MeshDrawCommands[InstanceIndex].MatIdx;
 
 	Out.Coord = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;

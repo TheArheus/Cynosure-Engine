@@ -8,12 +8,12 @@
 	#include <windowsx.h>
 	#include <vulkan/vulkan_win32.h>
 #else
-	#include "core/vendor/glfw/glfw3native.h"
-	#include "core/vendor/glfw/glfw3.h"
+	#include <glfw/glfw3native.h>
+	#include <glfw/glfw3.h>
 #endif
 
-#include <core/vendor/Volk/volk.h>
-#include <core/vendor/Volk/volk.c>
+#include <Volk/volk.h>
+#include <Volk/volk.c>
 
 #define  AMD_EXTENSIONS
 #define  NV_EXTENSIONS
@@ -26,12 +26,12 @@
 #include <spirv-headers/spirv.h>
 
 #define IMGUI_DEFINE_MATH_OPERATORS
-#include "core/vendor/imgui/imgui.h"
-#include "core/vendor/imgui/imgui.cpp"
-#include "core/vendor/imgui/imgui_demo.cpp"
-#include "core/vendor/imgui/imgui_draw.cpp"
-#include "core/vendor/imgui/imgui_tables.cpp"
-#include "core/vendor/imgui/imgui_widgets.cpp"
+#include <imgui/imgui.h>
+#include <imgui/imgui.cpp>
+#include <imgui/imgui_demo.cpp>
+#include <imgui/imgui_draw.cpp>
+#include <imgui/imgui_tables.cpp>
+#include <imgui/imgui_widgets.cpp>
 
 class window;
 #include "core/gfx/common.hpp"
@@ -71,11 +71,8 @@ u32 PreviousPowerOfTwo(u32 x)
 
 struct indirect_draw_indexed_command
 {
-	union
-	{
-		D3D12_DRAW_INDEXED_ARGUMENTS DxDrawArg;
-		VkDrawIndexedIndirectCommand VkDrawArg; // 5
-	};
+	u32 DrawID;
+	VkDrawIndexedIndirectCommand VkDrawArg; // 5
 };
 
 struct point_shadow_input

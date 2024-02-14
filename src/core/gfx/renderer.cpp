@@ -171,6 +171,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Format    = image_format::R32_SFLOAT;
 	GBuffer[4] = PushTexture("GBuffer4", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular
 	AmbientOcclusionData = PushTexture("AmbientOcclusionData", Backend->Width, Backend->Height, 1, TextureInputData);
+	BlurTemp			 = PushTexture("BlurTemp", Backend->Width, Backend->Height, 1, TextureInputData);
 
 	// TODO: Better context creation API
 	utils::render_context::input_data RendererInputData = {};
@@ -205,7 +206,8 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	ShadowComputeContext = CreateComputeContext("..\\shaders\\mesh.dbg.comp.glsl");
 	FrustCullingContext  = CreateComputeContext("..\\shaders\\indirect_cull_frust.comp.glsl");
 	OcclCullingContext   = CreateComputeContext("..\\shaders\\indirect_cull_occl.comp.glsl");
-	BlurContext = CreateComputeContext("..\\shaders\\blur.comp.glsl");
+	BlurContextV = CreateComputeContext("..\\shaders\\blur.comp.glsl");
+	BlurContextH = CreateComputeContext("..\\shaders\\blur.comp.glsl");
 
 	for(u32 MipIdx = 0; MipIdx < GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height)); ++MipIdx)
 	{
@@ -226,6 +228,7 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 	GlobalShadow(std::move(Oth.GlobalShadow)),
 	GBuffer(std::move(Oth.GBuffer)),
 	AmbientOcclusionData(std::move(Oth.AmbientOcclusionData)),
+	BlurTemp(std::move(Oth.BlurTemp)),
 	DepthPyramid(std::move(Oth.DepthPyramid)),
 	RandomAnglesTexture(std::move(Oth.RandomAnglesTexture)),
 	NoiseTexture(std::move(Oth.NoiseTexture)),
@@ -241,7 +244,8 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 	FrustCullingContext(std::move(Oth.FrustCullingContext)),
 	OcclCullingContext(std::move(Oth.OcclCullingContext)),
 	DepthReduceContext(std::move(Oth.DepthReduceContext)),
-	BlurContext(std::move(Oth.BlurContext)),
+	BlurContextV(std::move(Oth.BlurContextV)),
+	BlurContextH(std::move(Oth.BlurContextH)),
 	DebugComputeContext(std::move(Oth.DebugComputeContext))
 {}
 
@@ -261,6 +265,7 @@ operator=(global_graphics_context&& Oth) noexcept
 		GlobalShadow = std::move(Oth.GlobalShadow);
 		GBuffer = std::move(Oth.GBuffer);
 		AmbientOcclusionData = std::move(Oth.AmbientOcclusionData);
+		BlurTemp = std::move(Oth.BlurTemp);
 		DepthPyramid = std::move(Oth.DepthPyramid);
 		RandomAnglesTexture = std::move(Oth.RandomAnglesTexture);
 		NoiseTexture = std::move(Oth.NoiseTexture);
@@ -276,7 +281,8 @@ operator=(global_graphics_context&& Oth) noexcept
 		FrustCullingContext = std::move(Oth.FrustCullingContext);
 		OcclCullingContext = std::move(Oth.OcclCullingContext);
 		DepthReduceContext = std::move(Oth.DepthReduceContext);
-		BlurContext = std::move(Oth.BlurContext);
+		BlurContextV = std::move(Oth.BlurContextV);
+		BlurContextH = std::move(Oth.BlurContextH);
 		DebugComputeContext = std::move(Oth.DebugComputeContext);
 	}
 

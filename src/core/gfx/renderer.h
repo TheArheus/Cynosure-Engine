@@ -100,6 +100,7 @@ public:
 	std::vector<texture*> GBuffer;
 
 	texture* AmbientOcclusionData;
+	texture* BlurTemp;
 	texture* DepthPyramid;
 	texture* RandomAnglesTexture;
 	texture* NoiseTexture;
@@ -121,6 +122,7 @@ public:
 	compute_context* ShadowComputeContext;
 	compute_context* FrustCullingContext;
 	compute_context* OcclCullingContext;
-	compute_context* BlurContext;
+	compute_context* BlurContextV;
+	compute_context* BlurContextH;
 	compute_context* DebugComputeContext;
 };
