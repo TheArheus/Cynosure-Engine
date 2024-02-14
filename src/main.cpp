@@ -33,7 +33,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {
 	window Window(1280, 720, "3D Renderer");
 	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
 	global_pipeline_context* PipelineContext = Window.Gfx.CreateGlobalPipelineContext();
 

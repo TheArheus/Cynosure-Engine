@@ -239,12 +239,13 @@ struct button
 	u16  RepeatCount;
 };
 
-struct alignas(16) mesh_draw_command
+struct mesh_draw_command
 {
 	vec4 Translate;
 	vec4 Scale;
 	vec4 Rotate;
 	u32  MeshIndex;
+	vec3 Pad;
 };
 
 // NOTE: When light source is a point light Pos.w is a radius. Otherwise Pos.w is cutoff angle for spot light.
