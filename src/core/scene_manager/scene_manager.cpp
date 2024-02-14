@@ -160,7 +160,7 @@ UpdateScene(window& Window, alloc_vector<light_source>& GlobalLightSources)
 		Scenes[CurrentScene]->Registry.GetSystem<light_sources_system>()->Update(WorldUpdate, GlobalLightSources);
 
 		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate);
-		Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate);
+		//Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate);
 	}
 }
 
@@ -174,7 +174,7 @@ RenderScene(window& Window, global_pipeline_context* PipelineContext,
 	{
 		Scenes[CurrentScene]->Registry.GetSystem<world_update_system>()->Update(Window, WorldUpdate, MeshCompCullingCommonData, Scenes[CurrentScene]->GlobalLightPos);
 		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->Render(Window, PipelineContext, WorldUpdate, MeshCompCullingCommonData, DynamicMeshInstances, DynamicMeshVisibility, GlobalLightSources);
-		Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Render(Window, PipelineContext, WorldUpdate, MeshCompCullingCommonData, DynamicDebugInstances, DynamicDebugVisibility);
+		//Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Render(Window, PipelineContext, WorldUpdate, MeshCompCullingCommonData, DynamicDebugInstances, DynamicDebugVisibility);
 	}
 }
 

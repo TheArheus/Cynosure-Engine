@@ -54,10 +54,10 @@ struct vulkan_global_pipeline_context : public global_pipeline_context
 	void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData, 
 						   u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state>>& BarrierData, 
+	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state>>& BarrierData, 
+	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
 	void DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget) override;

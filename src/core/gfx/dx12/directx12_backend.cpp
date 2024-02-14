@@ -19,7 +19,6 @@ directx12_backend(window* Window)
 		Debug->EnableDebugLayer();
 		if(SUCCEEDED(Debug->QueryInterface(IID_PPV_ARGS(&Debug1))))
 		{
-			FactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 			Debug1->EnableDebugLayer();
 			Debug1->SetEnableGPUBasedValidation(TRUE);  // enable GPU-based validation
 			Debug1->Release();
@@ -31,21 +30,15 @@ directx12_backend(window* Window)
 		pDredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
 		pDredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
 	}
+
+	FactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
 	
 	CreateDXGIFactory2(FactoryFlags, IID_PPV_ARGS(&Factory));
 
-#if 0
-	if (UseWarp)
 	{
-		ComPtr<IDXGIAdapter> WarpAdapter;
-		Factory->EnumWarpAdapter(IID_PPV_ARGS(&WarpAdapter));
-		D3D12CreateDevice(WarpAdapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
-	}
-	else
-#endif
-	{
-		GetDevice(&Device, &Adapter);
+		GetDevice(Factory.Get(), &Adapter);
+		D3D12CreateDevice(Adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
 	}
 
 #if _DEBUG
@@ -225,7 +218,7 @@ dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool N
 }
 
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, u32* ArgumentsCount, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines)
+LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines)
 {
 	D3D12_SHADER_BYTECODE Result = {};
 
@@ -325,8 +318,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, u3
 
 		glslang::FinalizeProcess();
 
-		spirv_cross::CompilerHLSL Compiler(SpirvCode.data(), SpirvCode.size());
-
 		std::vector<op_info> ShaderInfo;
 		std::set<u32> DescriptorIndices;
 		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices);
@@ -381,7 +372,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, u3
 				if((DescriptorType == dx12_descriptor_type::image || DescriptorType == dx12_descriptor_type::sampler || DescriptorType == dx12_descriptor_type::combined_image_sampler) && Size == ~0u)
 					Size = 1;
 
-				if(ArgumentsCount) (*ArgumentsCount)++;
 				if(Size != ~0u)
 				{
 					D3D12_DESCRIPTOR_RANGE* ParameterRange = new D3D12_DESCRIPTOR_RANGE;
@@ -484,12 +474,13 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, u3
 			}
 		}
 
+		spirv_cross::CompilerHLSL Compiler(SpirvCode.data(), SpirvCode.size());
 		auto HlslResources = Compiler.get_shader_resources();
 
 		spirv_cross::CompilerHLSL::Options    HlslOptions;
 		spirv_cross::HLSLVertexAttributeRemap HlslAttribs;
 
-		HlslOptions.shader_model = 66; // SM6_6
+		HlslOptions.shader_model = 62; // SM6_2
 
 		Compiler.set_hlsl_options(HlslOptions);
 		Compiler.add_vertex_attribute_remap(HlslAttribs);
@@ -519,17 +510,17 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, u3
 		ComPtr<IDxcBlobEncoding> SourceBlob;
 		DxcLib->CreateBlobWithEncodingFromPinned(HlslCode.c_str(), static_cast<u32>(HlslCode.size()), CodePage, &SourceBlob);
 
-		const wchar_t* TargetProfile = L"vs_6_6";
+		const wchar_t* TargetProfile = L"vs_6_2";
 		if (ShaderType == shader_stage::fragment)
-			TargetProfile = L"ps_6_6";
+			TargetProfile = L"ps_6_2";
 		else if (ShaderType == shader_stage::compute)
-			TargetProfile = L"cs_6_6";
+			TargetProfile = L"cs_6_2";
 		else if (ShaderType == shader_stage::geometry)
-			TargetProfile = L"gs_6_6";
+			TargetProfile = L"gs_6_2";
 		else if (ShaderType == shader_stage::tessellation_control)
-			TargetProfile = L"hs_6_6";
+			TargetProfile = L"hs_6_2";
 		else if (ShaderType == shader_stage::tessellation_eval)
-			TargetProfile = L"ds_6_6";
+			TargetProfile = L"ds_6_2";
 
 		DxcBuffer SourceBuffer = {};
 		SourceBuffer.Ptr  = SourceBlob->GetBufferPointer();

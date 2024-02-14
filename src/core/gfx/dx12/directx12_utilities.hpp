@@ -42,37 +42,28 @@ void MessageCallback(D3D12_MESSAGE_CATEGORY MessageType, D3D12_MESSAGE_SEVERITY 
 	}
 }
 
-void GetDevice(ID3D12Device6** DeviceResult, IDXGIAdapter1** AdapterResult, bool HighPerformance = true)
+void GetDevice(IDXGIFactory6* Factory, IDXGIAdapter1** AdapterResult, bool HighPerformance = true)
 {
-	*DeviceResult  = nullptr;
 	*AdapterResult = nullptr;
-
-	ComPtr<IDXGIFactory6> Factory;
-	CreateDXGIFactory1(IID_PPV_ARGS(&Factory));
 
 	ComPtr<IDXGIAdapter1> pAdapter;
 	for (u32 AdapterIndex = 0;
 			Factory->EnumAdapterByGpuPreference(AdapterIndex, 
-				(HighPerformance ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE : DXGI_GPU_PREFERENCE_UNSPECIFIED), 
+				(HighPerformance ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE : DXGI_GPU_PREFERENCE_MINIMUM_POWER), 
 				 IID_PPV_ARGS(&pAdapter)) != DXGI_ERROR_NOT_FOUND;
 		++AdapterIndex)
 	{
 		DXGI_ADAPTER_DESC1 Desc;
 		pAdapter->GetDesc1(&Desc);
 
-		if (Desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+		if(SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device6), nullptr)))
 		{
-			continue;
-		}
-
-		if(SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_12_0, _uuidof(ID3D12Device6), nullptr)))
-		{
+			std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> Converter;
+			std::cout << "Current gpu is: " << Converter.to_bytes(Desc.Description) << std::endl;
 			*AdapterResult = pAdapter.Detach();
 			break;
 		}
 	}
-
-	D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(DeviceResult));
 }
 
 DXGI_FORMAT GetDXFormat(image_format Format)
@@ -522,34 +513,24 @@ D3D12_FILTER_REDUCTION_TYPE GetDXSamplerReductionMode(sampler_reduction_mode Mod
 	}
 }
 
-D3D12_RESOURCE_STATES GetDXLayoutFromAccessFlag(u32 Layouts)
+D3D12_RESOURCE_STATES GetDXBufferLayout(u32 Layouts, u32 PipelineStage)
 {
     D3D12_RESOURCE_STATES Result = {};
 
-	if (!Layouts)
-		Result |= D3D12_RESOURCE_STATE_COMMON;
     if (Layouts & AF_IndirectCommandRead)
         Result |= D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
     if (Layouts & AF_IndexRead)
         Result |= D3D12_RESOURCE_STATE_INDEX_BUFFER;
     if (Layouts & AF_VertexAttributeRead)
         Result |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-    if (Layouts & AF_UniformRead)
-        Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    if (Layouts & AF_InputAttachmentRead)
-        Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    if (Layouts & AF_ShaderRead)
-        Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
     if (Layouts & AF_ShaderWrite)
         Result |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    if (Layouts & AF_ColorAttachmentRead)
-        Result |= D3D12_RESOURCE_STATE_RENDER_TARGET;
-    if (Layouts & AF_ColorAttachmentWrite)
-        Result |= D3D12_RESOURCE_STATE_RENDER_TARGET;
-    if (Layouts & AF_DepthStencilAttachmentRead)
-        Result |= D3D12_RESOURCE_STATE_DEPTH_READ;
-    if (Layouts & AF_DepthStencilAttachmentWrite)
-        Result |= D3D12_RESOURCE_STATE_DEPTH_WRITE;
+    if (Layouts & AF_ShaderRead)
+	{
+		Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+		if(PipelineStage & PSF_EarlyFragment || PipelineStage & PSF_LateFragment || PipelineStage & PSF_FragmentShader)
+			Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	}
     if (Layouts & AF_TransferRead)
         Result |= D3D12_RESOURCE_STATE_COPY_SOURCE;
     if (Layouts & AF_TransferWrite)
@@ -562,35 +543,92 @@ D3D12_RESOURCE_STATES GetDXLayoutFromAccessFlag(u32 Layouts)
     return Result;
 }
 
-D3D12_RESOURCE_STATES GetDXLayout(barrier_state State)
+D3D12_RESOURCE_STATES GetDXImageLayout(barrier_state State, u32 Layouts, u32 PipelineStage)
 {
-    switch (State)
-    {
-    case barrier_state::general:
-        return D3D12_RESOURCE_STATE_COMMON;
-    case barrier_state::color_attachment:
-        return D3D12_RESOURCE_STATE_RENDER_TARGET;
-    case barrier_state::depth_stencil_attachment:
-        return D3D12_RESOURCE_STATE_DEPTH_WRITE;
-    case barrier_state::shader_read:
-        return D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    case barrier_state::depth_read:
-        return D3D12_RESOURCE_STATE_DEPTH_READ;
-    case barrier_state::stencil_read:
-        return D3D12_RESOURCE_STATE_DEPTH_READ; // NOTE: Assuming stencil is readable in depth read
-    case barrier_state::depth_stencil_read:
-        return D3D12_RESOURCE_STATE_DEPTH_READ; // NOTE: Assuming both depth and stencil are readable
-    case barrier_state::present:
-        return D3D12_RESOURCE_STATE_PRESENT;
-    case barrier_state::transfer_src:
-        return D3D12_RESOURCE_STATE_COPY_SOURCE;
-    case barrier_state::transfer_dst:
-        return D3D12_RESOURCE_STATE_COPY_DEST;
-    case barrier_state::undefined:
-        return D3D12_RESOURCE_STATE_COMMON;
-    default:
-        return D3D12_RESOURCE_STATE_COMMON;
-    }
+#if 0
+enum pipeline_stage_flags
+{
+	PSF_TopOfPipe       = BYTE(0 ),
+	PSF_DrawIndirect    = BYTE(1 ),
+	PSF_VertexInput     = BYTE(2 ),
+	PSF_VertexShader    = BYTE(3 ),
+	PSF_FragmentShader  = BYTE(4 ),
+	PSF_EarlyFragment   = BYTE(5 ),
+	PSF_LateFragment    = BYTE(6 ),
+	PSF_ColorAttachment = BYTE(7 ),
+	PSF_Compute         = BYTE(8 ),
+	PSF_Transfer        = BYTE(9 ),
+	PSF_BottomOfPipe    = BYTE(10),
+	PSF_Host            = BYTE(11),
+	PSF_AllGraphics     = BYTE(12),
+	PSF_AllCommands     = BYTE(13),
+};
+
+enum access_flags
+{
+	AF_ShaderRead                  = BYTE(5 ),
+	AF_ShaderWrite                 = BYTE(6 ),
+	AF_ColorAttachmentRead         = BYTE(7 ),
+	AF_ColorAttachmentWrite        = BYTE(8 ),
+	AF_DepthStencilAttachmentRead  = BYTE(9 ),
+	AF_DepthStencilAttachmentWrite = BYTE(10),
+	AF_TransferRead                = BYTE(11),
+	AF_TransferWrite               = BYTE(12),
+};
+
+enum class barrier_state
+{
+	general,
+	color_attachment,
+	depth_stencil_attachment,
+	shader_read,
+	depth_read,
+	stencil_read,
+	depth_stencil_read,
+	present,
+	transfer_src,
+	transfer_dst,
+	undefined,
+};
+
+enum image_flags
+{
+	TF_ColorAttachment       = BYTE(0),
+	TF_ColorTexture			 = BYTE(1),
+	TF_DepthTexture          = BYTE(2),
+	TF_StencilTexture        = BYTE(3),
+	TF_LinearTiling          = BYTE(4),
+	TF_Sampled               = BYTE(5),
+	TF_Storage               = BYTE(6),
+	TF_CubeMap				 = BYTE(7),
+	TF_CopySrc	             = BYTE(8),
+	TF_CopyDst               = BYTE(9),
+};
+#endif
+    D3D12_RESOURCE_STATES Result = D3D12_RESOURCE_STATE_COMMON;
+
+	if (State == barrier_state::color_attachment)
+        Result |= D3D12_RESOURCE_STATE_RENDER_TARGET;
+    if (State == barrier_state::depth_stencil_attachment)
+        Result |= D3D12_RESOURCE_STATE_DEPTH_WRITE;
+    if (Layouts & AF_ShaderWrite)
+        Result |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    if (Layouts & AF_ShaderRead)
+	{
+		Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+		if(PipelineStage & PSF_EarlyFragment || PipelineStage & PSF_LateFragment || PipelineStage & PSF_FragmentShader)
+			Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	}
+    if (Layouts & AF_TransferRead)
+        Result |= D3D12_RESOURCE_STATE_COPY_SOURCE;
+    if (Layouts & AF_TransferWrite)
+        Result |= D3D12_RESOURCE_STATE_COPY_DEST;
+    if (Layouts & AF_HostRead)
+        Result |= D3D12_RESOURCE_STATE_GENERIC_READ;
+    if (Layouts & AF_MemoryRead)
+        Result |= D3D12_RESOURCE_STATE_GENERIC_READ;
+
+	return Result;
 }
 
 #define DIRECTX_UTILITIES_H_
