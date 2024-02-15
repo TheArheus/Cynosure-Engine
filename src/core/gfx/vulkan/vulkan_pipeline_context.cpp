@@ -120,8 +120,8 @@ CopyImage(texture* Dst, texture* Src)
 	vulkan_texture* SrcTexture = static_cast<vulkan_texture*>(Src);
 	vulkan_texture* DstTexture = static_cast<vulkan_texture*>(Dst);
 
-	SetImageBarriers({{SrcTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_src, 0}, 
-					  {DstTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_dst, 0}}, 
+	SetImageBarriers({{SrcTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_src, -1}, 
+					  {DstTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_dst, -1}}, 
 					 PSF_ColorAttachment, PSF_Transfer);
 
 	VkImageCopy ImageCopyRegion = {};
@@ -203,10 +203,10 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state,
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.image = Texture->Handle;
 		Barrier.subresourceRange.aspectMask = Texture->Aspect;
-		Barrier.subresourceRange.baseMipLevel   = std::get<5>(Data);
+		Barrier.subresourceRange.baseMipLevel   = 0;
 		Barrier.subresourceRange.baseArrayLayer = 0;
-		Barrier.subresourceRange.levelCount = 1;//VK_REMAINING_MIP_LEVELS;
-		Barrier.subresourceRange.layerCount = 1;//VK_REMAINING_ARRAY_LAYERS;
+		Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+		Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
 		Barriers.push_back(Barrier);
 	}
@@ -241,10 +241,10 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, b
 			Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			Barrier.image = Texture->Handle;
 			Barrier.subresourceRange.aspectMask = Texture->Aspect;
-			Barrier.subresourceRange.baseMipLevel   = std::get<5>(Data);
+			Barrier.subresourceRange.baseMipLevel   = 0;
 			Barrier.subresourceRange.baseArrayLayer = 0;
-			Barrier.subresourceRange.levelCount = 1;//VK_REMAINING_MIP_LEVELS;
-			Barrier.subresourceRange.layerCount = 1;//VK_REMAINING_ARRAY_LAYERS;
+			Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+			Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
 			Barriers.push_back(Barrier);
 		}

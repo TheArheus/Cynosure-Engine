@@ -1,5 +1,8 @@
 #ifndef DIRECTX_UTILITIES_H_
 
+#include <imgui/backends/imgui_impl_dx12.h>
+#include <imgui/backends/imgui_impl_dx12.cpp>
+
 #define DX12_RESOURCE_LIMIT 65536
 #define DX12_TEXTURES_LIMIT 2048
 
@@ -590,27 +593,13 @@ enum class barrier_state
 	transfer_dst,
 	undefined,
 };
-
-enum image_flags
-{
-	TF_ColorAttachment       = BYTE(0),
-	TF_ColorTexture			 = BYTE(1),
-	TF_DepthTexture          = BYTE(2),
-	TF_StencilTexture        = BYTE(3),
-	TF_LinearTiling          = BYTE(4),
-	TF_Sampled               = BYTE(5),
-	TF_Storage               = BYTE(6),
-	TF_CubeMap				 = BYTE(7),
-	TF_CopySrc	             = BYTE(8),
-	TF_CopyDst               = BYTE(9),
-};
 #endif
     D3D12_RESOURCE_STATES Result = D3D12_RESOURCE_STATE_COMMON;
 
-	if (State == barrier_state::color_attachment)
-        Result |= D3D12_RESOURCE_STATE_RENDER_TARGET;
     if (State == barrier_state::depth_stencil_attachment)
         Result |= D3D12_RESOURCE_STATE_DEPTH_WRITE;
+	if (Layouts & AF_ColorAttachmentWrite)
+        Result |= D3D12_RESOURCE_STATE_RENDER_TARGET;
     if (Layouts & AF_ShaderWrite)
         Result |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     if (Layouts & AF_ShaderRead)

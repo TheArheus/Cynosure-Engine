@@ -152,12 +152,15 @@ struct render_debug_system : public entity_system
 		}
 
 		{
+			indirect_command_generation_input Input = {MeshCommonCullingInput.DebugDrawCount, MeshCommonCullingInput.DebugMeshCount};
+
 			PipelineContext->SetBufferBarrier({GeometryDebugOffsets, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshDrawDebugCommandBuffer, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_Compute);
 			PipelineContext->SetBufferBarrier({DebugIndirectDrawIndexedCommands, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 
 			Window.Gfx.DebugComputeContext->Begin(PipelineContext);
+			Window.Gfx.OcclCullingContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
 			Window.Gfx.DebugComputeContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.DebugComputeContext->End();
 			Window.Gfx.DebugComputeContext->Clear();

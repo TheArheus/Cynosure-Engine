@@ -328,6 +328,7 @@ struct render_system : public entity_system
 		}
 
 		{
+			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
 
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshDrawCommandDataBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
@@ -335,13 +336,17 @@ struct render_system : public entity_system
 			PipelineContext->SetBufferBarrier({GeometryOffsets, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 
 			Window.Gfx.FrustCullingContext->Begin(PipelineContext);
+			Window.Gfx.FrustCullingContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
 			Window.Gfx.FrustCullingContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.FrustCullingContext->End();
 			Window.Gfx.FrustCullingContext->Clear();
 		}
 
 		{
+			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
+
 			Window.Gfx.ShadowComputeContext->Begin(PipelineContext);
+			Window.Gfx.ShadowComputeContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
 			Window.Gfx.ShadowComputeContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.ShadowComputeContext->End();
 			Window.Gfx.ShadowComputeContext->Clear();
@@ -349,7 +354,7 @@ struct render_system : public entity_system
 
 		// TODO: this should be moved to directional light calculations I guess
 		//		 or make it possible to turn off
-		PipelineContext->SetImageBarriers({{Window.Gfx.GlobalShadow, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, -1}}, 
+		PipelineContext->SetImageBarriers({{Window.Gfx.GlobalShadow, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, ~0u}}, 
 										PSF_Compute, PSF_EarlyFragment);
 
 		PipelineContext->SetBufferBarriers({{MeshDrawShadowCommandBuffer, AF_ShaderWrite, AF_ShaderRead}}, 
@@ -382,7 +387,7 @@ struct render_system : public entity_system
 				{
 					texture* ShadowMapTexture = PointLightShadows[PointLightSourceIdx];
 
-					PipelineContext->SetImageBarriers({{ShadowMapTexture, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, -1}}, 
+					PipelineContext->SetImageBarriers({{ShadowMapTexture, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, ~0u}}, 
 													PSF_Compute, PSF_EarlyFragment);
 
 					for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
@@ -410,7 +415,7 @@ struct render_system : public entity_system
 				{
 					texture* ShadowMapTexture = LightShadows[SpotLightSourceIdx];
 
-					PipelineContext->SetImageBarriers({{ShadowMapTexture, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, -1}}, 
+					PipelineContext->SetImageBarriers({{ShadowMapTexture, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, ~0u}}, 
 												  PSF_Compute, PSF_EarlyFragment);
 
 					mat4 ShadowMapProj = PerspRH(LightSource.Pos.w, ShadowMapTexture->Width, ShadowMapTexture->Height, WorldUpdate.NearZ, WorldUpdate.FarZ);
@@ -436,7 +441,7 @@ struct render_system : public entity_system
 		{
 			mat4 Shadow = WorldUpdate.DebugView * WorldUpdate.Proj;
 
-			PipelineContext->SetImageBarriers({{Window.Gfx.DebugCameraViewDepthTarget, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, -1}}, 
+			PipelineContext->SetImageBarriers({{Window.Gfx.DebugCameraViewDepthTarget, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, ~0u}}, 
 										  PSF_Compute, PSF_EarlyFragment);
 
 			PipelineContext->SetBufferBarriers({{MeshDrawCommandBuffer, AF_ShaderWrite, AF_ShaderRead}}, PSF_Compute, PSF_VertexShader);
@@ -451,12 +456,12 @@ struct render_system : public entity_system
 		}
 
 		{
-			PipelineContext->SetImageBarriers({{DiffuseTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, -1}, 
-											  {NormalTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, 0},
-											  {SpecularTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, 0},
-											  {HeightTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, 0},
-											  {Window.Gfx.GBuffer, 0, AF_ColorAttachmentWrite, barrier_state::undefined, barrier_state::color_attachment, 0},
-											  {{Window.Gfx.GfxDepthTarget}, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, 0}},
+			PipelineContext->SetImageBarriers({{DiffuseTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}, 
+											  {NormalTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
+											  {SpecularTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
+											  {HeightTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
+											  {Window.Gfx.GBuffer, 0, AF_ColorAttachmentWrite, barrier_state::undefined, barrier_state::color_attachment, ~0u},
+											  {{Window.Gfx.GfxDepthTarget}, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, ~0u}},
 											 PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
 
 			PipelineContext->SetBufferBarrier({GeometryOffsets, AF_ShaderWrite, AF_ShaderRead}, PSF_Compute, PSF_VertexShader);
@@ -570,8 +575,11 @@ struct render_system : public entity_system
 		}
 
 		{
+			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
+
 			PipelineContext->SetBufferBarrier({MeshDrawVisibilityDataBuffer, AF_ShaderRead, AF_ShaderWrite}, PSF_Compute, PSF_Compute);
 			Window.Gfx.OcclCullingContext->Begin(PipelineContext);
+			Window.Gfx.OcclCullingContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
 			Window.Gfx.OcclCullingContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.OcclCullingContext->End();
 			Window.Gfx.OcclCullingContext->Clear();

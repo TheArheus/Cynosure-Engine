@@ -80,6 +80,16 @@ public:
 
 struct directx12_backend : public renderer_backend
 {
+	struct compiled_shader_info
+	{
+		std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
+		std::unordered_map<u32, u32> DescriptorHeapSizes;
+		D3D12_SHADER_BYTECODE Handle;
+		u32  PushConstantSize;
+		bool HavePushConstant;
+		bool HaveDrawID;
+	};
+
 	directx12_backend(window* Window);
 	~directx12_backend() override = default;
 	void DestroyObject() override;
@@ -101,8 +111,12 @@ struct directx12_backend : public renderer_backend
 	descriptor_heap ResourcesHeap;
 	descriptor_heap SamplersHeap;
 
+	descriptor_heap ImGuiResourcesHeap;
+
 	std::vector<ComPtr<ID3D12Resource>> SwapchainImages;
 	std::vector<D3D12_RESOURCE_STATES> SwapchainCurrentState;
+
+	std::unordered_map<std::string, compiled_shader_info> CompiledShaders;
 
 	directx12_command_queue* CommandQueue;
 	directx12_command_queue* CmpCommandQueue;

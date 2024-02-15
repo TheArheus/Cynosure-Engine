@@ -76,19 +76,21 @@ layout(binding = 4) buffer b4 { indirect_draw_indexed_command IndirectDrawIndexe
 layout(binding = 5) buffer c0 { uint IndirectDrawIndexedCommandsCounter; };
 layout(binding = 6) buffer b6 { mesh_draw_command MeshDrawCommands[]; };
 
+layout(push_constant) uniform pushConstant { uint DrawCount; uint MeshCount; };
+
 void main()
 {
 	uint DrawIndex = gl_GlobalInvocationID.x;
-	if(DrawIndex >= MeshCullingCommonInput.DrawCount) return;
+	if(DrawIndex >= DrawCount) return;
 
 	uint CommandIdx = MeshDrawCommandData[DrawIndex].MeshIndex - 1;
 	if(DrawIndex == 0)
 	{
-		for(uint MI = 0; MI < MeshCullingCommonInput.MeshCount; ++MI)
+		for(uint MI = 0; MI < MeshCount; ++MI)
 		{
 			IndirectDrawIndexedCommands[MI].InstanceCount = 0;
 		}
-		IndirectDrawIndexedCommandsCounter = MeshCullingCommonInput.MeshCount;
+		IndirectDrawIndexedCommandsCounter = MeshCount;
 	}
 
 	if(!MeshDrawVisibilityData[DrawIndex])
@@ -118,7 +120,6 @@ void main()
 	if(IsVisible)
 	{
 		uint InstanceIdx = atomicAdd(IndirectDrawIndexedCommands[CommandIdx].InstanceCount, 1);
-		barrier();
 
 		IndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[CommandIdx].IndexCount;
 		IndirectDrawIndexedCommands[CommandIdx].FirstIndex    = MeshOffsets[CommandIdx].IndexOffset;
@@ -127,8 +128,8 @@ void main()
 		IndirectDrawIndexedCommands[CommandIdx].DrawID        = CommandIdx;
 		MeshOffsets[CommandIdx].InstanceOffset = CommandIdx == 0 ? 0 : IndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + IndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
 
-		InstanceIdx += MeshOffsets[CommandIdx].InstanceOffset;
 		barrier();
+		InstanceIdx += MeshOffsets[CommandIdx].InstanceOffset;
 		MeshDrawCommands[InstanceIdx].MeshIndex	= CommandIdx;
 		MeshDrawCommands[InstanceIdx].Translate = MeshDrawCommandData[DrawIndex].Translate;
 		MeshDrawCommands[InstanceIdx].Scale     = MeshDrawCommandData[DrawIndex].Scale;

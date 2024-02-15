@@ -57,7 +57,6 @@ directx12_backend(window* Window)
 	Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &DataFormatSupport, sizeof(DataFormatSupport));
 
 	CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT);
-	//CmpCommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_COMPUTE);
 
 	{
 		ComPtr<IDXGISwapChain1> _SwapChain;
@@ -82,6 +81,8 @@ directx12_backend(window* Window)
 	DepthStencilHeap = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 	ResourcesHeap    = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	SamplersHeap     = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+
+	ImGuiResourcesHeap = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 
 	NAME_DX12_OBJECT_CSTR(ColorTargetHeap.Handle.Get(), "GlobalColorTargetHeap");
 	NAME_DX12_OBJECT_CSTR(DepthStencilHeap.Handle.Get(), "GlobalDepthStencilHeap");
@@ -119,6 +120,8 @@ directx12_backend(window* Window)
 	MsaaQuality = MsQualityLevels.NumQualityLevels;
 	if (MsaaQuality >= 2) MsaaState = true;
 	if (MsaaQuality < 2) RenderMultisampleSupport = false;
+
+	ImGui_ImplDX12_Init(Device.Get(), 2, ColorTargetFormat, ImGuiResourcesHeap.Handle.Get(), ImGuiResourcesHeap.CpuHandle, ImGuiResourcesHeap.GpuHandle);
 };
 
 void directx12_backend::
@@ -220,8 +223,18 @@ dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool N
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
 LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines)
 {
-	D3D12_SHADER_BYTECODE Result = {};
+	auto FoundCompiledShader = CompiledShaders.find(Path);
+	if(FoundCompiledShader != CompiledShaders.end())
+	{
+		ShaderRootLayout.insert(FoundCompiledShader->second.ShaderRootLayout.begin(), FoundCompiledShader->second.ShaderRootLayout.end());
+		DescriptorHeapSizes.insert(FoundCompiledShader->second.DescriptorHeapSizes.begin(), FoundCompiledShader->second.DescriptorHeapSizes.end());
+		HavePushConstant = FoundCompiledShader->second.HavePushConstant;
+		PushConstantSize = FoundCompiledShader->second.PushConstantSize;
+		HaveDrawID       = FoundCompiledShader->second.HaveDrawID;
+		return FoundCompiledShader->second.Handle;
+	}
 
+	D3D12_SHADER_BYTECODE Result = {};
 	std::ifstream File(Path);
 	if(File)
 	{
@@ -473,6 +486,11 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 				}
 			}
 		}
+		CompiledShaders[Path].ShaderRootLayout.insert(ShaderRootLayout.begin(), ShaderRootLayout.end());
+		CompiledShaders[Path].DescriptorHeapSizes.insert(DescriptorHeapSizes.begin(), DescriptorHeapSizes.end());
+		CompiledShaders[Path].HavePushConstant = HavePushConstant;
+		CompiledShaders[Path].PushConstantSize = PushConstantSize;
+		CompiledShaders[Path].HaveDrawID = HaveDrawID;
 
 		spirv_cross::CompilerHLSL Compiler(SpirvCode.data(), SpirvCode.size());
 		auto HlslResources = Compiler.get_shader_resources();
@@ -602,6 +620,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 			return {};
 		}
 
+		CompiledShaders[Path].Handle = Result;
 		SourceBlob->Release();
 	}
 

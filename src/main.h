@@ -75,6 +75,12 @@ struct indirect_draw_indexed_command
 	VkDrawIndexedIndirectCommand VkDrawArg; // 5
 };
 
+struct indirect_command_generation_input
+{
+	u32 DrawCount;
+	u32 MeshCount;
+};
+
 struct point_shadow_input
 {
 	mat4  LightMat;

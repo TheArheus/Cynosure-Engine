@@ -75,11 +75,13 @@ layout(binding = 2) buffer readonly b2 { mesh_draw_command MeshDrawCommandData[]
 layout(binding = 3) buffer b3 { bool MeshDrawVisibilityData[]; };
 layout(binding = 4) uniform sampler2D DepthPyramid;
 
+layout(push_constant) uniform pushConstant { uint DrawCount; uint MeshCount; };
+
 
 void main()
 {
 	uint DrawIndex = gl_GlobalInvocationID.x;
-	if(DrawIndex >= MeshCullingCommonInput.DrawCount) return;
+	if(DrawIndex >= DrawCount) return;
 
 	uint MeshIndex = MeshDrawCommandData[DrawIndex].MeshIndex - 1;
 

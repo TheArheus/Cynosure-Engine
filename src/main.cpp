@@ -32,7 +32,8 @@
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {
 	window Window(1280, 720, "3D Renderer");
-	Window.InitVulkanGraphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
 	global_pipeline_context* PipelineContext = Window.Gfx.CreateGlobalPipelineContext();
 
@@ -47,7 +48,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	double AvgCpuTime = 0.0;
 	while(Window.IsRunning())
 	{
-		//printf("-------------------new frame--------------------------------------------------\n");
 		linear_allocator SystemsAllocator(GlobalMemorySize, MemoryBlock);
 		linear_allocator LightSourcesAlloc(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT, SystemsAllocator.Allocate(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT));
 		linear_allocator GlobalMeshInstancesAlloc(MiB(16), SystemsAllocator.Allocate(MiB(16)));
@@ -80,9 +80,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
-			//PipelineContext->DebugGuiBegin(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
-			//SceneManager.RenderUI();
-			//PipelineContext->DebugGuiEnd(Window.Gfx.Backend);
+			PipelineContext->DebugGuiBegin(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
+			SceneManager.RenderUI();
+			PipelineContext->DebugGuiEnd(Window.Gfx.Backend);
 
 			PipelineContext->EmplaceColorTarget(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
 			PipelineContext->Present(Window.Gfx.Backend);
@@ -114,7 +114,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		TimeLast = TimeEnd;
 		AvgCpuTime = 0.75 * AvgCpuTime + TimeElapsed * 0.25;
 
-		//printf("===============================================================================\n");
 		std::string Title = "Frame " + std::to_string(AvgCpuTime) + "ms, " + std::to_string(1.0 / AvgCpuTime * 1000.0) + "fps";
 		Window.SetTitle(Title);
 	}

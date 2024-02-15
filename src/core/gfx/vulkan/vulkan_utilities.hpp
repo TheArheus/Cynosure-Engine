@@ -1,7 +1,7 @@
 #pragma once
 
-#include <core/vendor/imgui/backends/imgui_impl_vulkan.h>
-#include <core/vendor/imgui/backends/imgui_impl_vulkan.cpp>
+#include <imgui/backends/imgui_impl_vulkan.h>
+#include <imgui/backends/imgui_impl_vulkan.cpp>
 
 #define VK_CHECK(call, ...) \
 	do { \
