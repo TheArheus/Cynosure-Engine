@@ -49,19 +49,19 @@ struct render_debug_system : public entity_system
 
 			for (mesh_draw_command& EntityInstance : InstancesComponent->Data)
 			{
-				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (EntityInstance.MeshIndex - 1) * 3 + 1 });
+				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 1 });
 				StaticMeshVisibility.push_back(true);
 			}
 
 			for (mesh_draw_command& EntityInstance : InstancesComponent->Data)
 			{
-				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (EntityInstance.MeshIndex - 1) * 3 + 2 });
+				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 2 });
 				StaticMeshVisibility.push_back(true);
 			}
 
 			for (mesh_draw_command& EntityInstance : InstancesComponent->Data)
 			{
-				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (EntityInstance.MeshIndex - 1) * 3 + 3 });
+				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 3 });
 				StaticMeshVisibility.push_back(true);
 			}
 
@@ -123,19 +123,19 @@ struct render_debug_system : public entity_system
 
 			for(mesh_draw_command& EntityInstance : InstancesComponent->Data)
 			{
-				DynamicMeshInstances.push_back({EntityInstance.Translate, EntityInstance.Scale, vec4(0), (EntityInstance.MeshIndex-1)*3 + 1});
+				DynamicMeshInstances.push_back({EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 1});
 				DynamicMeshVisibility.push_back(true);
 			}
 
 			for(mesh_draw_command& EntityInstance : InstancesComponent->Data)
 			{
-				DynamicMeshInstances.push_back({EntityInstance.Translate, EntityInstance.Scale, vec4(0), (EntityInstance.MeshIndex-1)*3 + 2});
+				DynamicMeshInstances.push_back({EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 2});
 				DynamicMeshVisibility.push_back(true);
 			}
 
 			for(mesh_draw_command& EntityInstance : InstancesComponent->Data)
 			{
-				DynamicMeshInstances.push_back({EntityInstance.Translate, EntityInstance.Scale, vec4(0), (EntityInstance.MeshIndex-1)*3 + 3});
+				DynamicMeshInstances.push_back({EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 3});
 				DynamicMeshVisibility.push_back(true);
 			}
 		}
@@ -154,36 +154,32 @@ struct render_debug_system : public entity_system
 		{
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DebugDrawCount, MeshCommonCullingInput.DebugMeshCount};
 
-			PipelineContext->SetBufferBarrier({GeometryDebugOffsets, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
-			PipelineContext->SetBufferBarrier({MeshDrawDebugCommandBuffer, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_Compute);
-			PipelineContext->SetBufferBarrier({DebugIndirectDrawIndexedCommands, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
+			PipelineContext->SetBufferBarrier({DebugMeshDrawVisibilityDataBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
+			PipelineContext->SetBufferBarrier({DebugMeshDrawCommandDataBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
+			PipelineContext->SetBufferBarrier({MeshDrawDebugCommandBuffer, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
+			PipelineContext->SetBufferBarrier({GeometryDebugOffsets, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 
 			Window.Gfx.DebugComputeContext->Begin(PipelineContext);
-			Window.Gfx.OcclCullingContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
+			Window.Gfx.DebugComputeContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
 			Window.Gfx.DebugComputeContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.DebugComputeContext->End();
 			Window.Gfx.DebugComputeContext->Clear();
 		}
 
 		{
-			u32 ColorSrcAccessMask = AF_ShaderWrite;
-			u32 DepthSrcAccessMask = AF_ShaderRead;
-
-			barrier_state ColorOldLayout = barrier_state::general;
-			barrier_state DepthOldLayout = barrier_state::shader_read;
-
-			u32 SrcStageMask = PSF_Compute;
 			u32 DstStageMask = PSF_ColorAttachment | PSF_EarlyFragment | PSF_LateFragment;
 
-			PipelineContext->SetImageBarriers({{Window.Gfx.GfxColorTarget, ColorSrcAccessMask, AF_ColorAttachmentWrite, ColorOldLayout, barrier_state::color_attachment, ~0u},
-											  {Window.Gfx.GfxDepthTarget, DepthSrcAccessMask, AF_DepthStencilAttachmentWrite, DepthOldLayout, barrier_state::depth_stencil_attachment, ~0u}}, 
-											 SrcStageMask, DstStageMask);
+			PipelineContext->SetImageBarriers({{Window.Gfx.GfxColorTarget, AF_ShaderWrite, AF_ColorAttachmentWrite, barrier_state::general, barrier_state::color_attachment, ~0u},
+											  {Window.Gfx.GfxDepthTarget, AF_ShaderRead, AF_DepthStencilAttachmentWrite, barrier_state::shader_read, barrier_state::depth_stencil_attachment, ~0u}}, 
+											 PSF_Compute, DstStageMask);
 
 			PipelineContext->SetBufferBarrier({WorldUpdateBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_VertexShader|PSF_FragmentShader);
+			PipelineContext->SetBufferBarrier({DebugVertexBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_VertexShader);
 			PipelineContext->SetBufferBarrier({GeometryDebugOffsets, AF_ShaderWrite, AF_ShaderRead}, PSF_Compute, PSF_VertexShader);
 			PipelineContext->SetBufferBarrier({MeshDrawDebugCommandBuffer, AF_ShaderWrite, AF_ShaderRead}, PSF_Compute, PSF_VertexShader);
 			PipelineContext->SetBufferBarrier({DebugIndirectDrawIndexedCommands, AF_ShaderWrite, AF_IndirectCommandRead}, PSF_Compute, PSF_DrawIndirect);
+			PipelineContext->SetBufferBarrier({MeshDebugMaterialsBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_VertexShader|PSF_FragmentShader);
 
 			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.DebugContext->SetColorTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget}, {0, 0, 0, 1});

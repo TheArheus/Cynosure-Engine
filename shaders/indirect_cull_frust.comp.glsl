@@ -126,9 +126,11 @@ void main()
 		IndirectDrawIndexedCommands[CommandIdx].VertexOffset  = 0; //int(MeshOffsets[CommandIdx].VertexOffset);
 		IndirectDrawIndexedCommands[CommandIdx].FirstInstance = 0; 
 		IndirectDrawIndexedCommands[CommandIdx].DrawID        = CommandIdx;
-		MeshOffsets[CommandIdx].InstanceOffset = CommandIdx == 0 ? 0 : IndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + IndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
 
 		barrier();
+		MeshOffsets[CommandIdx].InstanceOffset = CommandIdx == 0 ? 0 : IndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + IndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
+		barrier();
+
 		InstanceIdx += MeshOffsets[CommandIdx].InstanceOffset;
 		MeshDrawCommands[InstanceIdx].MeshIndex	= CommandIdx;
 		MeshDrawCommands[InstanceIdx].Translate = MeshDrawCommandData[DrawIndex].Translate;

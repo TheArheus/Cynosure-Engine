@@ -60,7 +60,9 @@ struct directx12_buffer : public buffer
 
 		CommandList->CopyResource(Handle.Get(), TempHandle.Get());
 
-		CurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
+		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+		CommandList->ResourceBarrier(1, &BarrierData);
+		CurrentState = D3D12_RESOURCE_STATE_COMMON;
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -90,7 +92,9 @@ struct directx12_buffer : public buffer
 
 		CommandList->CopyBufferRegion(Handle.Get(), 0, TempHandle.Get(), 0, UpdateByteSize);
 
-		CurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
+		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+		CommandList->ResourceBarrier(1, &BarrierData);
+		CurrentState = D3D12_RESOURCE_STATE_COMMON;
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -155,7 +159,9 @@ struct directx12_buffer : public buffer
 
 		CommandList->CopyBufferRegion(TempHandle.Get(), 0, Handle.Get(), 0, UpdateByteSize);
 
-		CurrentState = D3D12_RESOURCE_STATE_COPY_SOURCE;
+		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+		CommandList->ResourceBarrier(1, &BarrierData);
+		CurrentState = D3D12_RESOURCE_STATE_COMMON;
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -178,6 +184,7 @@ struct directx12_buffer : public buffer
 		}
 
 		PipelineContext->CommandList->CopyBufferRegion(TempHandle.Get(), 0, Handle.Get(), 0, UpdateByteSize);
+
 		CurrentState = D3D12_RESOURCE_STATE_COPY_SOURCE;
 
 		void* CpuPtr;
@@ -383,7 +390,9 @@ struct directx12_texture : public texture
 		CommandList->CopyTextureRegion(&DstCopyLocation, 0, 0, 0, 
 									   &SrcCopyLocation, nullptr);
 
-		CurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
+		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+		CommandList->ResourceBarrier(1, &BarrierData);
+		CurrentState = D3D12_RESOURCE_STATE_COMMON;
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -458,7 +467,10 @@ struct directx12_texture : public texture
 		}
 
 		CommandList->CopyResource(TempHandle.Get(), Handle.Get());
-		CurrentState = D3D12_RESOURCE_STATE_COPY_SOURCE;
+
+		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+		CommandList->ResourceBarrier(1, &BarrierData);
+		CurrentState = D3D12_RESOURCE_STATE_COMMON;
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);

@@ -493,6 +493,7 @@ SetColorTarget(u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& C
 	if(EnableMultiview)
 	{
 		directx12_texture* Attachment = static_cast<directx12_texture*>(ColorAttachments[0]);
+		TexturesToCommon.insert(Attachment);
 		ColorTargets.push_back(Attachment->RenderTargetViews[Face]);
 		if(LoadOp == load_op::clear)
 		{
@@ -504,6 +505,7 @@ SetColorTarget(u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& C
 		for(u32 i = 0; i < ColorAttachments.size(); i++)
 		{
 			directx12_texture* Attachment = static_cast<directx12_texture*>(ColorAttachments[i]);
+			TexturesToCommon.insert(Attachment);
 			ColorTargets.push_back(Attachment->RenderTargetViews[0]);
 			if(LoadOp == load_op::clear)
 			{
@@ -517,6 +519,7 @@ void directx12_render_context::
 SetDepthTarget(u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face, bool EnableMultiview)  
 {
 	directx12_texture* Attachment = static_cast<directx12_texture*>(DepthAttachment);
+	TexturesToCommon.insert(Attachment);
 
 	DepthStencilTarget = Attachment->DepthStencilViews[Face];
 	if(LoadOp == load_op::clear)
