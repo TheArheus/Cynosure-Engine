@@ -28,6 +28,7 @@ struct offset
 	uint IndexCount;
 
 	uint InstanceOffset;
+	uint InstanceCount;
 };
 
 struct mesh_draw_command

@@ -33,6 +33,7 @@ struct offset
 	uint IndexCount;
 
 	uint InstanceOffset;
+	uint InstanceCount;
 };
 
 struct global_world_data

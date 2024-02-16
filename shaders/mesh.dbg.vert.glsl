@@ -34,6 +34,7 @@ struct offset
 	uint IndexCount;
 
 	uint InstanceOffset;
+	uint InstanceCount;
 };
 
 struct vert_in

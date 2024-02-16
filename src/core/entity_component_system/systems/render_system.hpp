@@ -79,9 +79,11 @@ struct render_system : public entity_system
 		u32 NormalMapIdx = 0;
 		u32 SpecularIdx  = 0;
 		u32 HeightMapIdx = 0;
+		u32 InstanceOffset = 0;
 		for(entity& Entity : Entities)
 		{
 			NewMaterial = {};
+			u32 EntityIdx = *(u32*)&Entity.Handle;
 			color_component* Color = Entity.GetComponent<color_component>();
 			mesh_component* Mesh = Entity.GetComponent<mesh_component>();
 			debug_component* Debug = Entity.GetComponent<debug_component>();
@@ -136,9 +138,11 @@ struct render_system : public entity_system
 
 			if(InstancesComponent)
 			{
+				Geometries.Offsets[EntityIdx - 1].InstanceOffset = InstanceOffset;
+				InstanceOffset += InstancesComponent->Data.size();
 				for (mesh_draw_command& EntityInstance : InstancesComponent->Data)
 				{
-					StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), *(u32*)&Entity.Handle });
+					StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), EntityIdx });
 					StaticMeshVisibility.push_back(true);
 				}
 			}
@@ -164,7 +168,7 @@ struct render_system : public entity_system
 		IndexBuffer = Window.Gfx.PushBuffer("IndexBuffer", Geometries.VertexIndices.data(), sizeof(u32), Geometries.VertexIndices.size(), false, resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
 
 		MeshDrawCommandBuffer = Window.Gfx.PushBuffer("MeshDrawCommandBuffer", sizeof(mesh_draw_command), StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		MeshDrawShadowCommandBuffer = Window.Gfx.PushBuffer("MeshDrawShadowCommandBuffer", sizeof(mesh_draw_command), StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshDrawShadowCommandBuffer = Window.Gfx.PushBuffer("MeshDrawShadowCommandBuffer", sizeof(mesh_draw_command) * 2, StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 		LightSourcesBuffer = Window.Gfx.PushBuffer("LightSourcesBuffer", sizeof(light_source), LIGHT_SOURCES_MAX_COUNT, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
 		WorldUpdateBuffer = Window.Gfx.PushBuffer("WorldUpdateBuffer", sizeof(global_world_data), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
@@ -332,7 +336,7 @@ struct render_system : public entity_system
 
 
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_Compute);
-			//PipelineContext->SetBufferBarrier({MeshDrawVisibilityDataBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
+			PipelineContext->SetBufferBarrier({MeshDrawVisibilityDataBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshDrawCommandDataBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshDrawCommandBuffer, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({GeometryOffsets, 0, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
@@ -458,12 +462,13 @@ struct render_system : public entity_system
 		}
 
 		{
-			PipelineContext->SetImageBarriers({{DiffuseTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}}, PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
-			PipelineContext->SetImageBarriers({{NormalTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}}, PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
-			PipelineContext->SetImageBarriers({{SpecularTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}}, PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
-			PipelineContext->SetImageBarriers({{HeightTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}}, PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
-			PipelineContext->SetImageBarriers({{Window.Gfx.GBuffer, 0, AF_ColorAttachmentWrite, barrier_state::undefined, barrier_state::color_attachment, ~0u}}, PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
-			PipelineContext->SetImageBarriers({{Window.Gfx.GfxDepthTarget, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, ~0u}}, PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
+			PipelineContext->SetImageBarriers({{DiffuseTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}, 
+											  {NormalTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
+											  {SpecularTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
+											  {HeightTextures, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
+											  {Window.Gfx.GBuffer, 0, AF_ColorAttachmentWrite, barrier_state::undefined, barrier_state::color_attachment, ~0u},
+											  {{Window.Gfx.GfxDepthTarget}, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, ~0u}},
+											 PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
 
 			PipelineContext->SetBufferBarrier({GeometryOffsets, AF_ShaderWrite, AF_ShaderRead}, PSF_Compute, PSF_VertexShader);
 			PipelineContext->SetBufferBarrier({WorldUpdateBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_VertexShader|PSF_FragmentShader);

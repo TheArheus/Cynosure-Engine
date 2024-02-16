@@ -28,6 +28,7 @@ struct offset
 	uint IndexCount;
 
 	uint InstanceOffset;
+	uint InstanceCount;
 };
 
 struct mesh_draw_command
@@ -121,15 +122,9 @@ void main()
 	{
 		uint InstanceIdx = atomicAdd(IndirectDrawIndexedCommands[CommandIdx].InstanceCount, 1);
 
-		IndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[CommandIdx].IndexCount;
-		IndirectDrawIndexedCommands[CommandIdx].FirstIndex    = MeshOffsets[CommandIdx].IndexOffset;
-		IndirectDrawIndexedCommands[CommandIdx].VertexOffset  = 0; //int(MeshOffsets[CommandIdx].VertexOffset);
-		IndirectDrawIndexedCommands[CommandIdx].FirstInstance = 0; 
-		IndirectDrawIndexedCommands[CommandIdx].DrawID        = CommandIdx;
-
-		barrier();
-		MeshOffsets[CommandIdx].InstanceOffset = CommandIdx == 0 ? 0 : IndirectDrawIndexedCommands[CommandIdx - 1].FirstInstance + IndirectDrawIndexedCommands[CommandIdx - 1].InstanceCount;
-		barrier();
+		IndirectDrawIndexedCommands[CommandIdx].DrawID     = CommandIdx;
+		IndirectDrawIndexedCommands[CommandIdx].IndexCount = MeshOffsets[CommandIdx].IndexCount;
+		IndirectDrawIndexedCommands[CommandIdx].FirstIndex = MeshOffsets[CommandIdx].IndexOffset;
 
 		InstanceIdx += MeshOffsets[CommandIdx].InstanceOffset;
 		MeshDrawCommands[InstanceIdx].MeshIndex	= CommandIdx;

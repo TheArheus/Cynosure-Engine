@@ -90,6 +90,7 @@ struct mesh
 		u32 IndexCount;
 
 		u32 InstanceOffset;
+		u32 InstanceCount;
 	};
 
 	struct alignas(16) material
