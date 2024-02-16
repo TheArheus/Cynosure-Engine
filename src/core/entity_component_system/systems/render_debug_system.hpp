@@ -38,8 +38,10 @@ struct render_debug_system : public entity_system
 
 	void Setup(window& Window, mesh_comp_culling_common_input& MeshCommonCullingInput)
 	{
+		u32 InstanceOffset = 0;
 		for(entity& Entity : Entities)
 		{
+			u32 EntityIdx = *(u32*)&Entity.Handle;
 			mesh NewDebugMesh;
 			mesh_component* MeshComponent = Entity.GetComponent<mesh_component>();
 			static_instances_component* InstancesComponent = Entity.GetComponent<static_instances_component>();
@@ -47,21 +49,27 @@ struct render_debug_system : public entity_system
 			NewDebugMesh.GenerateNTBDebug(MeshComponent->Data);
 			Geometries.Load(NewDebugMesh);
 
+			Geometries.Offsets[(EntityIdx - 1) * 3 + 0].InstanceOffset = InstanceOffset;
+			InstanceOffset += InstancesComponent->Data.size();
 			for (mesh_draw_command& EntityInstance : InstancesComponent->Data)
 			{
-				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 1 });
+				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (EntityIdx - 1) * 3 + 1 });
 				StaticMeshVisibility.push_back(true);
 			}
 
+			Geometries.Offsets[(EntityIdx - 1) * 3 + 1].InstanceOffset = InstanceOffset;
+			InstanceOffset += InstancesComponent->Data.size();
 			for (mesh_draw_command& EntityInstance : InstancesComponent->Data)
 			{
-				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 2 });
+				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (EntityIdx - 1) * 3 + 2 });
 				StaticMeshVisibility.push_back(true);
 			}
 
+			Geometries.Offsets[(EntityIdx - 1) * 3 + 2].InstanceOffset = InstanceOffset;
+			InstanceOffset += InstancesComponent->Data.size();
 			for (mesh_draw_command& EntityInstance : InstancesComponent->Data)
 			{
-				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 3 });
+				StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), (EntityIdx - 1) * 3 + 3 });
 				StaticMeshVisibility.push_back(true);
 			}
 
@@ -86,7 +94,7 @@ struct render_debug_system : public entity_system
 
 		DebugVertexBuffer = Window.Gfx.PushBuffer("DebugVertexBuffer", Geometries.Vertices.data(), sizeof(vertex), Geometries.Vertices.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 		DebugIndexBuffer = Window.Gfx.PushBuffer("DebugIndexBuffer", Geometries.VertexIndices.data(), sizeof(u32), Geometries.VertexIndices.size(), false, resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
-		MeshDrawDebugCommandBuffer = Window.Gfx.PushBuffer("MeshDrawDebugCommandBuffer", sizeof(mesh_draw_command), StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshDrawDebugCommandBuffer = Window.Gfx.PushBuffer("MeshDrawDebugCommandBuffer", sizeof(mesh_draw_command) * 2, StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
 		WorldUpdateBuffer = Window.Gfx.PushBuffer("WorldUpdateBuffer", sizeof(global_world_data), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer("MeshCommonCullingInputBuffer", sizeof(mesh_comp_culling_common_input), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
