@@ -548,52 +548,6 @@ D3D12_RESOURCE_STATES GetDXBufferLayout(u32 Layouts, u32 PipelineStage)
 
 D3D12_RESOURCE_STATES GetDXImageLayout(barrier_state State, u32 Layouts, u32 PipelineStage)
 {
-#if 0
-enum pipeline_stage_flags
-{
-	PSF_TopOfPipe       = BYTE(0 ),
-	PSF_DrawIndirect    = BYTE(1 ),
-	PSF_VertexInput     = BYTE(2 ),
-	PSF_VertexShader    = BYTE(3 ),
-	PSF_FragmentShader  = BYTE(4 ),
-	PSF_EarlyFragment   = BYTE(5 ),
-	PSF_LateFragment    = BYTE(6 ),
-	PSF_ColorAttachment = BYTE(7 ),
-	PSF_Compute         = BYTE(8 ),
-	PSF_Transfer        = BYTE(9 ),
-	PSF_BottomOfPipe    = BYTE(10),
-	PSF_Host            = BYTE(11),
-	PSF_AllGraphics     = BYTE(12),
-	PSF_AllCommands     = BYTE(13),
-};
-
-enum access_flags
-{
-	AF_ShaderRead                  = BYTE(5 ),
-	AF_ShaderWrite                 = BYTE(6 ),
-	AF_ColorAttachmentRead         = BYTE(7 ),
-	AF_ColorAttachmentWrite        = BYTE(8 ),
-	AF_DepthStencilAttachmentRead  = BYTE(9 ),
-	AF_DepthStencilAttachmentWrite = BYTE(10),
-	AF_TransferRead                = BYTE(11),
-	AF_TransferWrite               = BYTE(12),
-};
-
-enum class barrier_state
-{
-	general,
-	color_attachment,
-	depth_stencil_attachment,
-	shader_read,
-	depth_read,
-	stencil_read,
-	depth_stencil_read,
-	present,
-	transfer_src,
-	transfer_dst,
-	undefined,
-};
-#endif
     D3D12_RESOURCE_STATES Result = D3D12_RESOURCE_STATE_COMMON;
 
     if (State == barrier_state::depth_stencil_attachment)

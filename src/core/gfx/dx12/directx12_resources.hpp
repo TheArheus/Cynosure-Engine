@@ -51,13 +51,6 @@ struct directx12_buffer : public buffer
 		Gfx->CommandQueue->Reset();
 		CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
 
-		if(TempCurrentState != D3D12_RESOURCE_STATE_COPY_SOURCE)
-		{
-			auto TempBarrier = CD3DX12_RESOURCE_BARRIER::Transition(TempHandle.Get(), TempCurrentState, D3D12_RESOURCE_STATE_COPY_SOURCE);
-			CommandList->ResourceBarrier(1, &TempBarrier);
-			TempCurrentState = D3D12_RESOURCE_STATE_COPY_SOURCE;
-		}
-
 		CommandList->CopyResource(Handle.Get(), TempHandle.Get());
 
 		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
@@ -83,13 +76,6 @@ struct directx12_buffer : public buffer
 		Gfx->CommandQueue->Reset();
 		CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
 
-		if(TempCurrentState != D3D12_RESOURCE_STATE_COPY_DEST)
-		{
-			auto TempBarrier = CD3DX12_RESOURCE_BARRIER::Transition(TempHandle.Get(), TempCurrentState, D3D12_RESOURCE_STATE_COPY_DEST);
-			CommandList->ResourceBarrier(1, &TempBarrier);
-			TempCurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
-		}
-
 		CommandList->CopyBufferRegion(Handle.Get(), 0, TempHandle.Get(), 0, UpdateByteSize);
 
 		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
@@ -109,13 +95,6 @@ struct directx12_buffer : public buffer
 		memcpy(CpuPtr, Data, Size);
 		TempHandle->Unmap(0, 0);
 
-		if(TempCurrentState != D3D12_RESOURCE_STATE_COPY_SOURCE)
-		{
-			auto TempBarrier = CD3DX12_RESOURCE_BARRIER::Transition(TempHandle.Get(), TempCurrentState, D3D12_RESOURCE_STATE_COPY_SOURCE);
-			PipelineContext->CommandList->ResourceBarrier(1, &TempBarrier);
-			TempCurrentState = D3D12_RESOURCE_STATE_COPY_SOURCE;
-		}
-
 		PipelineContext->CommandList->CopyResource(Handle.Get(), TempHandle.Get());
 		CurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
 	}
@@ -130,13 +109,6 @@ struct directx12_buffer : public buffer
 		memcpy(CpuPtr, Data, UpdateByteSize);
 		TempHandle->Unmap(0, 0);
 
-		if(TempCurrentState != D3D12_RESOURCE_STATE_COPY_SOURCE)
-		{
-			auto TempBarrier = CD3DX12_RESOURCE_BARRIER::Transition(TempHandle.Get(), TempCurrentState, D3D12_RESOURCE_STATE_COPY_SOURCE);
-			PipelineContext->CommandList->ResourceBarrier(1, &TempBarrier);
-			TempCurrentState = D3D12_RESOURCE_STATE_COPY_SOURCE;
-		}
-
 		PipelineContext->CommandList->CopyBufferRegion(Handle.Get(), 0, TempHandle.Get(), 0, UpdateByteSize);
 		CurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
 	}
@@ -149,13 +121,6 @@ struct directx12_buffer : public buffer
 		ID3D12GraphicsCommandList* CommandList = Gfx->CommandQueue->AllocateCommandList();
 		Gfx->CommandQueue->Reset();
 		CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
-
-		if(TempCurrentState != D3D12_RESOURCE_STATE_COPY_DEST)
-		{
-			auto TempBarrier = CD3DX12_RESOURCE_BARRIER::Transition(TempHandle.Get(), TempCurrentState, D3D12_RESOURCE_STATE_COPY_DEST);
-			CommandList->ResourceBarrier(1, &TempBarrier);
-			TempCurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
-		}
 
 		CommandList->CopyBufferRegion(TempHandle.Get(), 0, Handle.Get(), 0, UpdateByteSize);
 
@@ -175,13 +140,6 @@ struct directx12_buffer : public buffer
 	void ReadBackSize(void* Data, u32 UpdateByteSize, global_pipeline_context* GlobalPipeline) override 
 	{
 		directx12_global_pipeline_context* PipelineContext = static_cast<directx12_global_pipeline_context*>(GlobalPipeline);
-
-		if(TempCurrentState != D3D12_RESOURCE_STATE_COPY_DEST)
-		{
-			auto TempBarrier = CD3DX12_RESOURCE_BARRIER::Transition(TempHandle.Get(), TempCurrentState, D3D12_RESOURCE_STATE_COPY_DEST);
-			PipelineContext->CommandList->ResourceBarrier(1, &TempBarrier);
-			TempCurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
-		}
 
 		PipelineContext->CommandList->CopyBufferRegion(TempHandle.Get(), 0, Handle.Get(), 0, UpdateByteSize);
 
@@ -208,6 +166,7 @@ struct directx12_buffer : public buffer
 			Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
 		CD3DX12_RESOURCE_DESC CounterResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(u32), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+        //ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
 		D3D12MA::ALLOCATION_DESC AllocDesc = {};
 		AllocDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
@@ -224,7 +183,8 @@ struct directx12_buffer : public buffer
 
 		CD3DX12_HEAP_PROPERTIES ResourceTempType = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		CD3DX12_RESOURCE_DESC TempDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, D3D12_RESOURCE_FLAG_NONE);
-		Gfx->Device->CreateCommittedResource(&ResourceTempType, D3D12_HEAP_FLAG_NONE, &TempDesc, D3D12_RESOURCE_STATE_COPY_SOURCE, nullptr, IID_PPV_ARGS(&TempHandle));
+		Gfx->Device->CreateCommittedResource(&ResourceTempType, D3D12_HEAP_FLAG_NONE, &TempDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempHandle));
+		TempCurrentState = D3D12_RESOURCE_STATE_GENERIC_READ;
 
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
@@ -305,7 +265,7 @@ struct directx12_texture : public texture
         D3D12_SAMPLER_DESC SamplerDesc = {};
         SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(InputData.AddressMode);
         SamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NONE;
-        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(filter::linear), GetDXFilter(filter::linear), GetDXFilter(filter::linear), GetDXSamplerReductionMode(Info.ReductionMode));
+        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(filter::linear), GetDXFilter(filter::linear), GetDXFilter(filter::linear), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(Info.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
         SamplerDesc.MaxLOD = InputData.MipLevels;
 
         switch(InputData.BorderColor)
@@ -370,13 +330,6 @@ struct directx12_texture : public texture
 		D3D12_PLACED_SUBRESOURCE_FOOTPRINT TextureFootprint = {};
 		TextureFootprint.Footprint = SubresourceDesc;
 
-		if(TempCurrentState != D3D12_RESOURCE_STATE_COPY_SOURCE)
-		{
-			auto TempBarrier = CD3DX12_RESOURCE_BARRIER::Transition(TempHandle.Get(), TempCurrentState, D3D12_RESOURCE_STATE_COPY_SOURCE);
-			CommandList->ResourceBarrier(1, &TempBarrier);
-			TempCurrentState = D3D12_RESOURCE_STATE_COPY_SOURCE;
-		}
-
 		D3D12_TEXTURE_COPY_LOCATION SrcCopyLocation = {};
 		SrcCopyLocation.pResource = TempHandle.Get();
 		SrcCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
@@ -427,13 +380,6 @@ struct directx12_texture : public texture
 		D3D12_PLACED_SUBRESOURCE_FOOTPRINT TextureFootprint = {};
 		TextureFootprint.Footprint = SubresourceDesc;
 
-		if(TempCurrentState != D3D12_RESOURCE_STATE_COPY_SOURCE)
-		{
-			auto TempBarrier = CD3DX12_RESOURCE_BARRIER::Transition(TempHandle.Get(), TempCurrentState, D3D12_RESOURCE_STATE_COPY_SOURCE);
-			PipelineContext->CommandList->ResourceBarrier(1, &TempBarrier);
-			TempCurrentState = D3D12_RESOURCE_STATE_COPY_SOURCE;
-		}
-
 		D3D12_TEXTURE_COPY_LOCATION SrcCopyLocation = {};
 		SrcCopyLocation.pResource = TempHandle.Get();
 		SrcCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
@@ -458,13 +404,6 @@ struct directx12_texture : public texture
 		ID3D12GraphicsCommandList* CommandList = Gfx->CommandQueue->AllocateCommandList();
 		Gfx->CommandQueue->Reset();
 		CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
-
-		if(TempCurrentState != D3D12_RESOURCE_STATE_COPY_DEST)
-		{
-			auto TempBarrier = CD3DX12_RESOURCE_BARRIER::Transition(TempHandle.Get(), TempCurrentState, D3D12_RESOURCE_STATE_COPY_DEST);
-			CommandList->ResourceBarrier(1, &TempBarrier);
-			TempCurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
-		}
 
 		CommandList->CopyResource(TempHandle.Get(), Handle.Get());
 
@@ -500,7 +439,6 @@ struct directx12_texture : public texture
         ResourceDesc.MipLevels = Info.MipLevels;
         ResourceDesc.SampleDesc.Count = 1;
         ResourceDesc.SampleDesc.Quality = 0;
-        ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         ResourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 		ResourceDesc.Format = GetDXFormat(Info.Format);
 
@@ -779,7 +717,8 @@ struct directx12_texture : public texture
 	{
 		CD3DX12_HEAP_PROPERTIES ResourceTempType = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		CD3DX12_RESOURCE_DESC TempDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
-		Device->CreateCommittedResource(&ResourceTempType, D3D12_HEAP_FLAG_NONE, &TempDesc, D3D12_RESOURCE_STATE_COPY_SOURCE, nullptr, IID_PPV_ARGS(&TempHandle));
+		Device->CreateCommittedResource(&ResourceTempType, D3D12_HEAP_FLAG_NONE, &TempDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempHandle));
+		TempCurrentState = D3D12_RESOURCE_STATE_GENERIC_READ;
 	}
 
 	void DestroyResource() override {/*Handle.Reset();*/}
@@ -810,7 +749,7 @@ CreateResource(renderer_backend* Backend)
 	D3D12MA::ALLOCATOR_DESC AllocatorDesc = {};
 	AllocatorDesc.pDevice  = Gfx->Device.Get();
 	AllocatorDesc.pAdapter = Gfx->Adapter.Get();
-	HRESULT hr = D3D12MA::CreateAllocator(&AllocatorDesc, &Handle);
+	D3D12MA::CreateAllocator(&AllocatorDesc, &Handle);
 }
 
 buffer* directx12_memory_heap::

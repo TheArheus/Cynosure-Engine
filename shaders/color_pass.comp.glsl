@@ -12,6 +12,17 @@
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 
+vec3 CascadeColors[] = 
+{
+	vec3(1, 0, 0),
+	vec3(0, 1, 0),
+	vec3(0, 0, 1),
+	vec3(1, 1, 0),
+	vec3(1, 0, 1),
+	vec3(0, 1, 1),
+	vec3(1, 1, 1),
+};
+
 struct global_world_data
 {
 	mat4  View;
@@ -296,33 +307,54 @@ void main()
         return;
     }
 
-	vec4  CoordWS  = texelFetch(GBuffer[0], ivec2(TextCoord), 0);
+	vec4 CoordWS  = texelFetch(GBuffer[0], ivec2(TextCoord), 0);
+	vec3 CoordVS  = (WorldUpdate.DebugView * CoordWS).xyz;
 	if((CoordWS.x == 0) && (CoordWS.y == 0) && (CoordWS.z == 0))
 	{
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
 		return;
 	}
 
-	vec3 CascadeColors[] = 
-	{
-		vec3(1, 0, 0),
-		vec3(0, 1, 0),
-		vec3(0, 0, 1),
-		vec3(1, 1, 0),
-		vec3(1, 0, 1),
-		vec3(0, 1, 1),
-		vec3(1, 1, 1),
-	};
-
+	float Specular         = texelFetch(GBuffer[4], ivec2(gl_GlobalInvocationID.xy), 0).x;
 	vec3  VertexNormalWS   = normalize(texelFetch(GBuffer[1], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
 	vec3  VertexNormalVS   = normalize(inverse(transpose(mat3(WorldUpdate.DebugView))) * VertexNormalWS).xyz;
 	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[2], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
 	vec3  FragmentNormalVS = normalize(inverse(transpose(mat3(WorldUpdate.DebugView))) * FragmentNormalWS).xyz;
-	vec4  Diffuse  = texelFetch(GBuffer[3], ivec2(TextCoord), 0);
-	float Specular = texelFetch(GBuffer[4], ivec2(TextCoord), 0).x;
-	float AmbientOcclusion = texelFetch(AmbientOcclusionBuffer, ivec2(TextCoord), 0).r;
 
-	vec3  CoordVS  = (WorldUpdate.DebugView * CoordWS).xyz;
+	vec2 ReflTextCoord = TextCoord;
+	{
+		float TotalDist = 0;
+        float FltMin = 0.001;
+
+		vec2 TexelViewDirUV = (TextCoord / TextureDims - 0.5) * 2.0;
+		vec4 TexelViewDirDP = inverse(WorldUpdate.DebugView) * inverse(WorldUpdate.Proj) * vec4(vec3(TexelViewDirUV, 1), 1);
+		vec3 TexelViewDirVP = TexelViewDirDP.xyz / TexelViewDirDP.w;
+
+        vec3 RayO  = CoordWS.xyz;
+        vec3 RayD  = reflect(TexelViewDirVP - CoordWS.xyz, FragmentNormalVS);
+        for(uint i = 0; i < 32; i++)
+        {
+            vec3 CurrentRayVS = RayO + TotalDist * RayD;
+            vec4 CurrentRaySP = WorldUpdate.Proj * WorldUpdate.DebugView * vec4(CurrentRayVS, 1);
+            vec2 CurrentRayUV = vec2(CurrentRaySP.xyz / CurrentRaySP.w) * 0.5 + 0.5;
+
+            vec4 SampledPosVS = texture(GBuffer[0], CurrentRayUV);
+			//SampledPosVS = WorldUpdate.DebugView * SampledPosVS;
+
+            float Dist = distance(SampledPosVS.xyz, CurrentRayVS);
+            TotalDist += Dist;
+            if(Dist <= FltMin || TotalDist > WorldUpdate.FarZ) 
+            { 
+				ReflTextCoord = CurrentRayUV * TextureDims;
+				break;
+            }
+        }
+	}
+
+	vec4  Diffuse  = texelFetch(GBuffer[3], ivec2(ReflTextCoord), 0);
+	      Specular = texelFetch(GBuffer[4], ivec2(ReflTextCoord), 0).x;
+	float AmbientOcclusion = texelFetch(AmbientOcclusionBuffer, ivec2(ReflTextCoord), 0).r;
+
 	vec3  RotationAngles = texture(RandomAnglesTexture, CoordVS / 32).xyz;
 	vec2  Rotation2D = vec2(cos(RotationAngles.x), sin(RotationAngles.y));
 	vec3  Rotation3D = vec3(cos(RotationAngles.x)*sin(RotationAngles.y), sin(RotationAngles.x)*sin(RotationAngles.y), cos(RotationAngles.y));

@@ -11,17 +11,19 @@ directx12_backend(window* Window)
 	Height = ClientHeight;
 
 	UINT FactoryFlags = 0;
-#if defined(_DEBUG)
+#if defined(CE_DEBUG)
 	ComPtr<ID3D12Debug>  Debug;
 	ComPtr<ID3D12Debug1> Debug1;
 	{
-		D3D12GetDebugInterface(IID_PPV_ARGS(&Debug));
-		Debug->EnableDebugLayer();
-		if(SUCCEEDED(Debug->QueryInterface(IID_PPV_ARGS(&Debug1))))
+		if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&Debug))))
 		{
-			Debug1->EnableDebugLayer();
-			Debug1->SetEnableGPUBasedValidation(TRUE);  // enable GPU-based validation
-			Debug1->Release();
+			Debug->EnableDebugLayer();
+			if(SUCCEEDED(Debug->QueryInterface(IID_PPV_ARGS(&Debug1))))
+			{
+				Debug1->EnableDebugLayer();
+				Debug1->SetEnableGPUBasedValidation(true);
+				Debug1->Release();
+			}
 		}
 	}
 
@@ -41,7 +43,7 @@ directx12_backend(window* Window)
 		D3D12CreateDevice(Adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
 	}
 
-#if _DEBUG
+#if defined(CE_DEBUG)
 	{
 		ID3D12InfoQueue1* InfoQueue = nullptr;
 		if (SUCCEEDED(Device->QueryInterface<ID3D12InfoQueue1>(&InfoQueue)))
@@ -55,7 +57,10 @@ directx12_backend(window* Window)
 	Factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &TearingSupport, sizeof(TearingSupport));
 
 	D3D12_FEATURE_DATA_FORMAT_SUPPORT DataFormatSupport = {ColorTargetFormat, D3D12_FORMAT_SUPPORT1_NONE, D3D12_FORMAT_SUPPORT2_NONE};
+	D3D12_FEATURE_DATA_D3D12_OPTIONS RendererOptions = {};
 	Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &DataFormatSupport, sizeof(DataFormatSupport));
+	Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &RendererOptions, sizeof(RendererOptions));
+	if(RendererOptions.TiledResourcesTier >= 2) MinMaxFilterAvailable = true;
 
 	CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT);
 
@@ -126,73 +131,29 @@ directx12_backend(window* Window)
 };
 
 void directx12_backend::
-DestroyObject()
-{
-}
+DestroyObject() {}
 
 void directx12_backend::
 RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 {
-#if 0
-	Fence.Flush(CommandQueue);
-	ID3D12GraphicsCommandList* CommandList = CommandQueue->AllocateCommandList();
-
-	heap_alloc RtvHeapMap = RtvHeap.Allocate(2);
-	heap_alloc DsvHeapMap = DsvHeap.Allocate(1);
-	RtvHeap.Reset();
-	DsvHeap.Reset();
-
 	Width  = NewWidth;
 	Height = NewHeight;
-	Viewport.Width  = (r32)NewWidth;
-	Viewport.Height = (r32)NewHeight;
-	Rect = { 0, 0, (LONG)NewWidth, (LONG)NewHeight };
 
-	CommandQueue->Reset();
-	CommandList->Reset(CommandQueue->CommandAlloc.Get(), nullptr);
-
-	for (u32 Idx = 0;
-		Idx < 2;
-		++Idx)
-	{
-		BackBuffers[Idx].Handle.Reset();
-	}
-	DepthStencilBuffer.Handle.Reset();
+	SwapchainImages[0].Reset();
+	SwapchainImages[1].Reset();
 
 	SwapChain->ResizeBuffers(2, NewWidth, NewHeight, ColorTargetFormat, (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 
-	for (u32 Idx = 0;
-		Idx < 2;
-		++Idx)
 	{
-		SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx].Handle));
-		Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapMap.GetNextCpuHandle());
+		D3D12_RENDER_TARGET_VIEW_DESC ColorTargetViewDesc = {};
+		ColorTargetViewDesc.Format = ColorTargetFormat;
+		ColorTargetViewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+
+		SwapChain->GetBuffer(0, IID_PPV_ARGS(&SwapchainImages[0]));
+		Device->CreateRenderTargetView(SwapchainImages[0].Get(), &ColorTargetViewDesc, ColorTargetHeap.GetNextCpuHandle());
+		SwapChain->GetBuffer(1, IID_PPV_ARGS(&SwapchainImages[1]));
+		Device->CreateRenderTargetView(SwapchainImages[1].Get(), &ColorTargetViewDesc, ColorTargetHeap.GetNextCpuHandle());
 	}
-
-	D3D12_RESOURCE_DESC DepthStencilDesc = {};
-	DepthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	DepthStencilDesc.Width = NewWidth;
-	DepthStencilDesc.Height = NewHeight;
-	DepthStencilDesc.DepthOrArraySize = 1;
-	DepthStencilDesc.MipLevels = 1;
-	DepthStencilDesc.Format = DepthBufferFormat;
-	DepthStencilDesc.SampleDesc.Count = MsaaState ? MsaaQuality : 1;
-	DepthStencilDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
-	DepthStencilDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	DepthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-
-	D3D12_CLEAR_VALUE Clear = {};
-	Clear.Format = DepthBufferFormat;
-	Clear.DepthStencil.Depth = 1.0f;
-	Clear.DepthStencil.Stencil = 0;
-	auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-	Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
-
-	Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeapMap.GetNextCpuHandle());
-
-	CommandQueue.ExecuteAndRemove(CommandList);
-	Fence.Flush(CommandQueue);
-#endif
 }
 
 dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool NonWritable)
@@ -499,7 +460,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 		spirv_cross::CompilerHLSL::Options    HlslOptions;
 		spirv_cross::HLSLVertexAttributeRemap HlslAttribs;
 
-		HlslOptions.shader_model = 62; // SM6_2
+		HlslOptions.shader_model = 60; // SM6_0
 
 		Compiler.set_hlsl_options(HlslOptions);
 		Compiler.add_vertex_attribute_remap(HlslAttribs);
@@ -529,36 +490,19 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 		ComPtr<IDxcBlobEncoding> SourceBlob;
 		DxcLib->CreateBlobWithEncodingFromPinned(HlslCode.c_str(), static_cast<u32>(HlslCode.size()), CodePage, &SourceBlob);
 
-		const wchar_t* TargetProfile = L"vs_6_2";
+		const wchar_t* TargetProfile = L"vs_6_0";
 		if (ShaderType == shader_stage::fragment)
-			TargetProfile = L"ps_6_2";
+			TargetProfile = L"ps_6_0";
 		else if (ShaderType == shader_stage::compute)
-			TargetProfile = L"cs_6_2";
+			TargetProfile = L"cs_6_0";
 		else if (ShaderType == shader_stage::geometry)
-			TargetProfile = L"gs_6_2";
+			TargetProfile = L"gs_6_0";
 		else if (ShaderType == shader_stage::tessellation_control)
-			TargetProfile = L"hs_6_2";
+			TargetProfile = L"hs_6_0";
 		else if (ShaderType == shader_stage::tessellation_eval)
-			TargetProfile = L"ds_6_2";
-
-		DxcBuffer SourceBuffer = {};
-		SourceBuffer.Ptr  = SourceBlob->GetBufferPointer();
-		SourceBuffer.Size = SourceBlob->GetBufferSize();
+			TargetProfile = L"ds_6_0";
 
 		std::vector<LPCWSTR> Arguments;
-
-		Arguments.push_back(L"-T");
-		Arguments.push_back(TargetProfile);
-		//Arguments.push_back(DXC_ARG_WARNINGS_ARE_ERRORS); //-WX
-		//Arguments.push_back(L"-HV 2021");
-#if 0
-		Arguments.push_back(DXC_ARG_DEBUG);
-		Arguments.push_back(DXC_ARG_SKIP_OPTIMIZATIONS);
-		Arguments.push_back(DXC_ARG_PREFER_FLOW_CONTROL);
-		Arguments.push_back(DXC_ARG_DEBUG_NAME_FOR_SOURCE);
-#endif
-		//Arguments.push_back(L"-Qstrip_debug");
-		//Arguments.push_back(L"-Qstrip_reflect");
 		Arguments.push_back(DXC_ARG_OPTIMIZATION_LEVEL3);
 
 		ComPtr<IDxcBlobUtf8> Errors;

@@ -14,7 +14,7 @@ vulkan_backend(window* Window)
 	std::vector<const char*> InstanceLayers;
 	std::vector<const char*> RequiredInstanceLayers = 
 	{
-#if _DEBUG
+#if defined(CE_DEBUG)
 		"VK_LAYER_KHRONOS_validation"
 #endif
 	};

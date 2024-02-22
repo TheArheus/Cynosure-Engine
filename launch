@@ -1,1 +1,1 @@
-ENABLE_VULKAN_RENDERDOC_CAPTURE=1 STEAM_COMPAT_DATA_PATH=~/.proton/ STEAM_COMPAT_CLIENT_INSTALL_PATH=~/.local/share/Steam ~/.steam/steam/steamapps/common/Proton\ 8.0/proton run ./build/Cynosure\ engine.exe
+ENABLE_VULKAN_RENDERDOC_CAPTURE=1 STEAM_COMPAT_DATA_PATH=~/.proton/ STEAM_COMPAT_CLIENT_INSTALL_PATH=~/.local/share/Steam ~/.steam/steam/steamapps/common/Proton\ 8.0/proton run build/Cynosure\ engine.exe

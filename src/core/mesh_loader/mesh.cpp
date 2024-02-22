@@ -65,7 +65,7 @@ Load(const std::string& Path, u32 BoundingGeneration)
 	NewOffset.IndexOffset  = VertexIndices.size();
 
 	Assimp::Importer Importer;
-	const aiScene* MeshData = Importer.ReadFile(Path, aiProcess_Triangulate|aiProcess_CalcTangentSpace|aiProcess_GenBoundingBoxes);
+	const aiScene* MeshData = Importer.ReadFile(Path, static_cast<u32>(aiProcess_Triangulate|aiProcess_CalcTangentSpace|aiProcess_GenBoundingBoxes));
 
 	std::vector<vertex> VertexResult;
 	std::unordered_map<vertex, u32> UniqueVertices;

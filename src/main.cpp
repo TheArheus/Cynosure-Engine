@@ -10,11 +10,8 @@
 #include <random>
 
 
-// TODO: Fix debug rendering for dx12
 // TODO: Handle dynamic entities that updates every frame
 //			One entity - one instance for a group of the object(would be easy to handle each instance and add to them the component if needed)
-//
-// TODO: Implement reflections using cube maps
 //
 // TODO: Application abstraction
 // TODO: Mesh animation component

@@ -101,6 +101,7 @@ struct directx12_backend : public renderer_backend
 	u32  MsaaQuality;
 	b32  TearingSupport = false;
 	bool MsaaState = false;
+	bool MinMaxFilterAvailable = false;
 	DWORD MsgCallback = 0;
 
 	const DXGI_FORMAT ColorTargetFormat = DXGI_FORMAT_B8G8R8A8_UNORM;

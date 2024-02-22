@@ -1521,7 +1521,7 @@ union alignas(16) mat4
 };
 
 inline vec4
-operator*(const mat4 lhs, const vec4 rhs)
+operator*(const mat4& lhs, const vec4& rhs)
 {
     vec4 Result = {};
 
@@ -1534,7 +1534,7 @@ operator*(const mat4 lhs, const vec4 rhs)
 }
 
 inline mat4 
-Inverse(mat4 M)
+Inverse(const mat4& M)
 {
 	float Sub00 = M.E33 * M.E44 - M.E34 * M.E43;
 	float Sub01 = M.E32 * M.E44 - M.E34 * M.E42;
