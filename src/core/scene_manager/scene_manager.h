@@ -39,7 +39,7 @@ struct scene_manager
 	bool IsCurrentSceneInitialized(){return Infos[CurrentScene].IsInitialized;}
 
 	void StartScene(window& Window);
-	void UpdateScene(window& Window, alloc_vector<light_source>& GlobalLightSources);
+	void UpdateScene(window& Window, global_pipeline_context* PipelineContext, alloc_vector<light_source>& GlobalLightSources);
 
 	void RenderScene(window& Window, global_pipeline_context* PipelineContext,
 					 alloc_vector<mesh_draw_command>& DynamicMeshInstances, alloc_vector<u32>& DynamicMeshVisibility, 

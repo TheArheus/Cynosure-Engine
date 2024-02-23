@@ -66,7 +66,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		if(!SceneManager.IsCurrentSceneInitialized()) continue;
 
 		SceneManager.StartScene(Window);
-		SceneManager.UpdateScene(Window, GlobalLightSources);
+		SceneManager.UpdateScene(Window, PipelineContext, GlobalLightSources);
 
 		auto Result = Window.ProcessMessages();
 		if(Result) return *Result;
@@ -77,11 +77,11 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
-			PipelineContext->DebugGuiBegin(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
+			PipelineContext->DebugGuiBegin(Window.Gfx.Backend, Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
 			SceneManager.RenderUI();
 			PipelineContext->DebugGuiEnd(Window.Gfx.Backend);
 
-			PipelineContext->EmplaceColorTarget(Window.Gfx.Backend, Window.Gfx.GfxColorTarget);
+			PipelineContext->EmplaceColorTarget(Window.Gfx.Backend, Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
 			PipelineContext->Present(Window.Gfx.Backend);
 		}
 

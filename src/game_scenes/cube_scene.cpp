@@ -25,7 +25,7 @@ struct cube_scene : scene
 		CubeObject.AddComponent<height_map_component>("..\\assets\\bricks4\\brick-wall.disp.png");
 
 		entity PlaneObject = Registry.CreateEntity();
-		PlaneObject.AddComponent<mesh_component>("..\\assets\\f22.obj", generate_aabb | generate_sphere);
+		PlaneObject.AddComponent<mesh_component>("..\\assets\\cube.obj", generate_aabb | generate_sphere);
 		PlaneObject.AddComponent<static_instances_component>();
 		PlaneObject.AddComponent<debug_component>();
 

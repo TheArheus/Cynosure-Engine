@@ -148,7 +148,7 @@ StartScene(window& Window)
 }
 
 void scene_manager::
-UpdateScene(window& Window, alloc_vector<light_source>& GlobalLightSources)
+UpdateScene(window& Window, global_pipeline_context* PipelineContext, alloc_vector<light_source>& GlobalLightSources)
 {
 	if(Scenes[CurrentScene]->IsInitialized)
 	{
@@ -159,8 +159,8 @@ UpdateScene(window& Window, alloc_vector<light_source>& GlobalLightSources)
 
 		Scenes[CurrentScene]->Registry.GetSystem<light_sources_system>()->Update(WorldUpdate, GlobalLightSources);
 
-		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate);
-		Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate);
+		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate, PipelineContext->BackBufferIndex);
+		Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate, PipelineContext->BackBufferIndex);
 	}
 }
 

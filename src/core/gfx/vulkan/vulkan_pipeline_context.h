@@ -153,7 +153,6 @@ private:
 	bool HavePushConstant = false;
 	bool UseFramebuffer   = false;
 
-
 	load_op  LoadOp;
 	store_op StoreOp;
 

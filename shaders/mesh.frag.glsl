@@ -120,5 +120,5 @@ void main()
 #endif
 	OutputSpecular		 = 1.0;
 	if(MeshMaterials[nonuniformEXT(MatIdx)].HasSpecularMap)
-		OutputSpecular *= texture(SpecularSamplers[nonuniformEXT(SpecularMapIdx)], TextCoord).r;
+		OutputSpecular   = texture(SpecularSamplers[nonuniformEXT(SpecularMapIdx)], TextCoord).r;
 }

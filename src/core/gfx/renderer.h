@@ -92,7 +92,7 @@ public:
 
 	std::vector<texture*> SwapchainImages;
 
-	texture* GfxColorTarget;
+	texture* GfxColorTarget[2];
 	texture* GfxDepthTarget;
 	texture* DebugCameraViewDepthTarget;
 
