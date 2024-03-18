@@ -1,7 +1,11 @@
 #pragma once
 #include <math.h>
 
+#if _WIN32
 #include <immintrin.h>
+#else
+#include <x86intrin.h>
+#endif
 
 #if __cplusplus >= 202002L
 template<typename T>
@@ -186,6 +190,15 @@ struct v2
 
     v2(T V) : x(V), y(V) {};
     v2(T _x, T _y) : x(_x), y(_y){};
+	v2(const v2<T>& rhs) : x(rhs.x), y(rhs.y) {};
+
+	v2(const swizzle_2d<v2<T>, 0, 0>& rhs) : x(rhs.E[0]), y(rhs.E[0]) {};
+	v2(const swizzle_2d<v2<T>, 1, 1>& rhs) : x(rhs.E[1]), y(rhs.E[1]) {};
+	v2(const swizzle_2d<v2<T>, 0, 1>& rhs) : x(rhs.E[0]), y(rhs.E[1]) {};
+
+	v2& operator=(const swizzle_2d<v2<T>, 0, 0>& rhs) { x = rhs.E[0]; y = rhs.E[0]; return *this; };
+	v2& operator=(const swizzle_2d<v2<T>, 1, 1>& rhs) { x = rhs.E[1]; y = rhs.E[1]; return *this; };
+	v2& operator=(const swizzle_2d<v2<T>, 0, 1>& rhs) { x = rhs.E[0]; y = rhs.E[1]; return *this; };
 
     T& operator[](uint32_t Idx)
     {
@@ -379,7 +392,25 @@ struct v3
 
     v3(T V) : x(V), y(V), z(V) {};
     v3(T _x, T _y, T _z) : x(_x), y(_y), z(_z) {};
+	v3(const v3<T>& rhs) : x(rhs.x), y(rhs.y), z(rhs.z) {};
 	v3(const v4<T>& rhs) : x(rhs.x), y(rhs.y), z(rhs.z) {};
+
+	v3(const swizzle_2d<v2<T>, 0, 0>& rhs) : x(rhs.E[0]), y(rhs.E[0]) {};
+	v3(const swizzle_2d<v2<T>, 1, 1>& rhs) : x(rhs.E[1]), y(rhs.E[1]) {};
+	v3(const swizzle_2d<v2<T>, 0, 1>& rhs) : x(rhs.E[0]), y(rhs.E[1]) {};
+	v3(const swizzle_3d<v3<T>, 0, 0, 0>& rhs) : x(rhs.E[0]), y(rhs.E[0]), z(rhs.E[0]) {};
+	v3(const swizzle_3d<v3<T>, 1, 1, 1>& rhs) : x(rhs.E[1]), y(rhs.E[1]), z(rhs.E[1]) {};
+	v3(const swizzle_3d<v3<T>, 2, 2, 2>& rhs) : x(rhs.E[2]), y(rhs.E[2]), z(rhs.E[2]) {};
+	v3(const swizzle_3d<v3<T>, 0, 1, 2>& rhs) : x(rhs.E[0]), y(rhs.E[1]), z(rhs.E[2]) {};
+
+
+	v3& operator=(const swizzle_2d<v2<T>, 0, 0>& rhs) { x = rhs.E[0]; y = rhs.E[0]; return *this; };
+	v3& operator=(const swizzle_2d<v2<T>, 1, 1>& rhs) { x = rhs.E[1]; y = rhs.E[1]; return *this; };
+	v3& operator=(const swizzle_2d<v2<T>, 0, 1>& rhs) { x = rhs.E[0]; y = rhs.E[1]; return *this; };
+	v3& operator=(const swizzle_3d<v3<T>, 0, 0, 0>& rhs) { x = rhs.E[0], y = rhs.E[0], z = rhs.E[0]; return *this; }
+    v3& operator=(const swizzle_3d<v3<T>, 1, 1, 1>& rhs) { x = rhs.E[1], y = rhs.E[1], z = rhs.E[1]; return *this; }
+    v3& operator=(const swizzle_3d<v3<T>, 2, 2, 2>& rhs) { x = rhs.E[2], y = rhs.E[2], z = rhs.E[2]; return *this; }
+    v3& operator=(const swizzle_3d<v3<T>, 0, 1, 2>& rhs) { x = rhs.E[0], y = rhs.E[1], z = rhs.E[2]; return *this; }
 
     T& operator[](uint32_t Idx)
     {
@@ -608,10 +639,36 @@ struct v4
     v4(v2<T> V) : x(V.x), y(V.y), z(0), w(0) {};
     v4(v3<T> V) : x(V.x), y(V.y), z(V.z), w(0) {};
     v4(v3<T> V, T _w) : x(V.x), y(V.y), z(V.z), w(_w) {};
-    //v4(const v4<T>& V) : x(V.x), y(V.y), z(V.z), w(V.w) {};
+    v4(const v4<T>& V) : x(V.x), y(V.y), z(V.z), w(V.w) {};
     template<typename U>
     v4(U _x, U _y, U _z, U _w) : x(_x), y(_y), z(_z), w(_w) {};
     v4(T _x, T _y, T _z, T _w) : x(_x), y(_y), z(_z), w(_w) {};
+
+	v4(const swizzle_2d<v2<T>, 0, 0>& rhs) : x(rhs.E[0]), y(rhs.E[0]) {};
+	v4(const swizzle_2d<v2<T>, 1, 1>& rhs) : x(rhs.E[1]), y(rhs.E[1]) {};
+	v4(const swizzle_2d<v2<T>, 0, 1>& rhs) : x(rhs.E[0]), y(rhs.E[1]) {};
+	v4(const swizzle_3d<v3<T>, 0, 0, 0>& rhs) : x(rhs.E[0]), y(rhs.E[0]), z(rhs.E[0]) {};
+	v4(const swizzle_3d<v3<T>, 1, 1, 1>& rhs) : x(rhs.E[1]), y(rhs.E[1]), z(rhs.E[1]) {};
+	v4(const swizzle_3d<v3<T>, 2, 2, 2>& rhs) : x(rhs.E[2]), y(rhs.E[2]), z(rhs.E[2]) {};
+	v4(const swizzle_3d<v3<T>, 0, 1, 2>& rhs) : x(rhs.E[0]), y(rhs.E[1]), z(rhs.E[2]) {};
+	v4(const swizzle_4d<v3<T>, 0, 0, 0, 0>& rhs) : x(rhs.E[0]), y(rhs.E[0]), z(rhs.E[0]), w(rhs.E[0]) {};
+	v4(const swizzle_4d<v3<T>, 1, 1, 1, 1>& rhs) : x(rhs.E[1]), y(rhs.E[1]), z(rhs.E[1]), w(rhs.E[1]) {};
+	v4(const swizzle_4d<v3<T>, 2, 2, 2, 2>& rhs) : x(rhs.E[2]), y(rhs.E[2]), z(rhs.E[2]), w(rhs.E[2]) {};
+	v4(const swizzle_4d<v3<T>, 3, 3, 3, 3>& rhs) : x(rhs.E[3]), y(rhs.E[3]), z(rhs.E[3]), w(rhs.E[3]) {};
+	v4(const swizzle_4d<v3<T>, 0, 1, 2, 3>& rhs) : x(rhs.E[0]), y(rhs.E[1]), z(rhs.E[2]), w(rhs.E[3]) {};
+
+	v4& operator=(const swizzle_2d<v2<T>, 0, 0>& rhs) { x = rhs.E[0]; y = rhs.E[0]; return *this; };
+	v4& operator=(const swizzle_2d<v2<T>, 1, 1>& rhs) { x = rhs.E[1]; y = rhs.E[1]; return *this; };
+	v4& operator=(const swizzle_2d<v2<T>, 0, 1>& rhs) { x = rhs.E[0]; y = rhs.E[1]; return *this; };
+	v4& operator=(const swizzle_3d<v3<T>, 0, 0, 0>& rhs) { x = rhs.E[0], y = rhs.E[0], z = rhs.E[0]; return *this; }
+    v4& operator=(const swizzle_3d<v3<T>, 1, 1, 1>& rhs) { x = rhs.E[1], y = rhs.E[1], z = rhs.E[1]; return *this; }
+    v4& operator=(const swizzle_3d<v3<T>, 2, 2, 2>& rhs) { x = rhs.E[2], y = rhs.E[2], z = rhs.E[2]; return *this; }
+    v4& operator=(const swizzle_3d<v3<T>, 0, 1, 2>& rhs) { x = rhs.E[0], y = rhs.E[1], z = rhs.E[2]; return *this; }
+    v4& operator=(const swizzle_4d<v3<T>, 0, 0, 0, 0>& rhs) { x = rhs.E[0], y = rhs.E[0], z = rhs.E[0], w = rhs.E[0]; return *this; }
+    v4& operator=(const swizzle_4d<v3<T>, 1, 1, 1, 1>& rhs) { x = rhs.E[1], y = rhs.E[1], z = rhs.E[1], w = rhs.E[1]; return *this; }
+    v4& operator=(const swizzle_4d<v3<T>, 2, 2, 2, 2>& rhs) { x = rhs.E[2], y = rhs.E[2], z = rhs.E[2], w = rhs.E[2]; return *this; }
+    v4& operator=(const swizzle_4d<v3<T>, 3, 3, 3, 3>& rhs) { x = rhs.E[3], y = rhs.E[3], z = rhs.E[3], w = rhs.E[3]; return *this; }
+	v4& operator=(const swizzle_4d<v3<T>, 0, 1, 2, 3>& rhs) { x = rhs.E[0], y = rhs.E[1], z = rhs.E[2], w = rhs.E[3]; return *this; }
 
     T& operator[](uint32_t Idx)
     {
@@ -1303,29 +1360,23 @@ Cross(vec3 A, vec3 B)
     return Result;
 }
 
-union mat3
+struct mat3
 {
-    struct
-    {
-        float E11, E12, E13;
-        float E21, E22, E23;
-        float E31, E32, E33;
-    };
-    struct
-    {
-        vec3 Line0;
-        vec3 Line1;
-        vec3 Line2;
-    };
-    vec3 Lines[3];
-    float E[3][3];
-    float V[9];
+	union
+	{
+		struct
+		{
+			float E11, E12, E13;
+			float E21, E22, E23;
+			float E31, E32, E33;
+		};
+		float E[3][3];
+		float V[9];
+	};
 
     mat3 operator=(const mat3& rhs)
     {
-        this->Line0 = rhs.Line0;
-        this->Line1 = rhs.Line1;
-        this->Line2 = rhs.Line2;
+		memcpy(V, rhs.V, sizeof(float) * 9);
         return *this;
     }
 
@@ -1408,33 +1459,25 @@ Inverse(mat3 M)
 	return Result;
 }
 
-union alignas(16) mat4
+struct alignas(16) mat4
 {
-    struct
-    {
-        float E11, E12, E13, E14;
-        float E21, E22, E23, E24;
-        float E31, E32, E33, E34;
-        float E41, E42, E43, E44;
-    };
-    struct
-    {
-        vec4 Line0;
-        vec4 Line1;
-        vec4 Line2;
-        vec4 Line3;
-    };
-    vec4 Lines[4];
-    float E[4][4];
-    float V[16];
-    __m128 I[4];
+	union
+	{
+		struct
+		{
+			float E11, E12, E13, E14;
+			float E21, E22, E23, E24;
+			float E31, E32, E33, E34;
+			float E41, E42, E43, E44;
+		};
+		float E[4][4];
+		float V[16];
+		__m128 I[4];
+	};
 
     mat4 operator=(const mat4& rhs)
     {
-        this->Line0 = rhs.Line0;
-        this->Line1 = rhs.Line1;
-        this->Line2 = rhs.Line2;
-        this->Line3 = rhs.Line3;
+		memcpy(V, rhs.V, sizeof(float) * 16);
         return *this;
     }
 
@@ -1682,21 +1725,21 @@ operator*(const mat4& lhs, const mat4& rhs)
 {
     mat4 res = {};
 
-    __m128 v0 = {};
-    __m128 v1 = {};
-    __m128 v2 = {};
-    __m128 v3 = {};
+    __m128 line0 = {};
+    __m128 line1 = {};
+    __m128 line2 = {};
+    __m128 line3 = {};
 
     for(int idx = 0; idx < 4; ++idx)
     {
-        v0 = _mm_set1_ps(lhs.V[0+idx*4]);
-        v1 = _mm_set1_ps(lhs.V[1+idx*4]);
-        v2 = _mm_set1_ps(lhs.V[2+idx*4]);
-        v3 = _mm_set1_ps(lhs.V[3+idx*4]);
-        res.I[idx] = _mm_fmadd_ps(rhs.I[0], v0, res.I[idx]);
-        res.I[idx] = _mm_fmadd_ps(rhs.I[1], v1, res.I[idx]);
-        res.I[idx] = _mm_fmadd_ps(rhs.I[2], v2, res.I[idx]);
-        res.I[idx] = _mm_fmadd_ps(rhs.I[3], v3, res.I[idx]);
+        line0 = _mm_set1_ps(lhs.V[0+idx*4]);
+        line1 = _mm_set1_ps(lhs.V[1+idx*4]);
+        line2 = _mm_set1_ps(lhs.V[2+idx*4]);
+        line3 = _mm_set1_ps(lhs.V[3+idx*4]);
+        res.I[idx] = _mm_fmadd_ps(rhs.I[0], line0, res.I[idx]);
+        res.I[idx] = _mm_fmadd_ps(rhs.I[1], line1, res.I[idx]);
+        res.I[idx] = _mm_fmadd_ps(rhs.I[2], line2, res.I[idx]);
+        res.I[idx] = _mm_fmadd_ps(rhs.I[3], line3, res.I[idx]);
     }
 
     return res;
@@ -1704,22 +1747,14 @@ operator*(const mat4& lhs, const mat4& rhs)
 
 struct quat
 {
-    union
-	{
-		struct 
-		{
-			vec3 q;
-			float w;
-		};
-		vec4 v;
-	};
+	vec4 v;
 
 	quat() = default;
 
-	quat(float x_, float y_, float z_, float w_){w = w_; q.x = x_; q.y = y_; q.z = z_;};
-	quat(vec3 q_, float w_){w = w_; q = q_;};
-	quat(v4<float> v_){v = v_;};
-	quat(float angle, vec3 axis){w = cos(angle / 2), q = axis * vec3(sin(angle/2));};
+	quat(float x_, float y_, float z_, float w_){ v.x = x_; v.y = y_; v.z = z_; v.w = w_; };
+	quat(vec3 q_, float w_){ v.w = w_; v.x = q_.x; v.y = q_.y; v.z = q_.z; };
+	quat(v4<float> v_){ v = v_; };
+	quat(float angle, vec3 axis){ v = vec4(axis * vec3(sin(angle/2)), cos(angle / 2)); };
 
 	quat(const quat& Other){ v = Other.v; };
 	quat& operator=(const quat& Other)
@@ -1730,7 +1765,7 @@ struct quat
 
 	quat Inverse()
 	{
-		return quat(-q.x, -q.y, -q.z, w);
+		return quat(-v.x, -v.y, -v.z, v.w);
 	}
 
 	quat Normalize()
@@ -1754,12 +1789,14 @@ struct quat
 
 quat operator+(quat lhs, quat rhs)
 {
-	return quat(lhs.q.x + rhs.q.x, lhs.q.y + rhs.q.y, lhs.q.z + rhs.q.z, lhs.w + rhs.w);
+	return quat(lhs.v.x + rhs.v.x, lhs.v.y + rhs.v.y, lhs.v.z + rhs.v.z, lhs.v.w + rhs.v.w);
 }
 
 quat operator*(quat lhs, quat rhs)
 {
-	return quat(lhs.q * rhs.w + rhs.q * lhs.w + Cross(lhs.q, rhs.q), -lhs.q.Dot(rhs.q) + lhs.w * rhs.w);
+	vec3 lhsq = lhs.v.xyz;
+	vec3 rhsq = rhs.v.xyz;
+	return quat(lhsq * rhs.v.w + rhsq * lhs.v.w + Cross(lhsq, rhsq), -lhsq.Dot(rhsq) + lhs.v.w * rhs.v.w);
 }
 
 inline mat4

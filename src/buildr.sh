@@ -1,0 +1,36 @@
+#! /usr/bin/bash
+
+set VulkanInc="%VULKAN_SDK%\Include"
+set VulkanLib="%VULKAN_SDK%\Lib"
+
+CommonCompFlags="-std=c++2a -O3 -ffast-math -w -Wall -Wextra -Wno-error -pthread -MD -frtti -fPIC -march=native"
+
+PlatformCppFiles="../src/linux_main.cpp"
+
+DepthCascades="-DDEPTH_CASCADES_COUNT=3"
+UseDebugColorBlend="-DDEBUG_COLOR_BLEND=0"
+GBufferCount="-DGBUFFER_COUNT=5"
+LightSourcesMax="-DLIGHT_SOURCES_MAX_COUNT=256"
+
+mkdir -p ../build ../build/scenes
+
+pushd ../build/scenes
+for f in ../../src/game_scenes/*.cpp; do
+    FileName="$f"
+    BaseName=$(basename "${FileName%.cpp}")
+    ExportName=""
+
+    IFS='_' read -ra tokens <<< "$BaseName"
+    for token in "${tokens[@]}"; do
+        ExportName+=$(echo "$token" | sed 's/.*/\u&/')
+    done
+
+    g++ $CommonCompFlags -I../../src -I../../src/core/vendor "$FileName" -lassimp -shared -o "$BaseName" $DepthCascades -DENGINE_EXPORT_CODE
+done
+popd
+
+pushd ../build
+g++ $CommonCompFlags ../src/main.cpp $PlatformCppFiles -I../src -I../src/core/vendor -o "Cynosure Engine" -ldl -lglfw -lglslang -lvulkan -lMachineIndependent -lOSDependent -lGenericCodeGen -lOGLCompiler -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt -lglslang-default-resource-limits -lSPVRemapper -lspirv-cross-core -lspirv-cross-cpp -lspirv-cross-glsl -lspirv-cross-hlsl -lassimp -lpthread $UseDebugColorBlend $DepthCascades $GBufferCount $LightSourcesMax
+popd
+
+exit 0

@@ -1,9 +1,11 @@
 #pragma once
 
-// TODO: Finish this one for linux. FIXES
 #include <time.h>
+#include <dlfcn.h>
 
-#include "..\..\vendor\imgui\backends\imgui_impl_glfw.h"
+#include "core/vendor/imgui/backends/imgui_impl_glfw.h"
+
+#define library_block void*
 
 class window
 {
@@ -18,7 +20,7 @@ public:
 
 	void NewFrame() {ImGui_ImplGlfw_NewFrame();};
 	void EmitEvents();
-	void InitGraphics();
+	void InitVulkanGraphics();
 
 	static std::optional<int> ProcessMessages();
 	static double GetTimestamp();
@@ -27,10 +29,10 @@ public:
 
 	bool IsRunning(){return IsWindowRunning;}
 
-	static void* GetProcAddr(HMODULE& Library, const char* SourceName, const char* FuncName);
-	static void  FreeLoadedLibrary(HMODULE& Library);
+	static void* GetProcAddr(library_block& Library, const char* SourceName, const char* FuncName);
+	static void  FreeLoadedLibrary(library_block& Library);
 
-	std::unique_ptr<renderer_backend> Gfx;
+	global_graphics_context Gfx;
 
 	static button Buttons[0xF];
 	static event_bus EventsDispatcher;

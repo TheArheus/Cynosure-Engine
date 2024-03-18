@@ -262,8 +262,8 @@ GenerateMeshlets()
 mesh::aabb mesh::
 GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords)
 {
-	r32 MinX = FLT_MAX, MinY = FLT_MAX, MinZ = FLT_MAX;
-	r32 MaxX = -FLT_MAX, MaxY = -FLT_MAX, MaxZ = -FLT_MAX;
+	r32 MinX = std::numeric_limits<float>::max(), MinY = std::numeric_limits<float>::max(), MinZ = std::numeric_limits<float>::max();
+	r32 MaxX = std::numeric_limits<float>::min(), MaxY = std::numeric_limits<float>::min(), MaxZ = std::numeric_limits<float>::min();
 
 	for(const vec3& Coord : Coords)
 	{

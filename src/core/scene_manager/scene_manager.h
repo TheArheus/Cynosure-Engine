@@ -4,7 +4,7 @@ struct scene_manager
 {
 	struct scene_info
 	{
-		HMODULE Module;
+		library_block Module;
 		std::string Name;
 		std::string Path;
 		std::filesystem::file_time_type LastFileCreation;

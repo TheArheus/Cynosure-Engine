@@ -19,9 +19,12 @@ LoadScene(const std::filesystem::directory_entry& SceneCode)
 	SceneFileName.erase(std::remove(SceneFileName.begin(), SceneFileName.end(), '_'), SceneFileName.end());
 	std::string CreateFunctionName = SceneFileName + "Create";
 
-	CopyFile(SceneCode.path().string().c_str(), TempSceneCode.path().string().c_str(), FALSE);
+	std::ifstream SourceFile(SceneCode.path(), std::ios::binary);
+    std::ofstream DestFile(TempSceneCode.path(), std::ios::binary);
+    DestFile << SourceFile.rdbuf();
+	DestFile.close();
 
-	HMODULE SceneLibrary;
+	library_block SceneLibrary;
 	game_scene_create* NewGameScene = (game_scene_create*)window::GetProcAddr(SceneLibrary, TempSceneCode.path().string().c_str(), CreateFunctionName.c_str());
 
 	if(NewGameScene)
@@ -91,8 +94,12 @@ UpdateScenes(std::string ScenesPath)
 					}
 
 					window::FreeLoadedLibrary(Infos[SceneIdx].Module);
-					DeleteFileA(TempSceneCode.path().string().c_str());
-					CopyFile(SceneCode.path().string().c_str(), TempSceneCode.path().string().c_str(), FALSE);
+
+					std::filesystem::remove(TempSceneCode.path());
+					std::ifstream SourceFile(SceneCode.path(), std::ios::binary);
+					std::ofstream DestFile(TempSceneCode.path(), std::ios::binary);
+					DestFile << SourceFile.rdbuf();
+					DestFile.close();
 
 					game_scene_create* NewGameScene = (game_scene_create*)window::GetProcAddr(Infos[SceneIdx].Module, TempSceneCode.path().string().c_str(), CreateFunctionName.c_str());
 

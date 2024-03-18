@@ -256,7 +256,7 @@ void window::InitDirectx12Graphics()
 }
 
 void* window::
-GetProcAddr(HMODULE& Library, const char* SourceName, const char* FuncName)
+GetProcAddr(library_block& Library, const char* SourceName, const char* FuncName)
 {
 	Library = LoadLibraryA(SourceName);
 
@@ -266,7 +266,7 @@ GetProcAddr(HMODULE& Library, const char* SourceName, const char* FuncName)
 }
 
 void window::
-FreeLoadedLibrary(HMODULE& Library)
+FreeLoadedLibrary(library_block& Library)
 {
 	FreeLibrary(Library);
 }

@@ -1,5 +1,5 @@
 
-#include "..\..\vendor\imgui\backends\imgui_impl_glfw.cpp"
+#include "core/vendor/imgui/backends/imgui_impl_glfw.cpp"
 
 button window::Buttons[0xF] = {};
 bool window::IsWindowRunning = false;
@@ -24,6 +24,9 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
     glfwSetWindowSizeCallback(Handle, WindowSizeCallback);
     glfwSetCursorPosCallback(Handle, CursorPosCallback);
     glfwSetScrollCallback(Handle, ScrollCallback);
+
+	ImGui::CreateContext();
+	ImGui_ImplGlfw_InitForVulkan(Handle, true);
 }
 
 window::window(const char* _Name)
@@ -149,25 +152,26 @@ void window::SetTitle(std::string& Title)
 	glfwSetWindowTitle(Handle, (std::string(Name) + " - " + Title).c_str());
 }
 
-void window::InitGraphics()
+void window::InitVulkanGraphics()
 {
-	Gfx = std::make_unique<renderer_backend>(this);
+	renderer_backend* NewBackend = new vulkan_backend(this);
+	Gfx = global_graphics_context(NewBackend, backend_type::vulkan);
 }
 
 void* window::
-GetProcAddr(HMODULE& Library, const char* SourceName, const char* FuncName)
+GetProcAddr(library_block& Library, const char* SourceName, const char* FuncName)
 {
-	Library = LoadLibraryA(SourceName);
+	Library = dlopen(SourceName, RTLD_LAZY);
 
-	void* Result = (void*)GetProcAddress(Library, FuncName);
+	void* Result = (void*)dlsym(Library, FuncName);
 
 	return Result;
 }
 
 void window::
-FreeLoadedLibrary(HMODULE& Library)
+FreeLoadedLibrary(library_block& Library)
 {
-	FreeLibrary(Library);
+	if(Library) dlclose(Library);
 }
 
 // Returns time in milliseconds
@@ -176,5 +180,5 @@ double window::GetTimestamp()
 	timespec ResultTime;
 	clock_gettime(CLOCK_MONOTONIC, &ResultTime);
 
-	return (double)ResultTime->tv_sec * 1000.0 + (double)ResultTime->tv_nsec / 1e6;
+	return (double)ResultTime.tv_sec * 1000.0 + (double)ResultTime.tv_nsec / 1e6;
 }

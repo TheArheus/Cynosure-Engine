@@ -335,6 +335,8 @@ void main()
 	float SsrConf = 1.0;
 	float Error   = 1.0;
 	bool  Hit     = false;
+
+	if(Specular != 0.0)
 	{
 		vec3 Tangent   = normalize(vec3(Rotation2D, 0) - FragmentNormalVS * dot(vec3(Rotation2D, 0), FragmentNormalVS));
 		vec3 Bitangent = cross(FragmentNormalVS, Tangent);

@@ -23,7 +23,11 @@
 
 #include <spirv_cross/spirv_glsl.hpp>
 #include <spirv_cross/spirv_hlsl.hpp>
-#include <spirv-headers/spirv.h>
+#if _WIN32
+	#include <spirv-headers/spirv.h>
+#else
+	#include <spirv/1.2/spirv.h>
+#endif
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <imgui/imgui.h>

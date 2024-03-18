@@ -5,9 +5,13 @@
 #include "core/scene_manager/scene_manager.cpp"
 #include "core/mesh_loader/mesh.cpp"
 #include "core/gfx/renderer.cpp"
+
+#if _WIN32
 #include <D3D12MemAlloc.cpp>
+#endif
 
 #include <random>
+#include <string_view>
 
 
 // TODO: Handle dynamic entities that updates every frame
@@ -25,12 +29,11 @@
 // TODO: Implement ray  tracing pipeline in the future
 
 
-
-int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
+[[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
 	window Window(1280, 720, "3D Renderer");
-	//Window.InitVulkanGraphics();
-	Window.InitDirectx12Graphics();
+	Window.InitVulkanGraphics();
+	//Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
 	global_pipeline_context* PipelineContext = Window.Gfx.CreateGlobalPipelineContext();
 
@@ -118,19 +121,4 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	free(MemoryBlock);
 
 	return 0;
-}
-
-int main(int argc, char* argv[])
-{
-	std::string CommandLine;
-	for(int i = 1; i < argc; ++i)
-	{
-		CommandLine += std::string(argv[i]);
-		if(i != (argc - 1))
-		{
-			CommandLine += " ";
-		}
-	}
-
-	return WinMain(0, 0, const_cast<char*>(CommandLine.c_str()), SW_SHOWNORMAL);
 }

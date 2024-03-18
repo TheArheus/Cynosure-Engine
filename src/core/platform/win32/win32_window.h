@@ -4,6 +4,7 @@
 #include "..\..\vendor\imgui\backends\imgui_impl_win32.h"
 
 #define ProcFunc(name) LRESULT name(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)
+#define library_block HMODULE
 
 class window
 {
@@ -62,8 +63,8 @@ public:
 	static std::optional<int> ProcessMessages();
 	static double GetTimestamp();
 
-	static void* GetProcAddr(HMODULE& Library, const char* SourceName, const char* FuncName);
-	static void  FreeLoadedLibrary(HMODULE& Library);
+	static void* GetProcAddr(library_block& Library, const char* SourceName, const char* FuncName);
+	static void  FreeLoadedLibrary(library_block& Library);
 
 	static event_bus EventsDispatcher;
 

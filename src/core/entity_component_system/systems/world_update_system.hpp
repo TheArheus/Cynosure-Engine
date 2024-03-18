@@ -149,7 +149,10 @@ struct world_update_system : entity_system
 			RoundOffset = RoundOffset * 2.0f / GlobalShadowWidth;
 			RoundOffset.z = 0.0f;
 			RoundOffset.w = 0.0f;
-			WorldUpdate.LightProj[CascadeIdx - 1].Line3 += RoundOffset;
+			WorldUpdate.LightProj[CascadeIdx - 1].E41 += RoundOffset.x;
+			WorldUpdate.LightProj[CascadeIdx - 1].E42 += RoundOffset.y;
+			WorldUpdate.LightProj[CascadeIdx - 1].E43 += RoundOffset.z;
+			WorldUpdate.LightProj[CascadeIdx - 1].E44 += RoundOffset.w;
 		}
 	}
 
@@ -199,26 +202,26 @@ struct world_update_system : entity_system
 		{
 			quat ViewDirQuat(ViewDir, 0);
 			quat RotQuat( CameraSpeed * 2, vec3(0, 1, 0));
-			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).v.xyz;
 		}
 		if(Event.Code == EC_RIGHT)
 		{
 			quat ViewDirQuat(ViewDir, 0);
 			quat RotQuat(-CameraSpeed * 2, vec3(0, 1, 0));
-			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).v.xyz;
 		}
 		vec3 U = Cross(vec3(0, 1, 0), ViewDir);
 		if(Event.Code == EC_UP)
 		{
 			quat ViewDirQuat(ViewDir, 0);
 			quat RotQuat( CameraSpeed, U);
-			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).v.xyz;
 		}
 		if(Event.Code == EC_DOWN)
 		{
 			quat ViewDirQuat(ViewDir, 0);
 			quat RotQuat(-CameraSpeed, U);
-			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).v.xyz;
 		}
 	}
 };

@@ -7,7 +7,7 @@
 	do { \
 		VkResult CallResult = call; \
 		if(!IsVulkanResultSuccess(CallResult)) { \
-			printf("[DEBUG] %s\n", VulkanResultString(CallResult, __VA_ARGS__)); \
+			printf("[DEBUG] %s\n", VulkanResultString(CallResult, ##__VA_ARGS__)); \
 			assert(CallResult == VK_SUCCESS); \
 		} \
 	} while(0);

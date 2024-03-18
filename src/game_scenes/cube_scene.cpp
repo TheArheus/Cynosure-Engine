@@ -1,7 +1,7 @@
 
 #include <intrinsics.h> 
-#include <core\mesh_loader\mesh.cpp>
-#include <core\entity_component_system\entity_systems.cpp>
+#include <core/mesh_loader/mesh.cpp>
+#include <core/entity_component_system/entity_systems.cpp>
 
 
 // TODO: RequireSystem<system_type>() function so that I could add them later in other parts of the application

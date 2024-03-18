@@ -1,3 +1,5 @@
+#pragma once
+
 #define _CRT_SECURE_NO_WARNINGS
 
 #ifdef ENGINE_EXPORT_CODE
@@ -31,6 +33,7 @@
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
+#include <list>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "core/vendor/stb_image.h"
@@ -310,10 +313,10 @@ struct global_world_data
 #define GameSceneStartFunc()  void Start()
 #define GameSceneUpdateFunc() void Update()
 
-#include "core\allocators\allocators.hpp"
-#include "core\events\events.hpp"
-#include "core\entity_component_system\entity_systems.h"
-#include "core\entity_component_system\components.h"
+#include "core/allocators/allocators.hpp"
+#include "core/events/events.hpp"
+#include "core/entity_component_system/entity_systems.h"
+#include "core/entity_component_system/components.h"
 
 struct scene
 {
