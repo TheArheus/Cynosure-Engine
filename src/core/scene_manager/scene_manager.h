@@ -23,7 +23,7 @@ struct scene_manager
 
 	bool DebugMeshesDrawEnabled = true;
 
-	scene_manager(window& Window, std::string ScenesPath = "..\\build\\scenes\\")
+	scene_manager(window& Window, std::string ScenesPath = "../build/scenes/")
 	{
 		WorldUpdate = {};
 		MeshCompCullingCommonData = {};
@@ -33,8 +33,8 @@ struct scene_manager
 
 	// TODO: Load a scenes by their file names. Load and unload if scene was recompiled(many if needed, but for this I need to check this every times in the loop I guess but that is a lot of work and think about something better)
 	void LoadScene(const std::filesystem::directory_entry& SceneCode);
-	void LoadAllScenes(std::string ScenesPath = "..\\build\\scenes\\");
-	void UpdateScenes(std::string ScenesPath = "..\\build\\scenes\\");
+	void LoadAllScenes(std::string ScenesPath = "../build/scenes/");
+	void UpdateScenes(std::string ScenesPath = "../build/scenes/");
 
 	bool IsCurrentSceneInitialized(){return Infos[CurrentScene].IsInitialized;}
 

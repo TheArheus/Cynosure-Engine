@@ -16,24 +16,24 @@ struct cube_scene : scene
 		GlobalLightPos = vec3(-4, 4, 2);
 
 		entity CubeObject = Registry.CreateEntity();
-		CubeObject.AddComponent<mesh_component>("..\\assets\\cube.obj", generate_aabb | generate_sphere);
+		CubeObject.AddComponent<mesh_component>("../assets/cube.obj", generate_aabb | generate_sphere);
 		CubeObject.AddComponent<static_instances_component>();
 		CubeObject.AddComponent<debug_component>();
-		CubeObject.AddComponent<diffuse_component>("..\\assets\\bricks4\\brick-wall.diff.tga");
-		CubeObject.AddComponent<normal_map_component>("..\\assets\\bricks4\\brick-wall.norm.tga");
-		CubeObject.AddComponent<specular_map_component>("..\\assets\\bricks4\\brick-wall.spec.tga");
-		CubeObject.AddComponent<height_map_component>("..\\assets\\bricks4\\brick-wall.disp.png");
+		CubeObject.AddComponent<diffuse_component>("../assets/bricks4/brick-wall.diff.tga");
+		CubeObject.AddComponent<normal_map_component>("../assets/bricks4/brick-wall.norm.tga");
+		CubeObject.AddComponent<specular_map_component>("../assets/bricks4/brick-wall.spec.tga");
+		CubeObject.AddComponent<height_map_component>("../assets/bricks4/brick-wall.disp.png");
 
 		entity PlaneObject = Registry.CreateEntity();
-		PlaneObject.AddComponent<mesh_component>("..\\assets\\cube.obj", generate_aabb | generate_sphere);
+		PlaneObject.AddComponent<mesh_component>("../assets/cube.obj", generate_aabb | generate_sphere);
 		PlaneObject.AddComponent<static_instances_component>();
 		PlaneObject.AddComponent<debug_component>();
 
 		//entity VampireEntity = Registry.CreateEntity();
-		//VampireEntity.AddComponent<mesh_component>("..\\assets\\dancing vampire\\dancing_vampire.dae");
+		//VampireEntity.AddComponent<mesh_component>("../assets/dancing vampire/dancing_vampire.dae");
 
 		//entity BobEntity = Registry.CreateEntity();
-		//BobEntity.AddComponent<mesh_component>("..\\assets\\bob_lamp_update\\bob_lamp_update.md5mesh");
+		//BobEntity.AddComponent<mesh_component>("../assets/bob_lamp_update/bob_lamp_update.md5mesh");
 
 		entity CameraObject = Registry.CreateEntity();
 		CameraObject.AddComponent<camera_component>(45.0f, 0.01f, 100.0f, false);

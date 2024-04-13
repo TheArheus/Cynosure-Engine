@@ -396,8 +396,10 @@ VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
 // TODO: Parse for push constant sizes
 // TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
 VkShaderModule vulkan_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines)
+LoadShaderModule(const char* RelPath, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines)
 {
+	std::string TempPath = std::filesystem::canonical(std::string(RelPath)).string();
+	const char* Path = TempPath.c_str();
 	auto FoundCompiledShader = CompiledShaders.find(Path);
 	if(FoundCompiledShader != CompiledShaders.end())
 	{

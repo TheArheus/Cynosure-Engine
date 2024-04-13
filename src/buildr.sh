@@ -25,7 +25,7 @@ for f in ../../src/game_scenes/*.cpp; do
         ExportName+=$(echo "$token" | sed 's/.*/\u&/')
     done
 
-    g++ $CommonCompFlags -I../../src -I../../src/core/vendor "$FileName" -lassimp -shared -o "$BaseName" $DepthCascades -DENGINE_EXPORT_CODE
+    g++ $CommonCompFlags -I../../src -I../../src/core/vendor "$FileName" -lassimp -shared -o "$BaseName.lscene" $DepthCascades -DENGINE_EXPORT_CODE
 done
 popd
 

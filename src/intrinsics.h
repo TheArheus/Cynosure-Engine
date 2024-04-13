@@ -279,7 +279,14 @@ struct texture_data
 
 	void Load(const char* Path)
 	{
-		Data = (void*)stbi_load(Path, (int*)&Width, (int*)&Height, (int*)&Depth, 4);
+		std::string TempPath = std::filesystem::canonical(std::string(Path)).string();
+		Data = (void*)stbi_load(TempPath.c_str(), (int*)&Width, (int*)&Height, (int*)&Depth, 4);
+	}
+
+	void Load(const std::string& Path)
+	{
+		std::string TempPath = std::filesystem::canonical(Path).string();
+		Data = (void*)stbi_load(TempPath.c_str(), (int*)&Width, (int*)&Height, (int*)&Depth, 4);
 	}
 
 	void Delete()

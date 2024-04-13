@@ -47,7 +47,11 @@ LoadAllScenes(std::string ScenesPath)
 {
 	for(const std::filesystem::directory_entry& SceneCode : std::filesystem::directory_iterator(ScenesPath))
 	{
+#if _WIN32
 		if(SceneCode.is_regular_file() && SceneCode.path().extension() == ".dll" && SceneCode.path().filename().string().find(".temp.dll") == std::string::npos) 
+#else
+		if(SceneCode.is_regular_file() && SceneCode.path().extension() == ".lscene" && SceneCode.path().filename().string().find(".temp.lscene") == std::string::npos) 
+#endif
 		{
 			LoadScene(SceneCode);
         }
@@ -61,7 +65,11 @@ UpdateScenes(std::string ScenesPath)
 	u32 SceneIdx = 0;
 	for(const auto& SceneCode : std::filesystem::directory_iterator(ScenesPath))
 	{
+#if _WIN32
 		if(SceneCode.is_regular_file() && SceneCode.path().extension() == ".dll" && SceneCode.path().filename().string().find(".temp.dll") == std::string::npos) 
+#else
+		if(SceneCode.is_regular_file() && SceneCode.path().extension() == ".lscene" && SceneCode.path().filename().string().find(".temp.lscene") == std::string::npos) 
+#endif
 		{
             std::string SceneFileName = SceneCode.path().string();
 

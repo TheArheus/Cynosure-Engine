@@ -1,7 +1,7 @@
 
 #ifndef WIN32_WINDOWS_H_
 
-#include "..\..\vendor\imgui\backends\imgui_impl_win32.h"
+#include "../../vendor/imgui/backends/imgui_impl_win32.h"
 
 #define ProcFunc(name) LRESULT name(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)
 #define library_block HMODULE

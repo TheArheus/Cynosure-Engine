@@ -1,5 +1,5 @@
 
-#include "..\..\vendor\imgui\backends\imgui_impl_win32.cpp"
+#include "../../vendor/imgui/backends/imgui_impl_win32.cpp"
 
 window::window_class window::WindowClass;
 LARGE_INTEGER window::TimerFrequency;

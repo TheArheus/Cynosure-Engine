@@ -74,12 +74,14 @@ struct mesh_component
 
 	mesh_component(const std::string& Path, u32 BoundingGeneration = 0)
 	{
-		Data.Load(Path, BoundingGeneration);
+		std::string TempPath = std::filesystem::canonical(std::string(Path)).string();
+		Data.Load(TempPath.c_str(), BoundingGeneration);
 	}
 	
 	void LoadMesh(const std::string& Path, u32 BoundingGeneration = 0)
 	{
-		Data.Load(Path, BoundingGeneration);
+		std::string TempPath = std::filesystem::canonical(std::string(Path)).string();
+		Data.Load(TempPath.c_str(), BoundingGeneration);
 	}
 };
 
@@ -166,40 +168,48 @@ struct particle_component
 
 struct diffuse_component
 {
-	const char* Data;
+	std::string Data;
 
 	diffuse_component() = default;
 	diffuse_component(const char* Path)
-		: Data(Path)
-	{}
+	{
+		std::string TempPath = std::filesystem::canonical(std::string(Path)).string();
+		Data = std::move(TempPath);
+	}
 };
 
 struct normal_map_component
 {
-	const char* Data;
+	std::string Data;
 
 	normal_map_component() = default;
 	normal_map_component(const char* Path)
-		: Data(Path)
-	{}
+	{
+		std::string TempPath = std::filesystem::canonical(std::string(Path)).string();
+		Data = std::move(TempPath);
+	}
 };
 
 struct specular_map_component
 {
-	const char* Data;
+	std::string Data;
 
 	specular_map_component() = default;
 	specular_map_component(const char* Path)
-		: Data(Path)
-	{}
+	{
+		std::string TempPath = std::filesystem::canonical(std::string(Path)).string();
+		Data = std::move(TempPath);
+	}
 };
 
 struct height_map_component
 {
-	const char* Data;
+	std::string Data;
 
 	height_map_component() = default;
 	height_map_component(const char* Path)
-		: Data(Path)
-	{}
+	{
+		std::string TempPath = std::filesystem::canonical(std::string(Path)).string();
+		Data = std::move(TempPath);
+	}
 };
