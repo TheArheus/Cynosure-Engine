@@ -1,5 +1,28 @@
 #pragma once
 
+class vulkan_memory_heap : public memory_heap
+{
+public:
+	vulkan_memory_heap() = default;
+	vulkan_memory_heap(renderer_backend* Backend) 
+	{
+		CreateResource(Backend);
+	}
+
+	void CreateResource(renderer_backend* Backend) override;
+
+	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) override;
+
+	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) override;
+
+	texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
+
+	texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
+
+	VmaAllocator Handle;
+};
+
+
 struct vulkan_backend : public renderer_backend
 {
 	struct compiled_shader_info
@@ -15,7 +38,7 @@ struct vulkan_backend : public renderer_backend
 	~vulkan_backend() override = default;
 	void DestroyObject() override;
 
-	[[nodiscard]] VkShaderModule LoadShaderModule(const char* RelPath, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines = {});
+	[[nodiscard]] VkShaderModule LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines = {});
 	void RecreateSwapchain(u32 NewWidth, u32 NewHeight) override;
 
 	u32 HighestUsedVulkanVersion;
@@ -51,4 +74,6 @@ struct vulkan_backend : public renderer_backend
 	VkRenderPass ImGuiRenderPass;
 
 	vulkan_command_queue* CommandQueue;
+	texture* NullTexture2D;
+	texture* NullTexture3D;
 };

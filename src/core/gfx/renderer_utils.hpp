@@ -29,6 +29,7 @@ namespace utils
 			border_color BorderColor;
 			sampler_address_mode AddressMode;
 			sampler_reduction_mode ReductionMode;
+			barrier_state InitialState;
 		};
 	};
 };
@@ -39,6 +40,29 @@ struct shader_define
 	std::string Value;
 };
 
+struct buffer;
+struct texture;
+struct renderer_backend;
+class memory_heap
+{
+public:
+	memory_heap() = default;
+	virtual ~memory_heap() = default;
+
+	virtual void CreateResource(renderer_backend* Backend) = 0;
+
+	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) = 0;
+	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) = 0;
+
+	virtual texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) = 0;
+	virtual texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) = 0;
+
+	u64 Size = 0;
+	u64 TotalSize = 0;
+	u64 BeginData = 0;
+	u64 Alignment = 0;
+};
+
 struct renderer_backend
 {
 	virtual ~renderer_backend() = default;
@@ -47,10 +71,9 @@ struct renderer_backend
 
 	u32 Width;
 	u32 Height;
+	memory_heap* GlobalHeap;
 };
 
-struct buffer;
-struct texture;
 struct global_pipeline_context
 {
 	global_pipeline_context() = default;
@@ -61,17 +84,17 @@ struct global_pipeline_context
 
 	virtual void CreateResource(renderer_backend* Backend) = 0;
 
-	virtual void Begin(renderer_backend* Backend) = 0;
+	virtual void Begin() = 0;
 
-	virtual void End(renderer_backend* Backend) = 0;
+	virtual void End() = 0;
 
 	virtual void DeviceWaitIdle() = 0;
 
-	virtual void EndOneTime(renderer_backend* Backend) = 0;
+	virtual void EndOneTime() = 0;
 
-	virtual void EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture) = 0;
+	virtual void EmplaceColorTarget(texture* RenderTexture) = 0;
 
-	virtual void Present(renderer_backend* Backend) = 0;
+	virtual void Present() = 0;
 
 	virtual void FillBuffer(buffer* Buffer, u32 Value) = 0;
 
@@ -92,8 +115,8 @@ struct global_pipeline_context
 	virtual void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
 								  u32 SrcStageMask, u32 DstStageMask) = 0;
 
-	virtual void DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget) = 0;
-	virtual void DebugGuiEnd(renderer_backend* Backend)   = 0;
+	virtual void DebugGuiBegin(texture* RenderTarget) = 0;
+	virtual void DebugGuiEnd()   = 0;
 
 	u32 BackBufferIndex = 0;
 };
@@ -132,9 +155,9 @@ public:
 	virtual void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	virtual void SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 
 	utils::render_context::input_data Info;
 };
@@ -164,29 +187,9 @@ public:
 	virtual void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	virtual void SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-};
-
-class memory_heap
-{
-public:
-	memory_heap() = default;
-	virtual ~memory_heap() = default;
-
-	virtual void CreateResource(renderer_backend* Backend) = 0;
-
-	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) = 0;
-	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) = 0;
-
-	virtual texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) = 0;
-	virtual texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) = 0;
-
-	u64 Size = 0;
-	u64 TotalSize = 0;
-	u64 BeginData = 0;
-	u64 Alignment = 0;
+	virtual void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 };
 
 struct buffer

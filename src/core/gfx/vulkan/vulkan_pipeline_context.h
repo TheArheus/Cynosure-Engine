@@ -29,17 +29,17 @@ struct vulkan_global_pipeline_context : public global_pipeline_context
 	
 	void DestroyObject() override;
 
-	void Begin(renderer_backend* Backend) override;
+	void Begin() override;
 
-	void End(renderer_backend* Backend) override;
+	void End() override;
 
 	void DeviceWaitIdle() override;
 
-	void EndOneTime(renderer_backend* Backend) override;
+	void EndOneTime() override;
 
-	void EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture) override;
+	void EmplaceColorTarget(texture* RenderTexture) override;
 
-	void Present(renderer_backend* Backend) override;
+	void Present() override;
 
 	void FillBuffer(buffer* Buffer, u32 Value) override;
 
@@ -60,16 +60,19 @@ struct vulkan_global_pipeline_context : public global_pipeline_context
 	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
-	void DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget) override;
-	void DebugGuiEnd(renderer_backend* Backend) override;
+	void DebugGuiBegin(texture* RenderTarget) override;
+	void DebugGuiEnd() override;
 
 	VkDevice Device;
 
 	VkPipelineStageFlags CurrentStage;
 	VkCommandBuffer* CommandList;
 	VkSemaphore AcquireSemaphore, ReleaseSemaphore;
+
+	vulkan_backend* Gfx;
 };
 
+// TODO: This is highly unefficient so I need to refactor this
 class vulkan_render_context : public render_context
 {
 public:
@@ -84,6 +87,7 @@ public:
     vulkan_render_context(vulkan_render_context&& other) noexcept : 
 		RenderingInfo(std::move(other.RenderingInfo)),
 		SetIndices(std::move(other.SetIndices)),
+		Parameters(std::move(other.Parameters)),
 		ShaderStages(std::move(other.ShaderStages)),
 		StaticDescriptorBindings(std::move(other.StaticDescriptorBindings)),
 		BufferInfos(std::move(other.BufferInfos)),
@@ -93,7 +97,13 @@ public:
 		PipelineContext(std::move(other.PipelineContext)),
 		Device(std::move(other.Device)),
 		Pipeline(std::move(other.Pipeline))
-	{}
+	{
+		NullTexture2D = other.NullTexture2D;
+		other.NullTexture2D = nullptr;
+
+		NullTexture3D = other.NullTexture3D;
+		other.NullTexture3D = nullptr;
+	}
 
     vulkan_render_context& operator=(vulkan_render_context&& other) noexcept 
 	{
@@ -101,6 +111,7 @@ public:
 		{
 			std::swap(RenderingInfo, other.RenderingInfo);
 			std::swap(SetIndices, other.SetIndices);
+			std::swap(Parameters, other.Parameters);
 			std::swap(ShaderStages, other.ShaderStages);
 			std::swap(StaticDescriptorBindings, other.StaticDescriptorBindings);
 			std::swap(BufferInfos, other.BufferInfos);
@@ -111,6 +122,12 @@ public:
 			std::swap(PipelineContext, other.PipelineContext);
 			std::swap(Device, other.Device);
 			std::swap(Pipeline, other.Pipeline);
+
+			NullTexture2D = other.NullTexture2D;
+			other.NullTexture2D = nullptr;
+
+			NullTexture3D = other.NullTexture3D;
+			other.NullTexture3D = nullptr;
         }
         return *this;
     }
@@ -139,9 +156,9 @@ public:
 	void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) override;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	void SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 	
 private:
 	
@@ -161,7 +178,9 @@ private:
 
 	std::map<u32, u32> SetIndices;
 	std::unordered_map<u32, VkFramebuffer> FrameBuffers;
+	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
 
+	std::vector<u32> DescriptorSizes;
 	std::vector<VkImageView> AttachmentViews;
 	std::vector<VkClearValue> RenderTargetClears;
 	std::vector<VkPipelineShaderStageCreateInfo> ShaderStages;
@@ -173,6 +192,8 @@ private:
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>> RenderingAttachmentInfoArrays;
 
 	vulkan_global_pipeline_context* PipelineContext;
+	texture* NullTexture2D;
+	texture* NullTexture3D;
 
 	VkDevice Device;
 	VkPipeline Pipeline;
@@ -185,6 +206,7 @@ private:
 	VkRenderPass RenderPass;
 };
 
+// TODO: This is highly unefficient so I need to refactor this
 class vulkan_compute_context : public compute_context
 {
 public:
@@ -202,10 +224,16 @@ public:
 		BufferInfos(std::move(other.BufferInfos)),
 		BufferArrayInfos(std::move(other.BufferArrayInfos)),
 		SetIndices(std::move(other.SetIndices)),
+		Parameters(std::move(other.Parameters)),
 		PipelineContext(std::move(other.PipelineContext)),
 		Device(std::move(other.Device)),
 		Pipeline(other.Pipeline)
     {
+		NullTexture2D = other.NullTexture2D;
+		other.NullTexture2D = nullptr;
+
+		NullTexture3D = other.NullTexture3D;
+		other.NullTexture3D = nullptr;
     }
 
     vulkan_compute_context& operator=(vulkan_compute_context&& other) noexcept 
@@ -219,11 +247,18 @@ public:
 			std::swap(BufferArrayInfos, other.BufferArrayInfos);
 
 			std::swap(SetIndices, other.SetIndices);
+			std::swap(Parameters, other.Parameters);
 
 			std::swap(PipelineContext, other.PipelineContext);
 
 			std::swap(Device, other.Device);
 			std::swap(Pipeline, other.Pipeline);
+
+			NullTexture2D = other.NullTexture2D;
+			other.NullTexture2D = nullptr;
+
+			NullTexture3D = other.NullTexture3D;
+			other.NullTexture3D = nullptr;
         }
         return *this;
     }
@@ -244,9 +279,9 @@ public:
 	void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) override;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	void SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
 private:
 
@@ -255,14 +290,18 @@ private:
 	u32 PushConstantSize = 0;
 	bool HavePushConstant = false;
 
+	std::vector<u32> DescriptorSizes;
 	std::vector<VkWriteDescriptorSet> StaticDescriptorBindings;
 	std::vector<VkDescriptorSet> Sets;
 	std::vector<std::unique_ptr<descriptor_info>> BufferInfos;
 	std::vector<std::unique_ptr<descriptor_info[]>> BufferArrayInfos;
 
 	std::map<u32, u32> SetIndices;
+	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
 
 	vulkan_global_pipeline_context* PipelineContext;
+	texture* NullTexture2D;
+	texture* NullTexture3D;
 
 	VkDevice Device;
 	VkPipeline Pipeline;

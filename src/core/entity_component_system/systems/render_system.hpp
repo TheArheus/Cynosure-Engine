@@ -181,12 +181,12 @@ struct render_system : public entity_system
 		Window.Gfx.ColorPassContext->SetStorageBufferView(LightSourcesBuffer);
 		Window.Gfx.ColorPassContext->SetStorageBufferView(Window.Gfx.PoissonDiskBuffer);
 		Window.Gfx.ColorPassContext->SetStorageBufferView(Window.Gfx.RandomSamplesBuffer);
-		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.RandomAnglesTexture}, barrier_state::shader_read);
-		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GBuffer, barrier_state::shader_read);
-		Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.GfxColorTarget[BackBufferIndex]}, barrier_state::general);
+		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.RandomAnglesTexture}, image_type::Texture2D, barrier_state::shader_read);
+		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GBuffer, image_type::Texture2D, barrier_state::shader_read);
+		Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.GfxColorTarget}, image_type::Texture2D, barrier_state::general);
 
-		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.AmbientOcclusionData}, barrier_state::shader_read, 0, 1);
-		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GlobalShadow, barrier_state::shader_read, 0, 2);
+		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.AmbientOcclusionData}, image_type::Texture2D, barrier_state::shader_read, 0, 1);
+		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GlobalShadow, image_type::Texture2D, barrier_state::shader_read, 0, 2);
 
 		u32 PointLightSourceCount = 0;
 		u32 SpotLightSourceCount = 0;
@@ -222,8 +222,8 @@ struct render_system : public entity_system
 			}
 
 			// TODO: Think about abstracting this usage???
-			Window.Gfx.ColorPassContext->SetImageSampler(LightShadows, barrier_state::shader_read, 0, 3);
-			Window.Gfx.ColorPassContext->SetImageSampler(PointLightShadows, barrier_state::shader_read, 0, 4);
+			Window.Gfx.ColorPassContext->SetImageSampler(LightShadows, image_type::Texture2D, barrier_state::shader_read, 0, 3);
+			Window.Gfx.ColorPassContext->SetImageSampler(PointLightShadows, image_type::Texture3D, barrier_state::shader_read, 0, 4);
 		}
 		Window.Gfx.ColorPassContext->StaticUpdate();
 
@@ -256,8 +256,8 @@ struct render_system : public entity_system
 
 		for(u32 MipIdx = 0; MipIdx < Window.Gfx.DepthReduceContext.size(); ++MipIdx)
 		{
-			Window.Gfx.DepthReduceContext[MipIdx]->SetImageSampler({MipIdx == 0 ? Window.Gfx.DebugCameraViewDepthTarget : Window.Gfx.DepthPyramid}, MipIdx == 0 ? barrier_state::shader_read: barrier_state::general, MipIdx == 0 ? MipIdx : (MipIdx - 1));
-			Window.Gfx.DepthReduceContext[MipIdx]->SetStorageImage({Window.Gfx.DepthPyramid}, barrier_state::general, MipIdx);
+			Window.Gfx.DepthReduceContext[MipIdx]->SetImageSampler({MipIdx == 0 ? Window.Gfx.DebugCameraViewDepthTarget : Window.Gfx.DepthPyramid}, image_type::Texture2D, MipIdx == 0 ? barrier_state::shader_read: barrier_state::general, MipIdx == 0 ? MipIdx : (MipIdx - 1));
+			Window.Gfx.DepthReduceContext[MipIdx]->SetStorageImage({Window.Gfx.DepthPyramid}, image_type::Texture2D, barrier_state::general, MipIdx);
 			Window.Gfx.DepthReduceContext[MipIdx]->StaticUpdate();
 		}
 
@@ -275,32 +275,32 @@ struct render_system : public entity_system
 		Window.Gfx.GfxContext->SetStorageBufferView(MeshDrawCommandBuffer);
 		Window.Gfx.GfxContext->SetStorageBufferView(MeshMaterialsBuffer);
 		Window.Gfx.GfxContext->SetStorageBufferView(GeometryOffsets);
-		Window.Gfx.GfxContext->SetImageSampler(DiffuseTextures, barrier_state::shader_read, 0, 1);
-		Window.Gfx.GfxContext->SetImageSampler(NormalTextures, barrier_state::shader_read, 0, 2);
-		Window.Gfx.GfxContext->SetImageSampler(SpecularTextures, barrier_state::shader_read, 0, 3);
-		Window.Gfx.GfxContext->SetImageSampler(HeightTextures, barrier_state::shader_read, 0, 4);
+		Window.Gfx.GfxContext->SetImageSampler(DiffuseTextures, image_type::Texture2D, barrier_state::shader_read, 0, 1);
+		Window.Gfx.GfxContext->SetImageSampler(NormalTextures, image_type::Texture2D, barrier_state::shader_read, 0, 2);
+		Window.Gfx.GfxContext->SetImageSampler(SpecularTextures, image_type::Texture2D, barrier_state::shader_read, 0, 3);
+		Window.Gfx.GfxContext->SetImageSampler(HeightTextures, image_type::Texture2D, barrier_state::shader_read, 0, 4);
 		Window.Gfx.GfxContext->StaticUpdate();
 
 		Window.Gfx.AmbientOcclusionContext->SetStorageBufferView(WorldUpdateBuffer);
 		Window.Gfx.AmbientOcclusionContext->SetStorageBufferView(Window.Gfx.RandomSamplesBuffer);
-		Window.Gfx.AmbientOcclusionContext->SetImageSampler({Window.Gfx.NoiseTexture}, barrier_state::shader_read);
-		Window.Gfx.AmbientOcclusionContext->SetImageSampler(Window.Gfx.GBuffer, barrier_state::shader_read);
-		Window.Gfx.AmbientOcclusionContext->SetStorageImage({Window.Gfx.AmbientOcclusionData}, barrier_state::general);
+		Window.Gfx.AmbientOcclusionContext->SetImageSampler({Window.Gfx.NoiseTexture}, image_type::Texture2D, barrier_state::shader_read);
+		Window.Gfx.AmbientOcclusionContext->SetImageSampler(Window.Gfx.GBuffer, image_type::Texture2D, barrier_state::shader_read);
+		Window.Gfx.AmbientOcclusionContext->SetStorageImage({Window.Gfx.AmbientOcclusionData}, image_type::Texture2D, barrier_state::general);
 		Window.Gfx.AmbientOcclusionContext->StaticUpdate();
 
-		Window.Gfx.BlurContextH->SetImageSampler({Window.Gfx.AmbientOcclusionData}, barrier_state::general);
-		Window.Gfx.BlurContextH->SetStorageImage({Window.Gfx.BlurTemp}, barrier_state::general);
+		Window.Gfx.BlurContextH->SetImageSampler({Window.Gfx.AmbientOcclusionData}, image_type::Texture2D, barrier_state::general);
+		Window.Gfx.BlurContextH->SetStorageImage({Window.Gfx.BlurTemp}, image_type::Texture2D, barrier_state::general);
 		Window.Gfx.BlurContextH->StaticUpdate();
 
-		Window.Gfx.BlurContextV->SetImageSampler({Window.Gfx.BlurTemp}, barrier_state::general);
-		Window.Gfx.BlurContextV->SetStorageImage({Window.Gfx.AmbientOcclusionData}, barrier_state::general);
+		Window.Gfx.BlurContextV->SetImageSampler({Window.Gfx.BlurTemp}, image_type::Texture2D, barrier_state::general);
+		Window.Gfx.BlurContextV->SetStorageImage({Window.Gfx.AmbientOcclusionData}, image_type::Texture2D, barrier_state::general);
 		Window.Gfx.BlurContextV->StaticUpdate();
 
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(GeometryOffsets);
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshDrawCommandDataBuffer);
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshDrawVisibilityDataBuffer);
-		Window.Gfx.OcclCullingContext->SetImageSampler({Window.Gfx.DepthPyramid}, barrier_state::general);
+		Window.Gfx.OcclCullingContext->SetImageSampler({Window.Gfx.DepthPyramid}, image_type::Texture2D, barrier_state::general);
 		Window.Gfx.OcclCullingContext->StaticUpdate();
 	}
 
@@ -334,7 +334,6 @@ struct render_system : public entity_system
 
 		{
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
-
 
 			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshDrawVisibilityDataBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
@@ -502,7 +501,7 @@ struct render_system : public entity_system
 		{
 			PipelineContext->SetImageBarriers({
 											{Window.Gfx.AmbientOcclusionData, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::general, ~0u},
-											{Window.Gfx.BlurTemp, 0, AF_ShaderWrite, barrier_state::general, barrier_state::general, ~0u},
+											{Window.Gfx.BlurTemp, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 											}, 
 											 PSF_Compute, PSF_Compute);
 
@@ -517,10 +516,9 @@ struct render_system : public entity_system
 
 		// NOTE: Vertical blur
 		{
-
 			PipelineContext->SetImageBarriers({
-											{Window.Gfx.AmbientOcclusionData, AF_ShaderRead, AF_ShaderWrite, barrier_state::general, barrier_state::general, ~0u},
 											{Window.Gfx.BlurTemp, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::general, ~0u},
+											{Window.Gfx.AmbientOcclusionData, AF_ShaderRead, AF_ShaderWrite, barrier_state::general, barrier_state::general, ~0u},
 											},
 											 PSF_Compute, PSF_Compute);
 
@@ -536,7 +534,7 @@ struct render_system : public entity_system
 		{
 			std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>> ColorPassBarrier = 
 			{
-				{{Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
+				{{Window.Gfx.GfxColorTarget}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.AmbientOcclusionData}, AF_ShaderRead, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
 				{{Window.Gfx.RandomAnglesTexture}, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
 				{Window.Gfx.GlobalShadow, AF_DepthStencilAttachmentWrite, AF_ShaderRead, barrier_state::depth_stencil_attachment, barrier_state::shader_read, ~0u},

@@ -1,27 +1,5 @@
 #pragma once
 
-class directx12_memory_heap : public memory_heap
-{
-public:
-	directx12_memory_heap() = default;
-	directx12_memory_heap(renderer_backend* Backend) 
-	{
-		CreateResource(Backend);
-	}
-
-	~directx12_memory_heap() override = default;
-
-	void CreateResource(renderer_backend* Backend) override;
-
-	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Usage) override;
-	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName,  void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Usage) override;
-
-	texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
-	texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
-
-	D3D12MA::Allocator* Handle;
-};
-
 struct directx12_buffer : public buffer
 {
 	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, bool NewWithCounter, u32 Usage)

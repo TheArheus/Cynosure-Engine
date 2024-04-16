@@ -2,7 +2,7 @@
 void directx12_global_pipeline_context::
 CreateResource(renderer_backend* Backend)
 {
-	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
+	Gfx = static_cast<directx12_backend*>(Backend);
 	Device = Gfx->Device.Get();
 
 	Fence.Init(Gfx->Device.Get());
@@ -11,19 +11,15 @@ CreateResource(renderer_backend* Backend)
 }
 
 void directx12_global_pipeline_context::
-Begin(renderer_backend* Backend)
+Begin()
 {
-	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-
 	Gfx->CommandQueue->Reset();
 	CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
 }
 
 void directx12_global_pipeline_context::
-End(renderer_backend* Backend)
+End()
 {
-	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-
 	BuffersToCommon.clear();
 	Gfx->CommandQueue->Execute(CommandList);
 	Fence.Flush(Gfx->CommandQueue);
@@ -36,19 +32,16 @@ End(renderer_backend* Backend)
 }
 
 void directx12_global_pipeline_context::
-EndOneTime(renderer_backend* Backend)
+EndOneTime()
 {
-	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-
 	BuffersToCommon.clear();
 	Gfx->CommandQueue->Execute(CommandList);
 	Fence.Flush(Gfx->CommandQueue);
 }
 
 void directx12_global_pipeline_context::
-EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture)
+EmplaceColorTarget(texture* RenderTexture)
 {
-	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 	directx12_texture* Texture = static_cast<directx12_texture*>(RenderTexture);
 
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers = 
@@ -65,10 +58,8 @@ EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture)
 }
 
 void directx12_global_pipeline_context::
-Present(renderer_backend* Backend)
+Present()
 {
-	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers = 
 	{
 		CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[BackBufferIndex].Get(), Gfx->SwapchainCurrentState[BackBufferIndex], D3D12_RESOURCE_STATE_COMMON)
@@ -236,9 +227,8 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, b
 }
 
 void directx12_global_pipeline_context::
-DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget)
+DebugGuiBegin(texture* RenderTarget)
 {
-	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 	directx12_texture* Clr = static_cast<directx12_texture*>(RenderTarget);
 
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers;
@@ -261,7 +251,7 @@ DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget)
 }
 
 void directx12_global_pipeline_context::
-DebugGuiEnd(renderer_backend* Backend) 
+DebugGuiEnd() 
 {
 	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), CommandList);
 }
@@ -630,7 +620,7 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 }
 
 void directx12_render_context::
-SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)  
+SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)  
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][1].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
@@ -650,7 +640,7 @@ SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 }
 
 void directx12_render_context::
-SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)  
+SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)  
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][0].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
@@ -670,7 +660,7 @@ SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 }
 
 void directx12_render_context::
-SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)  
+SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)  
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][0].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
@@ -894,7 +884,7 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 }
 
 void directx12_compute_context::
-SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
+SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][1].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
@@ -914,7 +904,7 @@ SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 }
 
 void directx12_compute_context::
-SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)  
+SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)  
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][0].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
@@ -934,7 +924,7 @@ SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 }
 
 void directx12_compute_context::
-SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)  
+SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)  
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][0].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 

@@ -24,20 +24,20 @@ struct directx12_global_pipeline_context : public global_pipeline_context
 
 	void CreateResource(renderer_backend* Backend) override;
 
-	void Begin(renderer_backend* Backend) override;
+	void Begin() override;
 
-	void End(renderer_backend* Backend) override;
+	void End() override;
 
 	void DeviceWaitIdle() override 
 	{
 		Fence.Wait();
 	}
 
-	void EndOneTime(renderer_backend* Backend) override;
+	void EndOneTime() override;
 
-	void EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture) override;
+	void EmplaceColorTarget(texture* RenderTexture) override;
 
-	void Present(renderer_backend* Backend) override;
+	void Present() override;
 
 	void FillBuffer(buffer* Buffer, u32 Value) override;
 
@@ -57,10 +57,11 @@ struct directx12_global_pipeline_context : public global_pipeline_context
 	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
-	void DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget) override;
-	void DebugGuiEnd(renderer_backend* Backend) override;
+	void DebugGuiBegin(texture* RenderTarget) override;
+	void DebugGuiEnd() override;
 
 	directx12_fence Fence;
+	directx12_backend* Gfx;
 
 	ID3D12Device6* Device;
 	ID3D12GraphicsCommandList* CommandList;
@@ -109,9 +110,9 @@ public:
 	// NOTE: If with counter, then it is using 2 bindings instead of 1
 	void SetStorageBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) override;
 	void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) override;
-	void SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
 private:
 	ComPtr<ID3D12PipelineState> Pipeline;
@@ -171,9 +172,9 @@ public:
 	void SetConstant(void* Data, size_t Size) override;
 	void SetStorageBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) override;
 	void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) override;
-	void SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
 private:
 	ComPtr<ID3D12PipelineState> Pipeline;

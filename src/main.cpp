@@ -76,16 +76,16 @@
 
 		if(!Window.IsGfxPaused)
 		{
-			PipelineContext->Begin(Window.Gfx.Backend);
+			PipelineContext->Begin();
 
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
-			PipelineContext->DebugGuiBegin(Window.Gfx.Backend, Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
+			PipelineContext->DebugGuiBegin(Window.Gfx.GfxColorTarget);
 			SceneManager.RenderUI();
-			PipelineContext->DebugGuiEnd(Window.Gfx.Backend);
+			PipelineContext->DebugGuiEnd();
 
-			PipelineContext->EmplaceColorTarget(Window.Gfx.Backend, Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
-			PipelineContext->Present(Window.Gfx.Backend);
+			PipelineContext->EmplaceColorTarget(Window.Gfx.GfxColorTarget);
+			PipelineContext->Present();
 		}
 
 		Window.EmitEvents();

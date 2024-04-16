@@ -2,8 +2,6 @@
 
 class global_graphics_context
 {
-	memory_heap* GlobalHeap;
-
 	global_graphics_context(const global_graphics_context&) = delete;
 	global_graphics_context& operator=(const global_graphics_context&) = delete;
 
@@ -16,22 +14,22 @@ public:
 
 	buffer* PushBuffer(std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
 	{
-		return GlobalHeap->PushBuffer(Backend, DebugName, DataSize, Count, NewWithCounter, Flags);
+		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, DataSize, Count, NewWithCounter, Flags);
 	}
 
 	buffer* PushBuffer(std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
 	{
-		return GlobalHeap->PushBuffer(Backend, DebugName, Data, DataSize, Count, NewWithCounter, Flags);
+		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, Data, DataSize, Count, NewWithCounter, Flags);
 	}
 
 	texture* PushTexture(std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
-		return GlobalHeap->PushTexture(Backend, DebugName, Width, Height, Depth, InputData);
+		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Width, Height, Depth, InputData);
 	}
 
 	texture* PushTexture(std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
-		return GlobalHeap->PushTexture(Backend, DebugName, Data, Width, Height, Depth, InputData);
+		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Data, Width, Height, Depth, InputData);
 	}
 
 	memory_heap* CreateMemoryHeap()
@@ -100,7 +98,7 @@ public:
 
 	std::vector<texture*> SwapchainImages;
 
-	texture* GfxColorTarget[2];
+	texture* GfxColorTarget;
 	texture* GfxDepthTarget;
 	texture* DebugCameraViewDepthTarget;
 

@@ -190,27 +190,6 @@ vulkan_backend(window* Window)
 	DeviceQueueCreateInfo.queueCount = 1;
 	DeviceQueueCreateInfo.pQueuePriorities = QueuePriorities;
 
-#if 0
-	Features2.features.imageCubeArray = true;
-	Features2.features.multiDrawIndirect = true;
-	Features2.features.pipelineStatisticsQuery = true;
-	Features2.features.shaderInt16 = true;
-	Features2.features.shaderInt64 = true;
-
-	Features11.storageBuffer16BitAccess = true;
-	Features11.multiview = true;
-
-	Features12.drawIndirectCount = true;
-	Features12.shaderFloat16 = true;
-	Features12.shaderInt8 = true;
-	Features12.samplerFilterMinmax = true;
-	Features12.descriptorIndexing = true;
-	Features12.descriptorBindingPartiallyBound = true;
-
-	Features13.maintenance4 = true;
-	Features13.dynamicRendering = true;
-#endif
-
 	VkDeviceCreateInfo DeviceCreateInfo = {};
 	DeviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	DeviceCreateInfo.queueCreateInfoCount = 1;
@@ -272,6 +251,20 @@ vulkan_backend(window* Window)
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, SwapchainImages.data());
 
 	CommandQueue = new vulkan_command_queue(Device, FamilyIndex);
+	GlobalHeap = new vulkan_memory_heap(this);
+
+	// TODO: Custom initial resource state
+	utils::texture::input_data TextureInputData = {};
+	TextureInputData.Type	   = image_type::Texture2D;
+	TextureInputData.MipLevels = 1;
+	TextureInputData.Layers    = 1;
+	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
+	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_ColorTexture;
+	TextureInputData.InitialState = barrier_state::shader_read;
+	NullTexture2D = GlobalHeap->PushTexture(this, "NullT_2D", nullptr, 1, 1, 1, TextureInputData);
+	TextureInputData.Type	   = image_type::Texture3D;
+	TextureInputData.Usage    |= image_flags::TF_CubeMap;
+	NullTexture3D = GlobalHeap->PushTexture(this, "NullT_3D", nullptr, 1, 1, 1, TextureInputData);
 
 	VkDescriptorPoolSize ImGuiPoolSizes[] = 
 	{
@@ -396,10 +389,8 @@ VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
 // TODO: Parse for push constant sizes
 // TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
 VkShaderModule vulkan_backend::
-LoadShaderModule(const char* RelPath, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines)
+LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines)
 {
-	std::string TempPath = std::filesystem::canonical(std::string(RelPath)).string();
-	const char* Path = TempPath.c_str();
 	auto FoundCompiledShader = CompiledShaders.find(Path);
 	if(FoundCompiledShader != CompiledShaders.end())
 	{
@@ -521,7 +512,6 @@ LoadShaderModule(const char* RelPath, shader_stage ShaderType, std::map<u32, std
 		for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
 		{
 			const op_info& Var = ShaderInfo[VariableIdx];
-			// TODO: Better type size calculation
 			if (Var.OpCode == SpvOpVariable && Var.StorageClass == SpvStorageClassPushConstant)
 			{
 				const op_info& VariableType = ShaderInfo[Var.TypeId[0]];

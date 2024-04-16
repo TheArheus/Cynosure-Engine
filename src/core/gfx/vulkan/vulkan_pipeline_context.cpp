@@ -2,7 +2,8 @@
 void vulkan_global_pipeline_context::
 CreateResource(renderer_backend* Backend)
 {
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(static_cast<vulkan_backend*>(Backend)->CommandQueue);
+	Gfx = static_cast<vulkan_backend*>(Backend);
+	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	Device = CommandQueue->Device;
 
 	VkSemaphoreCreateInfo SemaphoreCreateInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -28,19 +29,22 @@ DestroyObject()
 }
 
 void vulkan_global_pipeline_context::
-Begin(renderer_backend* Backend)
+Begin()
 {
-	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	CommandQueue->Reset(CommandList);
 
 	vkAcquireNextImageKHR(Device, Gfx->Swapchain, ~0ull, AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
+
+	SetImageBarriers({
+						{Gfx->NullTexture2D, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}, 
+						{Gfx->NullTexture3D, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}
+					 }, PSF_TopOfPipe, PSF_Compute);
 }
 
 void vulkan_global_pipeline_context::
-End(renderer_backend* Backend)
+End()
 {
-	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	CommandQueue->Execute(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 }
@@ -52,17 +56,15 @@ DeviceWaitIdle()
 }
 
 void vulkan_global_pipeline_context::
-EndOneTime(renderer_backend* Backend)
+EndOneTime()
 {
-	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	CommandQueue->ExecuteAndRemove(CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 }
 
 void vulkan_global_pipeline_context::
-EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture)
+EmplaceColorTarget(texture* RenderTexture)
 {
-	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(RenderTexture);
 
 	std::vector<VkImageMemoryBarrier> ImageCopyBarriers = 
@@ -83,9 +85,8 @@ EmplaceColorTarget(renderer_backend* Backend, texture* RenderTexture)
 }
 
 void vulkan_global_pipeline_context::
-Present(renderer_backend* Backend)
+Present()
 {
-	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 
 	std::vector<VkImageMemoryBarrier> ImageEndRenderBarriers = 
@@ -259,9 +260,8 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, b
 }
 
 void vulkan_global_pipeline_context::
-DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget)
+DebugGuiBegin(texture* RenderTarget)
 {
-	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	vulkan_texture* Clr = static_cast<vulkan_texture*>(RenderTarget);
 
 	ImGui_ImplVulkan_NewFrame();
@@ -285,10 +285,8 @@ DebugGuiBegin(renderer_backend* Backend, texture* RenderTarget)
 }
 
 void vulkan_global_pipeline_context::
-DebugGuiEnd(renderer_backend* Backend)
+DebugGuiEnd()
 {
-	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *CommandList);
 
 	if(Gfx->Features13.dynamicRendering)
@@ -301,6 +299,8 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	: LoadOp(NewLoadOp), StoreOp(NewStoreOp)
 {
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+	NullTexture2D = static_cast<vulkan_texture*>(Gfx->NullTexture2D);
+	NullTexture3D = static_cast<vulkan_texture*>(Gfx->NullTexture3D);
 	Device = Gfx->Device;
 
 	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
@@ -365,7 +365,6 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 		ShaderStages.push_back(Stage);
 	}
 
-	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
@@ -448,7 +447,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 		AttachDesc.samples       = VK_SAMPLE_COUNT_1_BIT;
 		AttachDesc.loadOp        = GetVKLoadOp(NewLoadOp);
 		AttachDesc.storeOp       = GetVKStoreOp(NewStoreOp);
-		AttachDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		AttachDesc.initialLayout = AttachDesc.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
 		AttachDesc.finalLayout   = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 		AttachRef.attachment = FormatIdx;
@@ -491,8 +490,8 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	DepthAttachDesc.samples       = VK_SAMPLE_COUNT_1_BIT;
 	DepthAttachDesc.loadOp        = GetVKLoadOp(NewLoadOp);
 	DepthAttachDesc.storeOp       = GetVKStoreOp(NewStoreOp);
-	DepthAttachDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	DepthAttachDesc.finalLayout   = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	DepthAttachDesc.initialLayout = DepthAttachDesc.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+	DepthAttachDesc.finalLayout   = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 	if(InputData.UseDepth)
 		AttachmentDescriptions.push_back(DepthAttachDesc);
 
@@ -917,15 +916,12 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 }
 
 // TODO: Remove image layouts and move them inside texture structure
+// TODO: Need to know image type ahead of time so that I wouldn't have image_type input parameter
 void vulkan_render_context::
-SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
+SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	if(Textures.size() == 0)
-	{
-		SetIndices[Set] += 1;
-		return;
-	}
-	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
+	u32 DescriptorCount = Parameters[Set][SetIndices[Set]].descriptorCount;
+	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), DescriptorCount));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -934,12 +930,24 @@ SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
+	vulkan_texture* NullData = nullptr;
+	if(Type == image_type::Texture2D)
+		NullData = static_cast<vulkan_texture*>(NullTexture2D);
+	else
+		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
+	{
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
+		ImageInfo[TextureIdx].imageView = NullData->Views[ViewIdx];
+		ImageInfo[TextureIdx].sampler = NullData->SamplerHandle;
+	}
+
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-	DescriptorSet.descriptorCount = Textures.size();
+	DescriptorSet.descriptorCount = DescriptorCount;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
 	StaticDescriptorBindings.push_back(DescriptorSet);
@@ -949,14 +957,10 @@ SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 }
 
 void vulkan_render_context::
-SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
+SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	if(Textures.size() == 0)
-	{
-		SetIndices[Set] += 1;
-		return;
-	}
-	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
+	u32 DescriptorCount = Parameters[Set][SetIndices[Set]].descriptorCount;
+	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), DescriptorCount));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -965,11 +969,23 @@ SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
+	vulkan_texture* NullData = nullptr;
+	if(Type == image_type::Texture2D)
+		NullData = static_cast<vulkan_texture*>(NullTexture2D);
+	else
+		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
+	{
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
+		ImageInfo[TextureIdx].imageView = NullData->Views[ViewIdx];
+		ImageInfo[TextureIdx].sampler = NullData->SamplerHandle;
+	}
+
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
-	DescriptorSet.descriptorCount = Textures.size();
+	DescriptorSet.descriptorCount = DescriptorCount;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
 	StaticDescriptorBindings.push_back(DescriptorSet);
@@ -979,14 +995,10 @@ SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 }
 
 void vulkan_render_context::
-SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
+SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	if(Textures.size() == 0)
-	{
-		SetIndices[Set] += 1;
-		return;
-	}
-	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
+	u32 DescriptorCount = Parameters[Set][SetIndices[Set]].descriptorCount;
+	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), DescriptorCount));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -995,11 +1007,23 @@ SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
+	vulkan_texture* NullData = nullptr;
+	if(Type == image_type::Texture2D)
+		NullData = static_cast<vulkan_texture*>(NullTexture2D);
+	else
+		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
+	{
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
+		ImageInfo[TextureIdx].imageView = NullData->Views[ViewIdx];
+		ImageInfo[TextureIdx].sampler = NullData->SamplerHandle;
+	}
+
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
-	DescriptorSet.descriptorCount = Textures.size();
+	DescriptorSet.descriptorCount = DescriptorCount;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
 	StaticDescriptorBindings.push_back(DescriptorSet);
@@ -1012,6 +1036,8 @@ vulkan_compute_context::
 vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, const std::vector<shader_define>& ShaderDefines)
 {
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+	NullTexture2D = static_cast<vulkan_texture*>(Gfx->NullTexture2D);
+	NullTexture3D = static_cast<vulkan_texture*>(Gfx->NullTexture3D);
 	Device = Gfx->Device;
 
 	std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>> ShaderRootLayout;
@@ -1022,7 +1048,6 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 	ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
 	ComputeStage.pName  = "main";
 
-	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
@@ -1237,15 +1262,12 @@ SetUniformBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 }
 
 // TODO: Remove image layouts and move them inside texture structure
+// TODO: Need to know image type ahead of time so that I wouldn't have image_type input parameter
 void vulkan_compute_context::
-SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
+SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	if(Textures.size() == 0)
-	{
-		SetIndices[Set] += 1;
-		return;
-	}
-	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
+	u32 DescriptorCount = Parameters[Set][SetIndices[Set]].descriptorCount;
+	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), DescriptorCount));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -1254,11 +1276,23 @@ SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
+	vulkan_texture* NullData = nullptr;
+	if(Type == image_type::Texture2D)
+		NullData = static_cast<vulkan_texture*>(NullTexture2D);
+	else
+		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
+	{
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
+		ImageInfo[TextureIdx].imageView = NullData->Views[ViewIdx];
+		ImageInfo[TextureIdx].sampler = NullData->SamplerHandle;
+	}
+
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
-	DescriptorSet.descriptorCount = Textures.size();
+	DescriptorSet.descriptorCount = DescriptorCount;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
 	StaticDescriptorBindings.push_back(DescriptorSet);
@@ -1268,14 +1302,10 @@ SetSampledImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 }
 
 void vulkan_compute_context::
-SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
+SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	if(Textures.size() == 0)
-	{
-		SetIndices[Set] += 1;
-		return;
-	}
-	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
+	u32 DescriptorCount = Parameters[Set][SetIndices[Set]].descriptorCount;
+	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), DescriptorCount));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -1284,11 +1314,23 @@ SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
+	vulkan_texture* NullData = nullptr;
+	if(Type == image_type::Texture2D)
+		NullData = static_cast<vulkan_texture*>(NullTexture2D);
+	else
+		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
+	{
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
+		ImageInfo[TextureIdx].imageView = NullData->Views[ViewIdx];
+		ImageInfo[TextureIdx].sampler = NullData->SamplerHandle;
+	}
+
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
-	DescriptorSet.descriptorCount = Textures.size();
+	DescriptorSet.descriptorCount = DescriptorCount;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
 	StaticDescriptorBindings.push_back(DescriptorSet);
@@ -1298,14 +1340,10 @@ SetStorageImage(const std::vector<texture*>& Textures, barrier_state State, u32 
 }
 
 void vulkan_compute_context::
-SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 ViewIdx, u32 Set)
+SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	if(Textures.size() == 0)
-	{
-		SetIndices[Set] += 1;
-		return;
-	}
-	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), Textures.size()));
+	u32 DescriptorCount = Parameters[Set][SetIndices[Set]].descriptorCount;
+	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), DescriptorCount));
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -1314,11 +1352,23 @@ SetImageSampler(const std::vector<texture*>& Textures, barrier_state State, u32 
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
+	vulkan_texture* NullData = nullptr;
+	if(Type == image_type::Texture2D)
+		NullData = static_cast<vulkan_texture*>(NullTexture2D);
+	else
+		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
+	{
+		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
+		ImageInfo[TextureIdx].imageView = NullData->Views[ViewIdx];
+		ImageInfo[TextureIdx].sampler = NullData->SamplerHandle;
+	}
+
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
-	DescriptorSet.descriptorCount = Textures.size();
+	DescriptorSet.descriptorCount = DescriptorCount;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
 	StaticDescriptorBindings.push_back(DescriptorSet);

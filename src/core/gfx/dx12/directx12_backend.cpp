@@ -128,6 +128,7 @@ directx12_backend(window* Window)
 	if (MsaaQuality < 2) RenderMultisampleSupport = false;
 
 	ImGui_ImplDX12_Init(Device.Get(), 2, ColorTargetFormat, ImGuiResourcesHeap.Handle.Get(), ImGuiResourcesHeap.CpuHandle, ImGuiResourcesHeap.GpuHandle);
+	GlobalHeap = new directx12_memory_heap(this);
 };
 
 void directx12_backend::

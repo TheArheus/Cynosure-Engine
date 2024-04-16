@@ -14,16 +14,13 @@ global_graphics_context::
 global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendType)
 	: Backend(NewBackend), BackendType(NewBackendType)
 {
-	GlobalHeap = CreateMemoryHeap();
-
 	utils::texture::input_data TextureInputData = {};
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_CopySrc;
-	GfxColorTarget[0] = PushTexture("ColorTarget0", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
-	GfxColorTarget[1] = PushTexture("ColorTarget1", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
+	GfxColorTarget = PushTexture("ColorTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TextureInputData.Format    = image_format::D32_SFLOAT;
 	TextureInputData.Usage     = image_flags::TF_DepthTexture | image_flags::TF_Sampled;
 	GfxDepthTarget = PushTexture("DepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
@@ -181,7 +178,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	RendererInputData.UseBackFace = true;
 	RendererInputData.UseOutline  = true;
 	GfxContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.vert.glsl", "../shaders/mesh.frag.glsl"}, GBuffer, {true, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
-	DebugContext = CreateRenderContext(load_op::load, store_op::store, {"../shaders/mesh.dbg.vert.glsl", "../shaders/mesh.dbg.frag.glsl"}, {GfxColorTarget[0]}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	DebugContext = CreateRenderContext(load_op::load, store_op::store, {"../shaders/mesh.dbg.vert.glsl", "../shaders/mesh.dbg.frag.glsl"}, {GfxColorTarget}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	DebugComputeContext = CreateComputeContext("../shaders/mesh.dbg.comp.glsl");
 
 	RendererInputData = {};
@@ -220,7 +217,6 @@ global_graphics_context::
 global_graphics_context(global_graphics_context&& Oth) noexcept : 
 	Backend(std::move(Oth.Backend)),
 	BackendType(std::move(Oth.BackendType)),
-	GlobalHeap(std::move(Oth.GlobalHeap)),
 	PoissonDiskBuffer(std::move(Oth.PoissonDiskBuffer)),
 	RandomSamplesBuffer(std::move(Oth.RandomSamplesBuffer)),
 	GfxDepthTarget(std::move(Oth.GfxDepthTarget)),
@@ -248,8 +244,7 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 	BlurContextH(std::move(Oth.BlurContextH)),
 	DebugComputeContext(std::move(Oth.DebugComputeContext))
 {
-	GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
-	GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
+	GfxColorTarget = std::move(Oth.GfxColorTarget);
 }
 
 global_graphics_context& global_graphics_context::
@@ -259,11 +254,9 @@ operator=(global_graphics_context&& Oth) noexcept
 	{
 		Backend = std::move(Oth.Backend);
 		BackendType = std::move(Oth.BackendType);
-		GlobalHeap = std::move(Oth.GlobalHeap);
 		PoissonDiskBuffer = std::move(Oth.PoissonDiskBuffer);
 		RandomSamplesBuffer = std::move(Oth.RandomSamplesBuffer);
-		GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
-		GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
+		GfxColorTarget = std::move(Oth.GfxColorTarget);
 		GfxDepthTarget = std::move(Oth.GfxDepthTarget);
 		DebugCameraViewDepthTarget = std::move(Oth.DebugCameraViewDepthTarget);
 		GlobalShadow = std::move(Oth.GlobalShadow);
