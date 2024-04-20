@@ -118,7 +118,7 @@ void main()
 	if(MeshMaterials[nonuniformEXT(MatIdx)].HasTexture)
 		OutputDiffuse *= vec4(texture(DiffuseSamplers[nonuniformEXT(TextureIdx)], TextCoord).rgb, 1);
 #endif
-	OutputSpecular		 = 1.0;
+	OutputSpecular		 = 0.0;
 	if(MeshMaterials[nonuniformEXT(MatIdx)].HasSpecularMap)
 		OutputSpecular   = texture(SpecularSamplers[nonuniformEXT(SpecularMapIdx)], TextCoord).r;
 }

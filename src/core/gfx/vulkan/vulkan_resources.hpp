@@ -277,7 +277,7 @@ struct vulkan_texture : public texture
 		CreateInfo.pNext = &ReductionMode;
 		CreateInfo.magFilter = VK_FILTER_NEAREST;
 		CreateInfo.minFilter = VK_FILTER_NEAREST;
-		CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 		CreateInfo.addressModeU = CreateInfo.addressModeV = CreateInfo.addressModeW = GetVKSamplerAddressMode(Info.AddressMode);
 		CreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 		CreateInfo.compareEnable = false;

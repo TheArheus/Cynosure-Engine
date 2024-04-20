@@ -178,7 +178,7 @@ struct render_debug_system : public entity_system
 		{
 			u32 DstStageMask = PSF_ColorAttachment | PSF_EarlyFragment | PSF_LateFragment;
 
-			PipelineContext->SetImageBarriers({{Window.Gfx.GfxColorTarget, AF_ShaderWrite, AF_ColorAttachmentWrite, barrier_state::general, barrier_state::color_attachment, ~0u},
+			PipelineContext->SetImageBarriers({{Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex], AF_ShaderWrite, AF_ColorAttachmentWrite, barrier_state::general, barrier_state::color_attachment, ~0u},
 											  {Window.Gfx.GfxDepthTarget, AF_ShaderRead, AF_DepthStencilAttachmentWrite, barrier_state::shader_read, barrier_state::depth_stencil_attachment, ~0u}}, 
 											 PSF_Compute, DstStageMask);
 
@@ -190,7 +190,7 @@ struct render_debug_system : public entity_system
 			PipelineContext->SetBufferBarrier({MeshDebugMaterialsBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_VertexShader|PSF_FragmentShader);
 
 			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
-			Window.Gfx.DebugContext->SetColorTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget}, {0, 0, 0, 1});
+			Window.Gfx.DebugContext->SetColorTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, {0, 0, 0, 1});
 			Window.Gfx.DebugContext->SetDepthTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
 			Window.Gfx.DebugContext->DrawIndirect(Geometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.DebugContext->End();

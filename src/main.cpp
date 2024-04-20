@@ -46,6 +46,7 @@
 	double TimeElapsed = 0.0;
 	double TimeEnd = 0.0;
 	double AvgCpuTime = 0.0;
+	u32 FrameIndex = 0;
 	while(Window.IsRunning())
 	{
 		linear_allocator SystemsAllocator(GlobalMemorySize, MemoryBlock);
@@ -68,6 +69,11 @@
 		SceneManager.UpdateScenes();
 		if(!SceneManager.IsCurrentSceneInitialized()) continue;
 
+		if(!Window.IsGfxPaused)
+		{
+			PipelineContext->AcquireNextImage();
+		}
+
 		SceneManager.StartScene(Window);
 		SceneManager.UpdateScene(Window, PipelineContext, GlobalLightSources);
 
@@ -80,11 +86,11 @@
 
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
-			PipelineContext->DebugGuiBegin(Window.Gfx.GfxColorTarget);
+			PipelineContext->DebugGuiBegin(Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
 			SceneManager.RenderUI();
 			PipelineContext->DebugGuiEnd();
 
-			PipelineContext->EmplaceColorTarget(Window.Gfx.GfxColorTarget);
+			PipelineContext->EmplaceColorTarget(Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
 			PipelineContext->Present();
 		}
 
@@ -114,6 +120,7 @@
 		TimeLast = TimeEnd;
 		AvgCpuTime = 0.75 * AvgCpuTime + TimeElapsed * 0.25;
 
+		FrameIndex++;
 		std::string Title = "Frame " + std::to_string(AvgCpuTime) + "ms, " + std::to_string(1.0 / AvgCpuTime * 1000.0) + "fps";
 		Window.SetTitle(Title);
 	}

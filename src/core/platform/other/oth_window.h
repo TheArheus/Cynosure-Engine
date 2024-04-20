@@ -34,7 +34,7 @@ public:
 
 	global_graphics_context Gfx;
 
-	static button Buttons[0xF];
+	static button Buttons[256];
 	static event_bus EventsDispatcher;
 
 	static bool IsWindowRunning;

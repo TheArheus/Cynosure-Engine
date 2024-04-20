@@ -1,8 +1,5 @@
 #! /usr/bin/bash
 
-set VulkanInc="%VULKAN_SDK%\Include"
-set VulkanLib="%VULKAN_SDK%\Lib"
-
 CommonCompFlags="-std=c++2a -O3 -ffast-math -w -Wall -Wextra -Wno-error -pthread -MD -frtti -fPIC -march=native"
 
 PlatformCppFiles="../src/linux_main.cpp"

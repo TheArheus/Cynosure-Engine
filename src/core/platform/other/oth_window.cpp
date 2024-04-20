@@ -1,7 +1,7 @@
 
 #include "core/vendor/imgui/backends/imgui_impl_glfw.cpp"
 
-button window::Buttons[0xF] = {};
+button window::Buttons[256] = {};
 bool window::IsWindowRunning = false;
 GLFWwindow* window::Handle = nullptr;
 event_bus window::EventsDispatcher;

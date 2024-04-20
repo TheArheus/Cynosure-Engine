@@ -29,6 +29,8 @@ struct vulkan_global_pipeline_context : public global_pipeline_context
 	
 	void DestroyObject() override;
 
+	void AcquireNextImage() override;
+
 	void Begin() override;
 
 	void End() override;

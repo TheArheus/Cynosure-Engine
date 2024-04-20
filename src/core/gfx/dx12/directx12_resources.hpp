@@ -243,7 +243,7 @@ struct directx12_texture : public texture
         D3D12_SAMPLER_DESC SamplerDesc = {};
         SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(InputData.AddressMode);
         SamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NONE;
-        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(filter::linear), GetDXFilter(filter::linear), GetDXFilter(filter::linear), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(Info.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
+        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(filter::nearest), GetDXFilter(filter::nearest), GetDXFilter(filter::nearest), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(Info.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
         SamplerDesc.MaxLOD = InputData.MipLevels;
 
         switch(InputData.BorderColor)

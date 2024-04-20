@@ -29,12 +29,16 @@ DestroyObject()
 }
 
 void vulkan_global_pipeline_context::
+AcquireNextImage()
+{
+	vkAcquireNextImageKHR(Device, Gfx->Swapchain, ~0ull, AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
+}
+
+void vulkan_global_pipeline_context::
 Begin()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	CommandQueue->Reset(CommandList);
-
-	vkAcquireNextImageKHR(Device, Gfx->Swapchain, ~0ull, AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
 
 	SetImageBarriers({
 						{Gfx->NullTexture2D, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}, 

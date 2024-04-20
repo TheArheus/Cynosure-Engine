@@ -11,6 +11,12 @@ CreateResource(renderer_backend* Backend)
 }
 
 void directx12_global_pipeline_context::
+AcquireNextImage()
+{
+	// NOTE: For directx12 this happens in the end of the frame
+}
+
+void directx12_global_pipeline_context::
 Begin()
 {
 	Gfx->CommandQueue->Reset();

@@ -181,9 +181,10 @@ struct render_system : public entity_system
 		Window.Gfx.ColorPassContext->SetStorageBufferView(LightSourcesBuffer);
 		Window.Gfx.ColorPassContext->SetStorageBufferView(Window.Gfx.PoissonDiskBuffer);
 		Window.Gfx.ColorPassContext->SetStorageBufferView(Window.Gfx.RandomSamplesBuffer);
+		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.GfxColorTarget[(BackBufferIndex + 1) % 2]}, image_type::Texture2D, barrier_state::general);
 		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.RandomAnglesTexture}, image_type::Texture2D, barrier_state::shader_read);
 		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GBuffer, image_type::Texture2D, barrier_state::shader_read);
-		Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.GfxColorTarget}, image_type::Texture2D, barrier_state::general);
+		Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.GfxColorTarget[BackBufferIndex]}, image_type::Texture2D, barrier_state::general);
 
 		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.AmbientOcclusionData}, image_type::Texture2D, barrier_state::shader_read, 0, 1);
 		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GlobalShadow, image_type::Texture2D, barrier_state::shader_read, 0, 2);
@@ -534,7 +535,8 @@ struct render_system : public entity_system
 		{
 			std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>> ColorPassBarrier = 
 			{
-				{{Window.Gfx.GfxColorTarget}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
+				{{Window.Gfx.GfxColorTarget[(PipelineContext->BackBufferIndex + 1) % 2]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
+				{{Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.AmbientOcclusionData}, AF_ShaderRead, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
 				{{Window.Gfx.RandomAnglesTexture}, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
 				{Window.Gfx.GlobalShadow, AF_DepthStencilAttachmentWrite, AF_ShaderRead, barrier_state::depth_stencil_attachment, barrier_state::shader_read, ~0u},

@@ -84,6 +84,8 @@ struct global_pipeline_context
 
 	virtual void CreateResource(renderer_backend* Backend) = 0;
 
+	virtual void AcquireNextImage() = 0;
+
 	virtual void Begin() = 0;
 
 	virtual void End() = 0;
@@ -118,7 +120,7 @@ struct global_pipeline_context
 	virtual void DebugGuiBegin(texture* RenderTarget) = 0;
 	virtual void DebugGuiEnd()   = 0;
 
-	u32 BackBufferIndex = 0;
+	u32 BackBufferIndex;
 };
 
 class render_context
