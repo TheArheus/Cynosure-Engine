@@ -493,8 +493,21 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 			return VK_NULL_HANDLE;
 		}
 
+		glslang::SpvOptions CompileOptions;
+#ifdef _DEBUG
+		CompileOptions.emitNonSemanticShaderDebugSource = true;
+		CompileOptions.emitNonSemanticShaderDebugInfo = true;
+		CompileOptions.generateDebugInfo = true;
+		CompileOptions.disableOptimizer = true;
+		CompileOptions.optimizeSize = false;
+#else
+		CompileOptions.stripDebugInfo = true;
+		CompileOptions.disableOptimizer = false;
+		CompileOptions.optimizeSize = true;
+#endif
+
 		glslang::TIntermediate *Intermediate = Program.getIntermediate(ShaderModule.getStage());
-		glslang::GlslangToSpv(*Intermediate, SpirvCode);
+		glslang::GlslangToSpv(*Intermediate, SpirvCode, &CompileOptions);
 
 		glslang::FinalizeProcess();
 

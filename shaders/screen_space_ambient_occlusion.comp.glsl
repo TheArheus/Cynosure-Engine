@@ -28,11 +28,32 @@ struct global_world_data
 	bool  LightSourceShadowsEnabled;
 };
 
+
 layout(binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 layout(binding = 1) readonly buffer b1 { vec4 HemisphereSamples[SAMPLES_COUNT]; };
 layout(binding = 2) uniform sampler2D NoiseTexture;
-layout(binding = 3) uniform sampler2D GBuffer[GBUFFER_COUNT];
-layout(binding = 4) uniform writeonly image2D OcclusionTarget;
+layout(binding = 3) uniform sampler2D DepthTarget;
+layout(binding = 4) uniform sampler2D GBuffer[GBUFFER_COUNT];
+layout(binding = 5) uniform writeonly image2D OcclusionTarget;
+
+vec3 ViewPosFromDepth1(vec2 TextCoord, float Depth) 
+{
+	TextCoord.y = 1 - TextCoord.y;
+    vec4 ClipSpacePosition = vec4(TextCoord * 2.0 - 1.0, Depth, 1.0);
+    vec4 ViewSpacePosition = inverse(WorldUpdate.Proj) * ClipSpacePosition;
+    ViewSpacePosition /= ViewSpacePosition.w;
+
+    return ViewSpacePosition.xyz;
+}
+
+vec3 ViewPosFromDepth2(vec2 TextCoord, float Depth) 
+{
+    vec4 ClipSpacePosition = vec4(TextCoord, Depth, 1.0);
+    vec4 ViewSpacePosition = inverse(WorldUpdate.Proj) * ClipSpacePosition;
+    ViewSpacePosition /= ViewSpacePosition.w;
+
+    return ViewSpacePosition.xyz;
+}
 
 
 void main()
@@ -44,11 +65,20 @@ void main()
         return;
     }
 
-	vec4 CoordWS = texelFetch(GBuffer[0], ivec2(TextCoord), 0);
-	vec3 CoordVS = (WorldUpdate.DebugView * CoordWS).xyz;
-	vec3 FragmentNormalWS = normalize(texelFetch(GBuffer[2], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
-	vec3 FragmentNormalVS = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(FragmentNormalWS, 1)).xyz);
-	vec2 Rotation = texture(NoiseTexture, TextCoord).xy;
+	float CurrDepth = texelFetch(DepthTarget, ivec2(TextCoord), 0).r;
+#if 0
+	if(CurrDepth == 1.0)
+	{
+		imageStore(OcclusionTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
+		return;
+	}
+#endif
+
+	vec3  CoordVS = ViewPosFromDepth1(TextCoord / TextureDims, CurrDepth);
+
+	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[2], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
+	vec3  FragmentNormalVS = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(FragmentNormalWS, 1)).xyz);
+	vec2  Rotation = texture(NoiseTexture, TextCoord).xy;
 
 	vec3  Tangent   = normalize(vec3(Rotation, 0) - FragmentNormalVS * dot(vec3(Rotation, 0), FragmentNormalVS));
 	vec3  Bitangent = cross(FragmentNormalVS, Tangent);
@@ -59,14 +89,14 @@ void main()
 	for(uint SampleIdx = 0; SampleIdx < SAMPLES_COUNT; ++SampleIdx)
 	{
 		vec3 SamplePosVS = TBNVS * HemisphereSamples[SampleIdx].xyz;
-		SamplePosVS = CoordVS + SamplePosVS * Radius;
+			 SamplePosVS = CoordVS + SamplePosVS * Radius;
 
 		vec4 Offset = vec4(SamplePosVS, 1.0);
 		Offset = WorldUpdate.Proj * Offset;
 		Offset.xyz /= Offset.w;
+		Offset.xy   = Offset.xy * vec2(0.5, -0.5) + 0.5;
 
-		vec4 SampledPosVS = texture(GBuffer[0], Offset.xy * vec2(0.5, -0.5) + 0.5);
-		SampledPosVS = WorldUpdate.View * SampledPosVS;
+		vec3 SampledPosVS = ViewPosFromDepth2(Offset.xy, texture(DepthTarget, Offset.xy).x);
 
 		float Range = smoothstep(0.0, 1.0, Radius / abs(CoordVS.z - SampledPosVS.z));
 		OcclusionResult += (((SampledPosVS.z - 0.005) > SamplePosVS.z) ? 1.0 : 0.0) * Range;

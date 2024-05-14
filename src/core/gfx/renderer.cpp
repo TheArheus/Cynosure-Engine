@@ -27,6 +27,12 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	GfxDepthTarget = PushTexture("DepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	DebugCameraViewDepthTarget = PushTexture("DebugCameraViewDepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 
+	TextureInputData.Format    = image_format::R16G16B16A16_SFLOAT; //R11G11B10_SFLOAT;
+	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
+	HdrColorTarget = PushTexture("HdrColorTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
+	TextureInputData.MipLevels = 6;
+	BrightTarget   = PushTexture("BrightTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
+
 	vec2 PoissonDisk[64] = {};
 	PoissonDisk[0]  = vec2(-0.613392, 0.617481);
 	PoissonDisk[1]  = vec2(0.170019, -0.040254);
@@ -160,15 +166,13 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc;
-	TextureInputData.Format    = image_format::R16G16B16A16_SFLOAT;
-	GBuffer[0] = PushTexture("GBuffer0", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Vertex Positions
 	TextureInputData.Format    = image_format::R16G16B16A16_SNORM;
-	GBuffer[1] = PushTexture("GBuffer1", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Vertex Normals
-	GBuffer[2] = PushTexture("GBuffer2", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Fragment Normals
+	GBuffer[0] = PushTexture("GBuffer_Normals",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Fragment Normals
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
-	GBuffer[3] = PushTexture("GBuffer3", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Diffuse Color
+	GBuffer[1] = PushTexture("GBuffer_Diffuse",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Diffuse Color
+	GBuffer[2] = PushTexture("GBuffer_Emmit",    nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Emmit Color
 	TextureInputData.Format    = image_format::R32_SFLOAT;
-	GBuffer[4] = PushTexture("GBuffer4", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular
+	GBuffer[3] = PushTexture("GBuffer_Specular", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular
 	AmbientOcclusionData = PushTexture("AmbientOcclusionData", Backend->Width, Backend->Height, 1, TextureInputData);
 	BlurTemp			 = PushTexture("BlurTemp", Backend->Width, Backend->Height, 1, TextureInputData);
 
@@ -200,7 +204,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	RendererInputData.ViewMask	   = 0;
 	DebugCameraViewContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.sdw.vert.glsl", "../shaders/mesh.sdw.frag.glsl"}, {}, RendererInputData);
 
-	ColorPassContext = CreateComputeContext("../shaders/color_pass.comp.glsl", {{"GBUFFER_COUNT", std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
+	ColorPassContext = CreateComputeContext("../shaders/color_pass.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	AmbientOcclusionContext = CreateComputeContext("../shaders/screen_space_ambient_occlusion.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	ShadowComputeContext = CreateComputeContext("../shaders/mesh.dbg.comp.glsl");
 	FrustCullingContext  = CreateComputeContext("../shaders/indirect_cull_frust.comp.glsl");
@@ -208,9 +212,18 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	BlurContextV = CreateComputeContext("../shaders/blur.comp.glsl");
 	BlurContextH = CreateComputeContext("../shaders/blur.comp.glsl");
 
+	BloomDownScaleContext;
+	BloomUpScaleContext;
+	BloomCombineContext = CreateComputeContext("../shaders/bloom_combine.comp.glsl");
+
 	for(u32 MipIdx = 0; MipIdx < GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height)); ++MipIdx)
 	{
-		DepthReduceContext.push_back(CreateComputeContext("../shaders/depth_reduce.comp.glsl"));
+		DepthReduceContext.push_back(CreateComputeContext("../shaders/texel_reduce.comp.glsl"));
+	}
+
+	for(u32 MipIdx = 0; MipIdx < 5; ++MipIdx)
+	{
+		BloomReduceContext.push_back(CreateComputeContext("../shaders/texel_reduce.comp.glsl"));
 	}
 }
 
@@ -241,12 +254,18 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 	FrustCullingContext(std::move(Oth.FrustCullingContext)),
 	OcclCullingContext(std::move(Oth.OcclCullingContext)),
 	DepthReduceContext(std::move(Oth.DepthReduceContext)),
+	BloomReduceContext(std::move(Oth.BloomReduceContext)),
 	BlurContextV(std::move(Oth.BlurContextV)),
 	BlurContextH(std::move(Oth.BlurContextH)),
+	BloomDownScaleContext(std::move(Oth.BloomDownScaleContext)),
+	BloomUpScaleContext(std::move(Oth.BloomUpScaleContext)),
+	BloomCombineContext(std::move(Oth.BloomCombineContext)),
 	DebugComputeContext(std::move(Oth.DebugComputeContext))
 {
 	GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
 	GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
+	HdrColorTarget = std::move(Oth.HdrColorTarget);
+	BrightTarget = std::move(Oth.BrightTarget);
 }
 
 global_graphics_context& global_graphics_context::
@@ -261,6 +280,8 @@ operator=(global_graphics_context&& Oth) noexcept
 		GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
 		GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
 		GfxDepthTarget = std::move(Oth.GfxDepthTarget);
+		HdrColorTarget = std::move(Oth.HdrColorTarget);
+		BrightTarget = std::move(Oth.BrightTarget);
 		DebugCameraViewDepthTarget = std::move(Oth.DebugCameraViewDepthTarget);
 		GlobalShadow = std::move(Oth.GlobalShadow);
 		GBuffer = std::move(Oth.GBuffer);
@@ -281,8 +302,12 @@ operator=(global_graphics_context&& Oth) noexcept
 		FrustCullingContext = std::move(Oth.FrustCullingContext);
 		OcclCullingContext = std::move(Oth.OcclCullingContext);
 		DepthReduceContext = std::move(Oth.DepthReduceContext);
+		BloomReduceContext = std::move(Oth.BloomReduceContext);
 		BlurContextV = std::move(Oth.BlurContextV);
 		BlurContextH = std::move(Oth.BlurContextH);
+		BloomDownScaleContext = std::move(Oth.BloomDownScaleContext);
+		BloomUpScaleContext = std::move(Oth.BloomUpScaleContext);
+		BloomCombineContext = std::move(Oth.BloomCombineContext);
 		DebugComputeContext = std::move(Oth.DebugComputeContext);
 	}
 

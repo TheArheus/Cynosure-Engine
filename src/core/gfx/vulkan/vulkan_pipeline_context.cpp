@@ -199,6 +199,7 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state,
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(std::get<0>(Data));
 
+		u32 MipIdx = std::get<5>(Data);
 		VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
 		Barrier.srcAccessMask = GetVKAccessMask(std::get<1>(Data));
 		Barrier.dstAccessMask = GetVKAccessMask(std::get<2>(Data));
@@ -208,10 +209,20 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state,
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.image = Texture->Handle;
 		Barrier.subresourceRange.aspectMask = Texture->Aspect;
-		Barrier.subresourceRange.baseMipLevel   = 0;
-		Barrier.subresourceRange.baseArrayLayer = 0;
-		Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-		Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+		if(MipIdx == ~0u)
+		{
+			Barrier.subresourceRange.baseMipLevel   = 0;
+			Barrier.subresourceRange.baseArrayLayer = 0;
+			Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+			Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+		}
+		else
+		{
+			Barrier.subresourceRange.baseMipLevel   = MipIdx;
+			Barrier.subresourceRange.baseArrayLayer = 0;
+			Barrier.subresourceRange.levelCount = 1;
+			Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+		}
 
 		Barriers.push_back(Barrier);
 	}
@@ -233,6 +244,7 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, b
 	{
 		const std::vector<texture*>& Textures = std::get<0>(Data);
 		if(!Textures.size()) continue;
+		u32 MipIdx = std::get<5>(Data);
 		for(texture* TextureData : Textures)
 		{
 			vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureData);
@@ -246,10 +258,20 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, b
 			Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			Barrier.image = Texture->Handle;
 			Barrier.subresourceRange.aspectMask = Texture->Aspect;
-			Barrier.subresourceRange.baseMipLevel   = 0;
-			Barrier.subresourceRange.baseArrayLayer = 0;
-			Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-			Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+			if(MipIdx == ~0u)
+			{
+				Barrier.subresourceRange.baseMipLevel   = 0;
+				Barrier.subresourceRange.baseArrayLayer = 0;
+				Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+				Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+			}
+			else
+			{
+				Barrier.subresourceRange.baseMipLevel   = MipIdx;
+				Barrier.subresourceRange.baseArrayLayer = 0;
+				Barrier.subresourceRange.levelCount = 1;
+				Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+			}
 
 			Barriers.push_back(Barrier);
 		}

@@ -46,7 +46,8 @@
 	double TimeElapsed = 0.0;
 	double TimeEnd = 0.0;
 	double AvgCpuTime = 0.0;
-	u32 FrameIndex = 0;
+	u32    FrameIndex = 0;
+	u32    CurrentScene = 0;
 	while(Window.IsRunning())
 	{
 		linear_allocator SystemsAllocator(GlobalMemorySize, MemoryBlock);
@@ -87,7 +88,29 @@
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
 			PipelineContext->DebugGuiBegin(Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
+			ImGui::NewFrame();
+
 			SceneManager.RenderUI();
+
+			if(SceneManager.Count() > 0)
+			{
+				ImGui::SetNextWindowPos(ImVec2(0, 300));
+				ImGui::SetNextWindowSize(ImVec2(150, 100));
+				ImGui::Begin("Active Scenes", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+
+				for(u32 SceneIdx = 0; SceneIdx < SceneManager.Count(); ++SceneIdx)
+				{
+					if(ImGui::Button(SceneManager.Infos[SceneIdx].Name.c_str()))
+					{
+						SceneManager.CurrentScene = SceneIdx;
+					}
+				}
+
+				ImGui::End();
+			}
+
+			ImGui::EndFrame();
+			ImGui::Render();
 			PipelineContext->DebugGuiEnd();
 
 			PipelineContext->EmplaceColorTarget(Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);

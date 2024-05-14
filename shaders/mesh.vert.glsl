@@ -60,6 +60,7 @@ struct global_world_data
 
 struct material
 {
+	vec4 LightDiffuse;
 	vec4 LightEmmit;
 	bool HasTexture;
 	uint TextureIdx;
@@ -85,7 +86,8 @@ struct vert_out
 {
 	vec4 Coord;
 	vec4 Norm;
-	vec4 Col;
+	vec4 ColDiffuse;
+	vec4 ColEmmit;
 	vec2 TextCoord;
 };
 
@@ -109,8 +111,8 @@ layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
 layout(set = 0, binding = 4) readonly buffer b4 { offset Offsets[]; };
 
 layout(location = 0) out vert_out Out;
-layout(location = 4) out uint     MatIdx;
-layout(location = 5) out mat3     TBN;
+layout(location = 5) out uint     MatIdx;
+layout(location = 6) out mat3     TBN;
 
 void main()
 {
@@ -129,9 +131,10 @@ void main()
 	vec3 Bitang  = normalize(vec3(In[VertexIndex].Bitangent));
 	TBN          = mat3(Tang, Bitang, Normal);
 
-	Out.Norm      = vec4(Normal, 0.0);
-	Out.Col		  = MeshMaterials[MatIdx].LightEmmit;
-	Out.TextCoord = In[VertexIndex].TexPos;
+	Out.Norm       = vec4(Normal, 0.0);
+	Out.ColDiffuse = MeshMaterials[MatIdx].LightDiffuse;
+	Out.ColEmmit   = MeshMaterials[MatIdx].LightEmmit;
+	Out.TextCoord  = In[VertexIndex].TexPos;
 
 	gl_Position   = WorldUpdate.Proj * WorldUpdate.View * Out.Coord;
 }

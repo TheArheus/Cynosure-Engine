@@ -95,6 +95,7 @@ struct mesh
 
 	struct alignas(16) material
 	{
+		vec4 LightDiffuse;
 		vec4 LightEmmit;
 		u32  HasTexture;
 		u32  TextureIdx;

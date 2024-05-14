@@ -1,7 +1,6 @@
 #version 450
 
-#extension GL_EXT_scalar_block_layout:  require
-#extension GL_EXT_nonuniform_qualifier: require
+#extension GL_EXT_scalar_block_layout: require
 
 struct global_world_data
 {
@@ -29,12 +28,14 @@ struct vert_in
 {
 	vec4 Coord;
 	vec4 Norm;
-	vec4 Col;
+	vec4 ColDiffuse;
+	vec4 ColEmmit;
 	vec2 TextCoord;
 };
 
 struct material
 {
+	vec4 LightDiffuse;
 	vec4 LightEmmit;
 	bool HasTexture;
 	uint TextureIdx;
@@ -55,29 +56,27 @@ layout(set = 3, binding = 0) uniform sampler2D SpecularSamplers[256];
 layout(set = 4, binding = 0) uniform sampler2D HeightSamplers[256];
 
 layout(location = 0) in vert_in   In;
-layout(location = 4) in flat uint MatIdx;
-layout(location = 5) in mat3      TBN;
+layout(location = 5) in flat uint MatIdx;
+layout(location = 6) in mat3      TBN;
 
-layout(location = 0) out vec4  OutputVertexPosition;
-layout(location = 1) out vec4  OutputVertexNormal;
-layout(location = 2) out vec4  OutputFragmentNormal;
-layout(location = 3) out vec4  OutputDiffuse;
-layout(location = 4) out float OutputSpecular;
+layout(location = 0) out vec4  OutputFragmentNormal;
+layout(location = 1) out vec4  OutputDiffuse;
+layout(location = 2) out vec4  OutputEmmit;
+layout(location = 3) out float OutputSpecular;
 
 
 void main()
 {
-	OutputVertexPosition = In.Coord;
-	OutputVertexNormal   = In.Norm * 0.5 + 0.5;
+	OutputEmmit			= In.ColEmmit;
 
-	uint TextureIdx     = MeshMaterials[nonuniformEXT(MatIdx)].TextureIdx;
-	uint NormalMapIdx   = MeshMaterials[nonuniformEXT(MatIdx)].NormalMapIdx;
-	uint SpecularMapIdx = MeshMaterials[nonuniformEXT(MatIdx)].SpecularMapIdx;
-	uint HeightMapIdx   = MeshMaterials[nonuniformEXT(MatIdx)].HeightMapIdx;
+	uint TextureIdx     = MeshMaterials[MatIdx].TextureIdx;
+	uint NormalMapIdx   = MeshMaterials[MatIdx].NormalMapIdx;
+	uint SpecularMapIdx = MeshMaterials[MatIdx].SpecularMapIdx;
+	uint HeightMapIdx   = MeshMaterials[MatIdx].HeightMapIdx;
 
 	vec2 TextCoord = In.TextCoord;
 	vec3 ViewDir = (WorldUpdate.CameraPos - In.Coord).xyz;
-	if((length(ViewDir) < 6) && MeshMaterials[nonuniformEXT(MatIdx)].HasHeightMap)
+	if((length(ViewDir) < 4) && MeshMaterials[MatIdx].HasHeightMap)
 	{
 		ViewDir = normalize(transpose(TBN) * ViewDir);
 		float HeightScale = 0.04;
@@ -90,35 +89,35 @@ void main()
 
 		vec2  DeltaTextCoord   = ViewDir.xy * HeightScale * LayersDepth;
 		vec2  CurrentTextCoord = In.TextCoord;
-		float CurrentDepth     = 1.0 - texture(HeightSamplers[nonuniformEXT(HeightMapIdx)], CurrentTextCoord).r;
+		float CurrentDepth     = 1.0 - texture(HeightSamplers[HeightMapIdx], CurrentTextCoord).r;
 		while(CurrentLayerDepth < CurrentDepth)
 		{
 			CurrentTextCoord  -= DeltaTextCoord;
-			CurrentDepth       = 1.0 - texture(HeightSamplers[nonuniformEXT(HeightMapIdx)], CurrentTextCoord).r;
+			CurrentDepth       = 1.0 - texture(HeightSamplers[HeightMapIdx], CurrentTextCoord).r;
 			CurrentLayerDepth += LayersDepth;
 		}
 
 		vec2 PrevTextCoord = CurrentTextCoord + DeltaTextCoord;
 
 		float AfterDepth  = CurrentDepth - CurrentLayerDepth;
-		float BeforeDepth = 1.0 - texture(HeightSamplers[nonuniformEXT(HeightMapIdx)], PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
+		float BeforeDepth = 1.0 - texture(HeightSamplers[HeightMapIdx], PrevTextCoord).x - CurrentLayerDepth + LayersDepth;
 		float Weight	  = AfterDepth / (AfterDepth - BeforeDepth);
 		TextCoord         = mix(PrevTextCoord, CurrentTextCoord, Weight);
 
-		if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard;
+		if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard; // clamp?
 	}
 
-	OutputFragmentNormal = OutputVertexNormal;
-	if(MeshMaterials[nonuniformEXT(MatIdx)].HasNormalMap)
-		OutputFragmentNormal = vec4((TBN * texture(NormalSamplers[nonuniformEXT(NormalMapIdx)], TextCoord).rgb) * 0.5 + 0.5, 0);
+	OutputFragmentNormal = In.Norm * 0.5 + 0.5;
+	if(MeshMaterials[MatIdx].HasNormalMap)
+		OutputFragmentNormal = vec4((TBN * texture(NormalSamplers[NormalMapIdx], TextCoord).rgb) * 0.5 + 0.5, 0);
 #if DEBUG_COLOR_BLEND
 	OutputDiffuse		 = vec4(vec3(0.1) * In.Col.rgb, 1.0);
 #else
-	OutputDiffuse		 = In.Col;
-	if(MeshMaterials[nonuniformEXT(MatIdx)].HasTexture)
-		OutputDiffuse *= vec4(texture(DiffuseSamplers[nonuniformEXT(TextureIdx)], TextCoord).rgb, 1);
+	OutputDiffuse		 = In.ColDiffuse;
+	if(MeshMaterials[MatIdx].HasTexture)
+		OutputDiffuse    = vec4(texture(DiffuseSamplers[TextureIdx], TextCoord).rgb, 1);
 #endif
 	OutputSpecular		 = 0.0;
-	if(MeshMaterials[nonuniformEXT(MatIdx)].HasSpecularMap)
-		OutputSpecular   = texture(SpecularSamplers[nonuniformEXT(SpecularMapIdx)], TextCoord).r;
+	if(MeshMaterials[MatIdx].HasSpecularMap)
+		OutputSpecular   = texture(SpecularSamplers[SpecularMapIdx], TextCoord).r;
 }

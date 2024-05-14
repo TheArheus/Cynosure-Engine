@@ -122,9 +122,9 @@ void main()
 	{
 		uint InstanceIdx = atomicAdd(IndirectDrawIndexedCommands[CommandIdx].InstanceCount, 1);
 
-		IndirectDrawIndexedCommands[CommandIdx].DrawID     = CommandIdx;
-		IndirectDrawIndexedCommands[CommandIdx].IndexCount = MeshOffsets[CommandIdx].IndexCount;
-		IndirectDrawIndexedCommands[CommandIdx].FirstIndex = MeshOffsets[CommandIdx].IndexOffset;
+		IndirectDrawIndexedCommands[CommandIdx].DrawID        = CommandIdx;
+		IndirectDrawIndexedCommands[CommandIdx].IndexCount    = MeshOffsets[CommandIdx].IndexCount;
+		IndirectDrawIndexedCommands[CommandIdx].FirstIndex    = MeshOffsets[CommandIdx].IndexOffset;
 
 		InstanceIdx += MeshOffsets[CommandIdx].InstanceOffset;
 		MeshDrawCommands[InstanceIdx].MeshIndex	= CommandIdx;

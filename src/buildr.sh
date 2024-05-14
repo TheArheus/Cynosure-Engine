@@ -6,7 +6,7 @@ PlatformCppFiles="../src/linux_main.cpp"
 
 DepthCascades="-DDEPTH_CASCADES_COUNT=3"
 UseDebugColorBlend="-DDEBUG_COLOR_BLEND=0"
-GBufferCount="-DGBUFFER_COUNT=5"
+GBufferCount="-DGBUFFER_COUNT=4"
 LightSourcesMax="-DLIGHT_SOURCES_MAX_COUNT=256"
 
 mkdir -p ../build ../build/scenes

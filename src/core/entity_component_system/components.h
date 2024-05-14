@@ -31,6 +31,15 @@ struct color_component
 	color_component(vec3 NewColor = vec3(1, 1, 1)) : Data(NewColor) {}
 };
 
+// TODO: Make it point light source by default
+struct emmit_component
+{
+	vec3  Data;
+	float Intensity;
+
+	emmit_component(vec3 NewColor = vec3(0, 0, 0), float NewIntensity = 1.0) : Data(NewColor), Intensity(NewIntensity) {}
+};
+
 struct camera_component
 {
 	union projection

@@ -15,7 +15,7 @@ set PlatformCppFiles="..\src\win32_main.cpp"
 
 set DepthCascades=-DDEPTH_CASCADES_COUNT=3
 set UseDebugColorBlend=-DDEBUG_COLOR_BLEND=0
-set GBufferCount=-DGBUFFER_COUNT=5
+set GBufferCount=-DGBUFFER_COUNT=4
 set LightSourcesMax=-DLIGHT_SOURCES_MAX_COUNT=256
 
 if not exist ..\build\ mkdir ..\build\

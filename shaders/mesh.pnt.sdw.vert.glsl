@@ -1,4 +1,4 @@
-#version 450
+#version 460
 
 #extension GL_EXT_shader_16bit_storage: require
 #extension GL_EXT_shader_8bit_storage: require
@@ -6,6 +6,33 @@
 #extension GL_EXT_shader_explicit_arithmetic_types:require
 #extension GL_EXT_shader_explicit_arithmetic_types_int16:require
 #extension GL_EXT_shader_explicit_arithmetic_types_int8:require
+
+struct sphere
+{
+	vec4  Center;
+	float Radius;
+};
+
+struct aabb
+{
+	vec4 Min;
+	vec4 Max;
+};
+
+struct offset
+{
+	aabb AABB;
+	sphere BoundingSphere;
+
+	uint VertexOffset;
+	uint VertexCount;
+
+	uint IndexOffset;
+	uint IndexCount;
+
+	uint InstanceOffset;
+	uint InstanceCount;
+};
 
 struct vert_in
 {
@@ -31,6 +58,7 @@ vec4 QuatMul(vec4 lhs, vec4 rhs)
 
 layout(binding = 0) readonly buffer b0 { vert_in In[]; };
 layout(binding = 1) readonly buffer b1 { mesh_draw_command MeshDrawCommands[]; };
+layout(binding = 2) readonly buffer b2 { offset Offsets[]; };
 layout(push_constant) uniform pushConstant 
 { 
 	mat4  ShadowMatrix; 
@@ -41,7 +69,11 @@ layout(location = 0) out vec4 OutPos;
 
 void main()
 {
-	OutPos = In[gl_VertexIndex].Pos * MeshDrawCommands[gl_InstanceIndex].Scale + MeshDrawCommands[gl_InstanceIndex].Translate;
+	uint DrawID        = gl_DrawID;
+	uint VertexIndex   = gl_VertexIndex   + Offsets[DrawID].VertexOffset;
+	uint InstanceIndex = gl_InstanceIndex + Offsets[DrawID].InstanceOffset;
+
+	OutPos = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
 	gl_Position = ShadowMatrix * OutPos;
 }
 

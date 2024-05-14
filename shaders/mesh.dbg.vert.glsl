@@ -70,6 +70,7 @@ struct global_world_data
 
 struct material
 {
+	vec4 LightDiffuse;
 	vec4 LightEmmit;
 	bool HasTexture;
 	uint TextureIdx;
