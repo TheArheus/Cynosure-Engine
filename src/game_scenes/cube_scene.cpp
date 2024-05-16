@@ -28,11 +28,6 @@ struct cube_scene : scene
 		PlaneObject.AddComponent<mesh_component>("../assets/cube.obj", generate_aabb | generate_sphere);
 		PlaneObject.AddComponent<static_instances_component>();
 
-		entity EmmitObject = Registry.CreateEntity();
-		EmmitObject.AddComponent<mesh_component>("../assets/cube.obj", generate_aabb | generate_sphere);
-		EmmitObject.AddComponent<static_instances_component>();
-		EmmitObject.AddComponent<emmit_component>(vec3(0.5, 0.1, 0.7), 17.0); // Should it become point light source?
-
 		//entity VampireEntity = Registry.CreateEntity();
 		//VampireEntity.AddComponent<mesh_component>("../assets/dancing vampire/dancing_vampire.dae");
 
@@ -44,7 +39,6 @@ struct cube_scene : scene
 
 		vec4 Scaling = vec4(vec3(1.0f / 2.0), 1.0);
 
-#if 0
 		entity LightComponent0 = Registry.CreateEntity();
 		entity LightComponent1 = Registry.CreateEntity();
 		LightComponent0.AddComponent<light_component>()->PointLight(vec3(-4,  4,  2), 10, vec3(1, 0, 1), 0.02);
@@ -64,14 +58,6 @@ struct cube_scene : scene
 			else
 				PlaneObject.GetComponent<static_instances_component>()->AddInstance(Translation, Scaling, true);
 		}
-#else
-		entity LightComponent0 = Registry.CreateEntity();
-		LightComponent0.AddComponent<light_component>()->PointLight(vec3(0,  0,  0), 10, vec3(1, 1, 1), 0.02);
-
-		CubeObject.GetComponent<static_instances_component>()->AddInstance(vec4(-2.5, 0.0, 0.0, 0.0), Scaling, true);
-		PlaneObject.GetComponent<static_instances_component>()->AddInstance(vec4(2.5, 0.0, 0.0, 0.0), Scaling, true);
-		EmmitObject.GetComponent<static_instances_component>()->AddInstance(vec4(0.0, 0.0, 2.5, 0.0), Scaling, true);
-#endif
 	}
 
 	GameSceneUpdateFunc() override

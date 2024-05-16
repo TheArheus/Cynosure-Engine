@@ -31,13 +31,7 @@ struct cube_scene1 : scene
 		entity EmmitObject = Registry.CreateEntity();
 		EmmitObject.AddComponent<mesh_component>("../assets/cube.obj", generate_aabb | generate_sphere);
 		EmmitObject.AddComponent<static_instances_component>();
-		EmmitObject.AddComponent<emmit_component>(vec3(0.5, 0.1, 0.7)); // Should it become point light source?
-
-		//entity VampireEntity = Registry.CreateEntity();
-		//VampireEntity.AddComponent<mesh_component>("../assets/dancing vampire/dancing_vampire.dae");
-
-		//entity BobEntity = Registry.CreateEntity();
-		//BobEntity.AddComponent<mesh_component>("../assets/bob_lamp_update/bob_lamp_update.md5mesh");
+		EmmitObject.AddComponent<emmit_component>(vec3(0.5, 0.1, 0.7), 17.0); // Should it become point light source?
 
 		entity CameraObject = Registry.CreateEntity();
 		CameraObject.AddComponent<camera_component>(45.0f, 0.01f, 100.0f, false);

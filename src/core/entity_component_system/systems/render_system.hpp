@@ -102,7 +102,7 @@ struct render_system : public entity_system
 			}
 			if(Emmit)
 			{
-				NewMaterial.LightEmmit   = vec4(Emmit->Data * Emmit->Intensity, 1.0);
+				NewMaterial.LightEmmit   = vec4(Emmit->Data, Emmit->Intensity);
 			}
 			if(Diffuse)
 			{
@@ -272,12 +272,25 @@ struct render_system : public entity_system
 			Window.Gfx.DepthReduceContext[MipIdx]->StaticUpdate();
 		}
 
-		for(u32 MipIdx = 0; MipIdx < Window.Gfx.BloomReduceContext.size(); ++MipIdx)
+		for(u32 MipIdx = 0; MipIdx < Window.Gfx.BloomDownScaleContext.size(); ++MipIdx)
 		{
-			Window.Gfx.BloomReduceContext[MipIdx]->SetImageSampler({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::shader_read, MipIdx);
-			Window.Gfx.BloomReduceContext[MipIdx]->SetStorageImage({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::general, MipIdx + 1);
-			Window.Gfx.BloomReduceContext[MipIdx]->StaticUpdate();
+			Window.Gfx.BloomDownScaleContext[MipIdx]->SetImageSampler({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::shader_read, MipIdx);
+			Window.Gfx.BloomDownScaleContext[MipIdx]->SetStorageImage({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::general, MipIdx + 1);
+			Window.Gfx.BloomDownScaleContext[MipIdx]->StaticUpdate();
 		}
+
+		for(s32 MipIdx = Window.Gfx.BloomUpScaleContext.size() - 1; MipIdx >= 0 ; --MipIdx)
+		{
+			Window.Gfx.BloomUpScaleContext[MipIdx]->SetImageSampler({MipIdx < Window.Gfx.BloomUpScaleContext.size() - 1 ? Window.Gfx.TempBrTarget : Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::shader_read, MipIdx + 1);
+			Window.Gfx.BloomUpScaleContext[MipIdx]->SetImageSampler({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::shader_read, MipIdx);
+			Window.Gfx.BloomUpScaleContext[MipIdx]->SetStorageImage({Window.Gfx.TempBrTarget}, image_type::Texture2D, barrier_state::general, MipIdx);
+			Window.Gfx.BloomUpScaleContext[MipIdx]->StaticUpdate();
+		}
+
+		Window.Gfx.BloomCombineContext->SetImageSampler({Window.Gfx.HdrColorTarget}, image_type::Texture2D, barrier_state::shader_read);
+		Window.Gfx.BloomCombineContext->SetImageSampler({Window.Gfx.TempBrTarget}, image_type::Texture2D, barrier_state::shader_read);
+		Window.Gfx.BloomCombineContext->SetStorageImage({Window.Gfx.GfxColorTarget[BackBufferIndex]}, image_type::Texture2D, barrier_state::general);
+		Window.Gfx.BloomCombineContext->StaticUpdate();
 
 		Window.Gfx.ShadowContext->SetStorageBufferView(VertexBuffer);
 		Window.Gfx.ShadowContext->SetStorageBufferView(MeshDrawShadowCommandBuffer);
@@ -316,11 +329,6 @@ struct render_system : public entity_system
 		Window.Gfx.BlurContextV->SetImageSampler({Window.Gfx.BlurTemp}, image_type::Texture2D, barrier_state::general);
 		Window.Gfx.BlurContextV->SetStorageImage({Window.Gfx.AmbientOcclusionData}, image_type::Texture2D, barrier_state::general);
 		Window.Gfx.BlurContextV->StaticUpdate();
-
-		Window.Gfx.BloomCombineContext->SetImageSampler({Window.Gfx.HdrColorTarget}, image_type::Texture2D, barrier_state::shader_read);
-		Window.Gfx.BloomCombineContext->SetImageSampler({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::shader_read);
-		Window.Gfx.BloomCombineContext->SetStorageImage({Window.Gfx.GfxColorTarget[BackBufferIndex]}, image_type::Texture2D, barrier_state::general);
-		Window.Gfx.BloomCombineContext->StaticUpdate();
 
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 		Window.Gfx.OcclCullingContext->SetStorageBufferView(GeometryOffsets);
@@ -581,28 +589,57 @@ struct render_system : public entity_system
 		}
 
 		{
-			PipelineContext->SetImageBarriers({{Window.Gfx.BrightTarget, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, 0}}, 
+			PipelineContext->SetImageBarriers({{Window.Gfx.BrightTarget, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, 0},
+											   {Window.Gfx.BrightTarget, AF_ShaderWrite, AF_ShaderWrite, barrier_state::general, barrier_state::general, 1}}, 
 											  PSF_Compute, PSF_Compute);
 
 			for(u32 MipIdx = 0;
-				MipIdx < Window.Gfx.BloomReduceContext.size();
+				MipIdx < Window.Gfx.BloomDownScaleContext.size();
 				++MipIdx)
 			{
-				vec2 VecDims(Max(1u, Window.Gfx.Backend->Width  >> MipIdx),
-							 Max(1u, Window.Gfx.Backend->Height >> MipIdx));
+				vec2 VecDims(Max(1u, Window.Gfx.BrightTarget->Width  >> (MipIdx + 1)),
+							 Max(1u, Window.Gfx.BrightTarget->Height >> (MipIdx + 1)));
 
 				if(MipIdx >= 1)
 				{
 					std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state, u32>> MipBarrier;
 					MipBarrier.push_back({Window.Gfx.BrightTarget, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, MipIdx});
+					MipBarrier.push_back({Window.Gfx.BrightTarget, AF_ShaderWrite, AF_ShaderWrite, barrier_state::general, barrier_state::general, MipIdx + 1});
 					PipelineContext->SetImageBarriers(MipBarrier, PSF_Compute, PSF_Compute);
 				}
 
-				Window.Gfx.BloomReduceContext[MipIdx]->Begin(PipelineContext);
-				Window.Gfx.BloomReduceContext[MipIdx]->SetConstant((void*)VecDims.E, sizeof(vec2));
-				Window.Gfx.BloomReduceContext[MipIdx]->Execute(VecDims.x, VecDims.y);
-				Window.Gfx.BloomReduceContext[MipIdx]->End();
-				Window.Gfx.BloomReduceContext[MipIdx]->Clear();
+				Window.Gfx.BloomDownScaleContext[MipIdx]->Begin(PipelineContext);
+				Window.Gfx.BloomDownScaleContext[MipIdx]->SetConstant((void*)VecDims.E, sizeof(vec2));
+				Window.Gfx.BloomDownScaleContext[MipIdx]->Execute(VecDims.x, VecDims.y);
+				Window.Gfx.BloomDownScaleContext[MipIdx]->End();
+				Window.Gfx.BloomDownScaleContext[MipIdx]->Clear();
+			}
+		}
+
+		{
+			PipelineContext->SetImageBarriers({{Window.Gfx.BrightTarget, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, Window.Gfx.BloomUpScaleContext.size()},
+											   {Window.Gfx.TempBrTarget, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u}}, 
+											  PSF_Compute, PSF_Compute);
+
+			for(s32 MipIdx = Window.Gfx.BloomUpScaleContext.size() - 1;
+				MipIdx >= 0;
+				--MipIdx)
+			{
+				vec2 VecDims(Max(1u, Window.Gfx.BrightTarget->Width  >> MipIdx),
+							 Max(1u, Window.Gfx.BrightTarget->Height >> MipIdx));
+
+				if(MipIdx < Window.Gfx.BloomUpScaleContext.size() - 1)
+				{
+					std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state, u32>> MipBarrier;
+					MipBarrier.push_back({Window.Gfx.TempBrTarget, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, MipIdx + 1});
+					PipelineContext->SetImageBarriers(MipBarrier, PSF_Compute, PSF_Compute);
+				}
+
+				Window.Gfx.BloomUpScaleContext[MipIdx]->Begin(PipelineContext);
+				Window.Gfx.BloomUpScaleContext[MipIdx]->SetConstant((void*)VecDims.E, sizeof(vec2));
+				Window.Gfx.BloomUpScaleContext[MipIdx]->Execute(VecDims.x, VecDims.y);
+				Window.Gfx.BloomUpScaleContext[MipIdx]->End();
+				Window.Gfx.BloomUpScaleContext[MipIdx]->Clear();
 			}
 		}
 
@@ -611,6 +648,7 @@ struct render_system : public entity_system
 			{
 				{{Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.HdrColorTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
+				{{Window.Gfx.TempBrTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, 0},
 			};
 			PipelineContext->SetImageBarriers(ColorPassBarrier, PSF_Compute, PSF_Compute);
 

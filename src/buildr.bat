@@ -24,25 +24,14 @@ if not exist ..\build\scenes\ mkdir ..\build\scenes\
 pushd ..\build\scenes\
 del *.pdb > NUL 2> NUL
 for %%f in ("..\..\src\game_scenes\*.cpp") do (
-	set FileName=%%f
-	set BaseName=%%~nf
-    set ExportName=
+	set "FileName=%%f"
+	set "BaseName=%%~nf"
+    set "ExportName="
     
-	for /F "tokens=1,* delims=_" %%a in ("!BaseName!") do (
-        call :ProcessToken %%a
-        set "RestOfName=%%b"
-    )
-
-    :NextToken
-    if not "!RestOfName!"=="" (
-        for /F "tokens=1,* delims=_" %%a in ("!RestOfName!") do (
-            call :ProcessToken %%a
-            set "RestOfName=%%b"
-        )
-        goto NextToken
-    )
+	call :ProcessTokens !BaseName!
     
     set ExportName=!ExportName!Create
+	echo !ExportName!
 	cl %CommonCompFlags% /I"..\..\src" /I"..\..\src\core\vendor" "!FileName!" ..\libs\assimp-vc143-mt.lib /LD /Fe"!BaseName!" %DepthCascades% -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName% /LIBPATH:"..\..\libs" -PDB:ce_!BaseName!_%random%.pdb
 )
 popd
@@ -52,13 +41,23 @@ del *.pdb > NUL 2> NUL
 cl %CommonCompFlags% /I%VulkanInc% /I"..\src" /I"..\src\core\vendor" user32.lib kernel32.lib gdi32.lib shell32.lib d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib ..\libs\dxcompiler.lib vulkan-1.lib glslang.lib HLSL.lib OGLCompiler.lib OSDependent.lib MachineIndependent.lib SPIRV.lib SPIRV-Tools.lib SPIRV-Tools-opt.lib GenericCodeGen.lib glslang-default-resource-limits.lib SPVRemapper.lib spirv-cross-core.lib spirv-cross-cpp.lib spirv-cross-glsl.lib spirv-cross-hlsl.lib ..\libs\assimp-vc143-mt.lib ..\src\main.cpp %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
 popd
 
+endlocal
 goto :eof
 
-:ProcessToken
-	call :CapitalizeFirstLetter %1
-	set "ExportName=!ExportName!!CapWord!"
+:ProcessTokens
+	set "InputWord=%~1"
+	set "RestOfName=%InputWord%"
 
-goto :eof
+	:NextToken
+	if defined RestOfName (
+		for /F "tokens=1,* delims=_" %%a in ("!RestOfName!") do (
+			set "RestOfName=%%b"
+			call :CapitalizeFirstLetter %%a
+			set "ExportName=!ExportName!!CapWord!"
+		)
+		goto :NextToken
+	)
+	exit /b
 
 :CapitalizeFirstLetter
     set InputWord=%1
@@ -68,4 +67,5 @@ goto :eof
         if /i "!FirstChar!"=="%%i" set FirstChar=%%i
     )
     set CapWord=!FirstChar!!RemainingChars!
-    exit /b
+
+	exit /b

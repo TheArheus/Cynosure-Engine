@@ -284,7 +284,7 @@ private:
 // TODO: Better image view handling
 struct vulkan_texture : public texture
 {
-	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_transparent, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, barrier_state::undefined})
+	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, barrier_state::undefined})
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
@@ -306,7 +306,7 @@ struct vulkan_texture : public texture
 		CreateInfo.minFilter = VK_FILTER_NEAREST;
 		CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 		CreateInfo.addressModeU = CreateInfo.addressModeV = CreateInfo.addressModeW = GetVKSamplerAddressMode(Info.AddressMode);
-		CreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+		CreateInfo.borderColor = GetVKBorderColor(Info.BorderColor);
 		CreateInfo.compareEnable = false;
 		CreateInfo.compareOp = VK_COMPARE_OP_NEVER;
 		CreateInfo.maxLod = Info.MipLevels;

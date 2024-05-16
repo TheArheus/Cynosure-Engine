@@ -59,15 +59,15 @@ layout(location = 0) in vert_in   In;
 layout(location = 5) in flat uint MatIdx;
 layout(location = 6) in mat3      TBN;
 
-layout(location = 0) out vec4  OutputFragmentNormal;
-layout(location = 1) out vec4  OutputDiffuse;
-layout(location = 2) out vec4  OutputEmmit;
-layout(location = 3) out float OutputSpecular;
+layout(location = 0) out vec4 OutputFragmentNormal;
+layout(location = 1) out vec4 OutputDiffuse;
+layout(location = 2) out vec4 OutputEmmit;
+layout(location = 3) out vec2 OutputSpecularEmmit;
 
 
 void main()
 {
-	OutputEmmit			= In.ColEmmit;
+	OutputEmmit			= vec4(In.ColEmmit.rgb, 1.0);
 
 	uint TextureIdx     = MeshMaterials[MatIdx].TextureIdx;
 	uint NormalMapIdx   = MeshMaterials[MatIdx].NormalMapIdx;
@@ -117,7 +117,7 @@ void main()
 	if(MeshMaterials[MatIdx].HasTexture)
 		OutputDiffuse    = vec4(texture(DiffuseSamplers[TextureIdx], TextCoord).rgb, 1);
 #endif
-	OutputSpecular		 = 0.0;
+	OutputSpecularEmmit	 = vec2(0.0, In.ColEmmit.w);
 	if(MeshMaterials[MatIdx].HasSpecularMap)
-		OutputSpecular   = texture(SpecularSamplers[SpecularMapIdx], TextCoord).r;
+		OutputSpecularEmmit = vec2(texture(SpecularSamplers[SpecularMapIdx], TextCoord).r, In.ColEmmit.w);
 }

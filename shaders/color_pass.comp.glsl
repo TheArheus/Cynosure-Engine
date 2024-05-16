@@ -359,7 +359,7 @@ void GetPBRColor(inout vec3 DiffuseColor, inout vec3 SpecularColor, vec3 Coord, 
 		 kDiff = kDiff * (1.0 - Metalness);
 
 	vec3 DiffusePart  = kDiff * Diffuse / Pi;
-	vec3 SpecularPart = (D * F * G) / (4 * NdotL * NdotV) + 0.00001;
+	vec3 SpecularPart = (D * F * G) / (4 * NdotL * NdotV + 0.00001);
 
 	vec3 RadianceAmmount = Radiance * NdotL;
 	DiffuseColor  += DiffusePart  * RadianceAmmount;
@@ -464,7 +464,8 @@ void main()
 
 	vec3  Diffuse  = texelFetch(GBuffer[1], ivec2(TextCoord), 0).rgb;
 	vec3  Emmit    = texelFetch(GBuffer[2], ivec2(TextCoord), 0).rgb;
-	float Specular = texelFetch(GBuffer[3], ivec2(TextCoord), 0).x;
+	float Specular = texelFetch(GBuffer[3], ivec2(TextCoord), 0).r;
+	float EmmitSze = texelFetch(GBuffer[3], ivec2(TextCoord), 0).g;
 	float AmbientOcclusion = texelFetch(AmbientOcclusionBuffer, ivec2(TextCoord), 0).r;
 
 	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[0], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
@@ -595,7 +596,7 @@ void main()
 	else
 	{
 		vec3 FinalLight = (LightDiffuse + LightSpecular);// * AmbientOcclusion;
-			 FinalLight = Emmit + mix(vec3(0.002), FinalLight, 1.0 - Shadow);
+			 FinalLight = Emmit * EmmitSze + mix(vec3(0.002), FinalLight, 1.0 - Shadow);
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(FinalLight, 1));
 		if(dot(FinalLight, vec3(0.2126, 0.7152, 0.0722)) > 1.0)
 			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(FinalLight, 1));

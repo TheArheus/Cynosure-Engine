@@ -28,5 +28,5 @@ void main()
 
 	vec3 TexelA = texture(A, TextCoord / TextureDimsA).rbg;
 	vec3 TexelB = texture(B, TextCoord / TextureDimsB).rgb;
-	imageStore(OutTexture, ivec2(TextCoord), vec4(pow(vec3(TexelA + TexelB), vec3(1.0 / 2.2)), 1.0));
+	imageStore(OutTexture, ivec2(TextCoord), vec4(pow(aces(TexelA + TexelB), vec3(1.0 / 2.2)), 1.0));
 }

@@ -104,6 +104,7 @@ public:
 
 	texture* HdrColorTarget;
 	texture* BrightTarget;
+	texture* TempBrTarget;
 
 	std::vector<texture*> GlobalShadow;
 	std::vector<texture*> GBuffer;
@@ -119,7 +120,6 @@ public:
 
 	std::vector<render_context*> CubeMapShadowContexts;
 	std::vector<compute_context*> DepthReduceContext;
-	std::vector<compute_context*> BloomReduceContext;
 
 	render_context* GfxContext;
 	render_context* CascadeShadowContext;
@@ -127,8 +127,8 @@ public:
 	render_context* DebugCameraViewContext;
 	render_context* DebugContext;
 
-	compute_context* BloomDownScaleContext;
-	compute_context* BloomUpScaleContext;
+	std::vector<compute_context*> BloomDownScaleContext;
+	std::vector<compute_context*> BloomUpScaleContext;
 	compute_context* BloomCombineContext;
 
 	compute_context* ColorPassContext;

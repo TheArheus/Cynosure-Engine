@@ -167,6 +167,7 @@ UpdateScene(window& Window, global_pipeline_context* PipelineContext, alloc_vect
 {
 	if(Scenes[CurrentScene]->IsInitialized)
 	{
+		// TODO: Unload old scene, save scene state and load new scene. Load old scene saved state if old one is loaded respectively
 		Scenes[CurrentScene]->Reset();
 		Scenes[CurrentScene]->Update();
 

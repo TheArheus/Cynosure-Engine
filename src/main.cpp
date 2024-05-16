@@ -14,6 +14,14 @@
 #include <string_view>
 
 
+// TODO: Image Based Lighting
+// TODO: Sky
+// TODO: Volumetric clouds
+// TODO: Volumetric lighting
+// TODO: Global Illumination
+//
+// TODO: Add more flexibility to activate/disable features
+//			Maybe I would need to add render graphs or just automatic barriers for it
 // TODO: Handle dynamic entities that updates every frame
 //			One entity - one instance for a group of the object(would be easy to handle each instance and add to them the component if needed)
 //
@@ -92,7 +100,7 @@
 
 			SceneManager.RenderUI();
 
-			if(SceneManager.Count() > 0)
+			if(SceneManager.Count() > 1)
 			{
 				ImGui::SetNextWindowPos(ImVec2(0, 300));
 				ImGui::SetNextWindowSize(ImVec2(150, 100));
