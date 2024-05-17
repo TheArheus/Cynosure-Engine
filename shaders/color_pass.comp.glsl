@@ -10,6 +10,7 @@
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
+const float GScat    = 0.7;
 const float RayStep  = 0.1;
 const uint  MaxSteps = 128;
 
@@ -301,13 +302,17 @@ void SpotLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord, 
 	SpecularResult += NewSpecular;
 }
 
+float MieScattering(float Angle)
+{
+	return (1.0 - GScat * GScat) / (4.0 * Pi * pow(1.0 + GScat * GScat - 2.0 * GScat * Angle, 1.5));
+}
+
 float NormalDistributionGGX(vec3 Normal, vec3 Half, float Roughness)
 {
 	float a2    = Roughness * Roughness;
 	float NdotH = max(dot(Normal, Half), 0.0);
 
-	//float Denom = (NdotH * NdotH * (a2 - 1.0) + 1.0);
-	float Denom = (NdotH * NdotH * a2 + 1.0);
+	float Denom = (NdotH * NdotH * (a2 - 1.0) + 1.0);
 
 	return a2 / (Pi * Denom * Denom);
 }
@@ -445,18 +450,63 @@ void main()
         return;
     }
 
+	vec3  GlobalLightPosWS = WorldUpdate.GlobalLightPos.xyz;
+	vec3  GlobalLightDirWS = normalize(-WorldUpdate.GlobalLightPos.xyz);
+	vec3  GlobalLightPosVS = (WorldUpdate.DebugView * vec4(GlobalLightPosWS, 1)).xyz;
+	vec3  GlobalLightDirVS = normalize((WorldUpdate.DebugView * vec4(GlobalLightDirWS, 1)).xyz);
+
+	float CurrDepth = texelFetch(DepthTarget, ivec2(TextCoord), 0).r;
+	vec3  CoordWS = WorldPosFromDepth(TextCoord / TextureDims, CurrDepth);
+	vec3  CoordVS = vec3(WorldUpdate.DebugView * vec4(CoordWS, 1.0));
+
+	vec3  Volumetric = vec3(0);
+	uint  Layer = 0;
+	for(uint CascadeIdx = 1;
+		CascadeIdx <= DEPTH_CASCADES_COUNT;
+		++CascadeIdx)
+	{
+		if(abs(CoordVS.z) < WorldUpdate.CascadeSplits[CascadeIdx])
+		{
+			Layer = CascadeIdx - 1;
+			break;
+		}
+	}
+	{
+		vec3 LightViewDir = normalize(CoordWS - WorldUpdate.CameraPos.xyz);
+
+		uint LightSamplesCount = 64;
+		vec3 RayP = WorldUpdate.CameraPos.xyz;
+		vec3 RayD = LightViewDir * (1.0 / LightSamplesCount);
+		for(uint StepIdx = 0; StepIdx < LightSamplesCount; ++StepIdx)
+		{
+			RayP += RayD;
+
+			vec4 ProjectedRayCoord = WorldUpdate.LightProj[Layer] * WorldUpdate.LightView[Layer] * vec4(RayP, 1.0);
+			ProjectedRayCoord.xyz /= ProjectedRayCoord.w;
+			ProjectedRayCoord.xy   = ProjectedRayCoord.xy * vec2(0.5, -0.5) + 0.5;
+
+			float SampledDepth = texture(ShadowMap[Layer], ProjectedRayCoord.xy).r;
+			if((ProjectedRayCoord.z + 0.01) < SampledDepth)
+			{
+				Volumetric += MieScattering(dot(LightViewDir, -GlobalLightDirWS)) * vec3(0.8235, 0.7215, 0.0745);
+			}
+		}
+
+		Volumetric /= LightSamplesCount;
+	}
+
 	float Metallic  = 1.0;
 	float Roughness = 0.8;
-	float CurrDepth = texelFetch(DepthTarget, ivec2(TextCoord), 0).r;
 	if(CurrDepth == 1.0)
 	{
-		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
+		imageStore(ColorTarget , ivec2(gl_GlobalInvocationID.xy), vec4(Volumetric, 1));
+		if(dot(Volumetric, vec3(0.2126, 0.7152, 0.0722)) > 1.0)
+			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(Volumetric, 1));
+		else
+			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
 		imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
 		return;
 	}
-
-	vec3  CoordWS = WorldPosFromDepth(TextCoord / TextureDims, CurrDepth);
-	vec3  CoordVS = vec3(WorldUpdate.DebugView * vec4(CoordWS, 1.0));
 
 	vec3  RotationAngles = texture(RandomAnglesTexture, CoordVS / 32).xyz;
 	vec2  Rotation2D = vec2(cos(RotationAngles.x), sin(RotationAngles.y));
@@ -475,12 +525,12 @@ void main()
 	vec3  ReflDirVS = normalize(reflect(CoordVS, FragmentNormalVS));
 
 	vec3  Jitt = mix(vec3(0.0), VecHash(CoordWS), Specular);
-	float FresnelSSR = 5.0 * pow(1.0 - max(dot(ViewDirVS, FragmentNormalVS), 0.0), 2.0);
+	float FresnelSSR = 2.0 * pow(1.0 - max(dot(ViewDirVS, FragmentNormalVS), 0.0), 2.0);
 
 	vec2  ReflTextCoord = ReflectedRayCast(CoordVS, ReflDirVS + Jitt);
 	if(ReflTextCoord.x > 0.0)
 	{
-		vec2  dReflCoord = smoothstep(0.2, 0.4, abs(vec2(0.5) - ReflTextCoord));
+		vec2  dReflCoord = smoothstep(0.2, 0.6, abs(vec2(0.5) - ReflTextCoord));
 		float ScreenEdgeFactor = clamp(1.0 - (dReflCoord.x + dReflCoord.y), 0.0, 1.0);
 		float ReflectionMultiplier = pow(Metallic, 3.0) * ScreenEdgeFactor * -ReflDirVS.z;
 		vec3  ReflDiffuse = texture(PrevColorTarget, ReflTextCoord).rgb * clamp(ReflectionMultiplier, 0.0, 0.8) * FresnelSSR;
@@ -488,23 +538,18 @@ void main()
 		Diffuse = ReflDiffuse; //mix(ReflDiffuse, Diffuse, 0.4);
 	}
 
-	vec4 ShadowPos[4];
+	vec4 ShadowPosLS[4];
 	vec4 CameraPosLS[4];
 	for(uint CascadeIdx = 0;
 		CascadeIdx < DEPTH_CASCADES_COUNT;
 		++CascadeIdx)
 	{
-		ShadowPos[CascadeIdx] = WorldUpdate.LightProj[CascadeIdx] * WorldUpdate.LightView[CascadeIdx] * vec4(CoordWS, 1.0);
+		ShadowPosLS[CascadeIdx] = WorldUpdate.LightProj[CascadeIdx] * WorldUpdate.LightView[CascadeIdx] * vec4(CoordWS, 1.0);
 		CameraPosLS[CascadeIdx] = WorldUpdate.LightProj[CascadeIdx] * WorldUpdate.LightView[CascadeIdx] * WorldUpdate.CameraPos;
 	}
 
-	vec3 GlobalLightPosWS = WorldUpdate.GlobalLightPos.xyz;
-	vec3 GlobalLightDirWS = normalize(-WorldUpdate.GlobalLightPos.xyz);
-	vec3 GlobalLightPosVS = (WorldUpdate.DebugView * vec4(GlobalLightPosWS, 1)).xyz;
-	vec3 GlobalLightDirVS = (WorldUpdate.DebugView * vec4(GlobalLightDirWS, 1)).xyz;
-
-	vec3 LightDiffuse   = vec3(0);
-	vec3 LightSpecular  = vec3(0);
+	vec3 LightDiffuse  = vec3(0);
+	vec3 LightSpecular = vec3(0);
 	uint TotalLightSourceCount = WorldUpdate.PointLightSourceCount + 
 								 WorldUpdate.SpotLightSourceCount;
 	float LightShadow = 0.0;
@@ -522,22 +567,6 @@ void main()
 		float Intensity       = LightSources[LightIdx].Col.w;
 		float Radius          = LightSources[LightIdx].Pos.w;
 
-#if 0 // Phong Shading
-		if(LightSources[LightIdx].Type == light_type_point)
-		{
-			PointLight(LightDiffuse, LightSpecular, CoordVS, FragmentNormalVS, ViewDirVS, LightSourcePosVS, Radius, LightSourceCol, Intensity, Diffuse, Specular);
-			if(WorldUpdate.LightSourceShadowsEnabled)
-			{
-				LightShadow += GetPointLightShadow(PointShadowMaps[PointLightShadowMapIdx], CoordWS, LightSourcePosWS, FragmentNormalWS, TextCoord/TextureDims, Rotation2D, WorldUpdate.CascadeSplits[0], 0.1);
-			}
-			PointLightShadowMapIdx++;
-		}
-		else if(LightSources[LightIdx].Type == light_type_spot)
-		{
-			SpotLight(LightDiffuse, LightSpecular, CoordVS, FragmentNormalVS, ViewDirVS, LightSourcePosVS, Radius, LightSourceDirVS, LightSourceCol, Intensity, Diffuse, Specular);
-			SpotLightShadowMapIdx++;
-		}
-#else // Physically Based Shading
 		if(LightSources[LightIdx].Type == light_type_point)
 		{
 			vec3 LightDirVS = LightSourcePosVS - CoordVS;
@@ -553,33 +582,22 @@ void main()
 			GetPBRColor(LightDiffuse, LightSpecular, CoordVS, FragmentNormalVS, ViewDirVS, LightSourcePosVS, Radius, LightSourceDirVS, LightSourceCol, Intensity, Diffuse, Roughness, Metallic);
 			SpotLightShadowMapIdx++;
 		}
-#endif
 	}
 	LightShadow /= float(TotalLightSourceCount);
 
-	uint  Layer = 0;
 	float GlobalShadow = 0.0;
 	vec3  CascadeCol;
-	for(uint CascadeIdx = 1;
-		CascadeIdx <= DEPTH_CASCADES_COUNT;
-		++CascadeIdx)
 	{
-		if(abs(CoordVS.z) < WorldUpdate.CascadeSplits[CascadeIdx])
+		GlobalShadow = GetShadow(ShadowMap[Layer], ShadowPosLS[Layer], Rotation2D, WorldUpdate.CascadeSplits[Layer], FragmentNormalWS, GlobalLightPosWS, WorldUpdate.GlobalLightSize);
+		CascadeCol = CascadeColors[Layer];
+
+		float Fade = clamp((1.0 - (CoordVS.z * CoordVS.z) / (WorldUpdate.CascadeSplits[Layer + 1] * WorldUpdate.CascadeSplits[Layer + 1])) / 0.2, 0.0, 1.0);
+		if(Fade > 0.0 && Fade < 1.0)
 		{
-			Layer  = CascadeIdx - 1;
-			GlobalShadow = GetShadow(ShadowMap[Layer], ShadowPos[Layer], Rotation2D, WorldUpdate.CascadeSplits[CascadeIdx - 1], FragmentNormalWS, GlobalLightPosWS, WorldUpdate.GlobalLightSize);
-			CascadeCol = CascadeColors[Layer];
-
-			float Fade = clamp((1.0 - (CoordVS.z * CoordVS.z) / (WorldUpdate.CascadeSplits[CascadeIdx] * WorldUpdate.CascadeSplits[CascadeIdx])) / 0.2, 0.0, 1.0);
-			if(Fade > 0.0 && Fade < 1.0)
-			{
-				float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPos[Layer + 1], Rotation2D, WorldUpdate.CascadeSplits[CascadeIdx], FragmentNormalWS, GlobalLightPosWS, WorldUpdate.GlobalLightSize);
-				vec3  NextCascadeCol = CascadeColors[Layer + 1];
-				GlobalShadow = mix(NextShadow, GlobalShadow, Fade);
-				CascadeCol = mix(NextCascadeCol, CascadeCol, Fade);
-			}
-
-			break;
+			float NextShadow = GetShadow(ShadowMap[Layer + 1], ShadowPosLS[Layer + 1], Rotation2D, WorldUpdate.CascadeSplits[Layer + 1], FragmentNormalWS, GlobalLightPosWS, WorldUpdate.GlobalLightSize);
+			vec3  NextCascadeCol = CascadeColors[Layer + 1];
+			GlobalShadow = mix(NextShadow, GlobalShadow, Fade);
+			CascadeCol = mix(NextCascadeCol, CascadeCol, Fade);
 		}
 	}
 
@@ -596,7 +614,7 @@ void main()
 	else
 	{
 		vec3 FinalLight = (LightDiffuse + LightSpecular);// * AmbientOcclusion;
-			 FinalLight = Emmit * EmmitSze + mix(vec3(0.002), FinalLight, 1.0 - Shadow);
+			 FinalLight = Volumetric + Emmit * EmmitSze + mix(vec3(0.001), FinalLight, 1.0 - Shadow);
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(FinalLight, 1));
 		if(dot(FinalLight, vec3(0.2126, 0.7152, 0.0722)) > 1.0)
 			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(FinalLight, 1));

@@ -258,7 +258,7 @@ vulkan_backend(window* Window)
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
-	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
+	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_ColorTexture;
 	TextureInputData.InitialState = barrier_state::shader_read;
 	NullTexture2D = GlobalHeap->PushTexture(this, "NullT_2D", nullptr, 1, 1, 1, TextureInputData);
