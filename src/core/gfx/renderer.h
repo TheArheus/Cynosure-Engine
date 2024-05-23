@@ -63,7 +63,7 @@ public:
 	}
 
 	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, 
-										const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
+										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
 	{
 		switch(BackendType)
 		{
@@ -102,6 +102,7 @@ public:
 	texture* GfxDepthTarget;
 	texture* DebugCameraViewDepthTarget;
 
+	texture* VoxelGridTarget;
 	texture* HdrColorTarget;
 	texture* BrightTarget;
 	texture* TempBrTarget;
@@ -118,10 +119,11 @@ public:
 	buffer* PoissonDiskBuffer;
 	buffer* RandomSamplesBuffer;
 
-	std::vector<render_context*> CubeMapShadowContexts;
+	std::vector<render_context*>  CubeMapShadowContexts;
 	std::vector<compute_context*> DepthReduceContext;
 
 	render_context* GfxContext;
+	render_context* VoxelizationContext;
 	render_context* CascadeShadowContext;
 	render_context* ShadowContext;
 	render_context* DebugCameraViewContext;

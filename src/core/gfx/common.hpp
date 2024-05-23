@@ -116,6 +116,7 @@ enum class image_type
 	Texture1D,
 	Texture2D,
 	Texture3D,
+	TextureCube,
 };
 
 enum class polygon_mode
@@ -830,7 +831,7 @@ struct op_info
 	bool NonWritable;
 };
 
-void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std::set<u32>& DescriptorIndices)
+void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std::set<u32>& DescriptorIndices, u32& LocalSizeIdX, u32& LocalSizeIdY, u32& LocalSizeIdZ)
 {
 	assert(Binary[0] == SpvMagicNumber);
 
@@ -847,6 +848,17 @@ void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std:
 
 		switch(OpCode)
 		{
+			case SpvOpExecutionModeId:
+			{
+				ResultId = Binary[Offset + 1];
+
+				if(Binary[Offset + 2] == SpvExecutionModeLocalSizeId)
+				{
+					LocalSizeIdX = Binary[Offset + 3];
+					LocalSizeIdY = Binary[Offset + 4];
+					LocalSizeIdZ = Binary[Offset + 5];
+				}
+			} break;
 			case SpvOpMemberDecorate:
 			{
 				    ResultId     = Binary[Offset + 1];

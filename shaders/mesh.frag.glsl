@@ -28,8 +28,6 @@ struct vert_in
 {
 	vec4 Coord;
 	vec4 Norm;
-	vec4 ColDiffuse;
-	vec4 ColEmmit;
 	vec2 TextCoord;
 };
 
@@ -56,18 +54,20 @@ layout(set = 3, binding = 0) uniform sampler2D SpecularSamplers[256];
 layout(set = 4, binding = 0) uniform sampler2D HeightSamplers[256];
 
 layout(location = 0) in vert_in   In;
-layout(location = 5) in flat uint MatIdx;
-layout(location = 6) in mat3      TBN;
+layout(location = 3) in flat uint MatIdx;
+layout(location = 4) in mat3      TBN;
 
-layout(location = 0) out vec4 OutputFragmentNormal;
-layout(location = 1) out vec4 OutputDiffuse;
-layout(location = 2) out vec4 OutputEmmit;
-layout(location = 3) out vec2 OutputSpecularEmmit;
+layout(location = 0) out vec4 OutputVertexNormal;
+layout(location = 1) out vec4 OutputFragmentNormal;
+layout(location = 2) out vec4 OutputDiffuse;
+layout(location = 3) out vec4 OutputEmmit;
+layout(location = 4) out vec2 OutputSpecularEmmit;
 
 
 void main()
 {
-	OutputEmmit			= vec4(In.ColEmmit.rgb, 1.0);
+	vec4 ColEmmit = MeshMaterials[MatIdx].LightEmmit;
+	OutputEmmit			= vec4(ColEmmit.rgb, 1.0);
 
 	uint TextureIdx     = MeshMaterials[MatIdx].TextureIdx;
 	uint NormalMapIdx   = MeshMaterials[MatIdx].NormalMapIdx;
@@ -107,17 +107,18 @@ void main()
 		if(TextCoord.x < 0.0 || TextCoord.y < 0.0 || TextCoord.x > 1.0 || TextCoord.y > 1.0) discard; // clamp?
 	}
 
-	OutputFragmentNormal = In.Norm * 0.5 + 0.5;
+	OutputVertexNormal   = In.Norm * 0.5 + 0.5;
+	OutputFragmentNormal = OutputVertexNormal;
 	if(MeshMaterials[MatIdx].HasNormalMap)
 		OutputFragmentNormal = vec4((TBN * texture(NormalSamplers[NormalMapIdx], TextCoord).rgb) * 0.5 + 0.5, 0);
 #if DEBUG_COLOR_BLEND
 	OutputDiffuse		 = vec4(vec3(0.1) * In.Col.rgb, 1.0);
 #else
-	OutputDiffuse		 = In.ColDiffuse;
+	OutputDiffuse		 = MeshMaterials[MatIdx].LightDiffuse;
 	if(MeshMaterials[MatIdx].HasTexture)
 		OutputDiffuse    = vec4(texture(DiffuseSamplers[TextureIdx], TextCoord).rgb, 1);
 #endif
-	OutputSpecularEmmit	 = vec2(0.0, In.ColEmmit.w);
+	OutputSpecularEmmit	 = vec2(0.0, ColEmmit.w);
 	if(MeshMaterials[MatIdx].HasSpecularMap)
-		OutputSpecularEmmit = vec2(texture(SpecularSamplers[SpecularMapIdx], TextCoord).r, In.ColEmmit.w);
+		OutputSpecularEmmit = vec2(texture(SpecularSamplers[SpecularMapIdx], TextCoord).r, ColEmmit.w);
 }

@@ -189,6 +189,7 @@ struct render_system : public entity_system
 		Window.Gfx.ColorPassContext->SetStorageBufferView(Window.Gfx.RandomSamplesBuffer);
 		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.GfxColorTarget[(BackBufferIndex + 1) % 2]}, image_type::Texture2D, barrier_state::general);
 		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.GfxDepthTarget}, image_type::Texture2D, barrier_state::shader_read);
+		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.VoxelGridTarget}, image_type::Texture3D, barrier_state::shader_read);
 		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.RandomAnglesTexture}, image_type::Texture2D, barrier_state::shader_read);
 		Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GBuffer, image_type::Texture2D, barrier_state::shader_read);
 		Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.HdrColorTarget}, image_type::Texture2D, barrier_state::general);
@@ -232,7 +233,7 @@ struct render_system : public entity_system
 
 			// TODO: Think about abstracting this usage???
 			Window.Gfx.ColorPassContext->SetImageSampler(LightShadows, image_type::Texture2D, barrier_state::shader_read, 0, 3);
-			Window.Gfx.ColorPassContext->SetImageSampler(PointLightShadows, image_type::Texture3D, barrier_state::shader_read, 0, 4);
+			Window.Gfx.ColorPassContext->SetImageSampler(PointLightShadows, image_type::TextureCube, barrier_state::shader_read, 0, 4);
 		}
 		Window.Gfx.ColorPassContext->StaticUpdate();
 
@@ -283,7 +284,6 @@ struct render_system : public entity_system
 		{
 			Window.Gfx.BloomUpScaleContext[MipIdx]->SetImageSampler({MipIdx < Window.Gfx.BloomUpScaleContext.size() - 1 ? Window.Gfx.TempBrTarget : Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::shader_read, MipIdx + 1);
 			Window.Gfx.BloomUpScaleContext[MipIdx]->SetImageSampler({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::shader_read, MipIdx);
-			Window.Gfx.BloomUpScaleContext[MipIdx]->SetStorageImage({Window.Gfx.TempBrTarget}, image_type::Texture2D, barrier_state::general, MipIdx);
 			Window.Gfx.BloomUpScaleContext[MipIdx]->StaticUpdate();
 		}
 
@@ -313,6 +313,19 @@ struct render_system : public entity_system
 		Window.Gfx.GfxContext->SetImageSampler(SpecularTextures, image_type::Texture2D, barrier_state::shader_read, 0, 3);
 		Window.Gfx.GfxContext->SetImageSampler(HeightTextures, image_type::Texture2D, barrier_state::shader_read, 0, 4);
 		Window.Gfx.GfxContext->StaticUpdate();
+
+		Window.Gfx.VoxelizationContext->SetStorageBufferView(WorldUpdateBuffer);
+		Window.Gfx.VoxelizationContext->SetStorageBufferView(VertexBuffer);
+		Window.Gfx.VoxelizationContext->SetStorageBufferView(MeshDrawCommandBuffer);
+		Window.Gfx.VoxelizationContext->SetStorageBufferView(MeshMaterialsBuffer);
+		Window.Gfx.VoxelizationContext->SetStorageBufferView(GeometryOffsets);
+		Window.Gfx.VoxelizationContext->SetStorageBufferView(LightSourcesBuffer);
+		Window.Gfx.VoxelizationContext->SetStorageImage({Window.Gfx.VoxelGridTarget}, image_type::Texture3D, barrier_state::general);
+		Window.Gfx.VoxelizationContext->SetImageSampler(DiffuseTextures, image_type::Texture2D, barrier_state::shader_read, 0, 1);
+		Window.Gfx.VoxelizationContext->SetImageSampler(NormalTextures, image_type::Texture2D, barrier_state::shader_read, 0, 2);
+		Window.Gfx.VoxelizationContext->SetImageSampler(SpecularTextures, image_type::Texture2D, barrier_state::shader_read, 0, 3);
+		Window.Gfx.VoxelizationContext->SetImageSampler(HeightTextures, image_type::Texture2D, barrier_state::shader_read, 0, 4);
+		Window.Gfx.VoxelizationContext->StaticUpdate();
 
 		Window.Gfx.AmbientOcclusionContext->SetStorageBufferView(WorldUpdateBuffer);
 		Window.Gfx.AmbientOcclusionContext->SetStorageBufferView(Window.Gfx.RandomSamplesBuffer);
@@ -517,13 +530,76 @@ struct render_system : public entity_system
 			Window.Gfx.GfxContext->Clear();
 		}
 
+		vec3 VoxelSceneSize = {};
 		{
-			PipelineContext->SetImageBarriers({{Window.Gfx.GBuffer, AF_ColorAttachmentWrite, AF_ShaderRead, barrier_state::color_attachment, barrier_state::shader_read, ~0u},
-										   {{Window.Gfx.NoiseTexture}, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
-										   {{Window.Gfx.GfxDepthTarget}, 0, AF_ShaderRead, barrier_state::depth_stencil_attachment, barrier_state::shader_read, ~0u}, 
-										   {{Window.Gfx.AmbientOcclusionData}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u}},
-										  PSF_ColorAttachment, PSF_Compute);
+			{
+				mat4 Proj = PerspRH(45.0f, WorldUpdate.ScreenWidth, WorldUpdate.ScreenHeight, WorldUpdate.CascadeSplits[0], WorldUpdate.CascadeSplits[1]);
+				mat4 InverseProjectViewMatrix = Inverse(WorldUpdate.DebugView * Proj);
+
+				std::vector<vec4> CameraViewCorners = 
+				{
+					// Near
+					vec4{-1.0f, -1.0f, 0.0f, 1.0f},
+					vec4{ 1.0f, -1.0f, 0.0f, 1.0f},
+					vec4{ 1.0f,  1.0f, 0.0f, 1.0f},
+					vec4{-1.0f,  1.0f, 0.0f, 1.0f},
+					// Far
+					vec4{-1.0f, -1.0f, 1.0f, 1.0f},
+					vec4{ 1.0f, -1.0f, 1.0f, 1.0f},
+					vec4{ 1.0f,  1.0f, 1.0f, 1.0f},
+					vec4{-1.0f,  1.0f, 1.0f, 1.0f},
+				};
+
+				for(size_t i = 0; i < CameraViewCorners.size(); i++)
+				{
+					CameraViewCorners[i] = InverseProjectViewMatrix * CameraViewCorners[i];
+					CameraViewCorners[i] = CameraViewCorners[i] / CameraViewCorners[i].w;
+				}
+
+				float MinX = FLT_MAX, MinY = FLT_MAX, MinZ = FLT_MAX, MaxX = -FLT_MAX, MaxY = -FLT_MAX, MaxZ = -FLT_MAX;
+				for(vec3 V : CameraViewCorners)
+				{
+					if(V.x < MinX)
+						MinX = V.x;
+					if(V.y < MinY)
+						MinY = V.y;
+					if(V.z < MinZ)
+						MinZ = V.z;
+					if(V.x > MaxX)
+						MaxX = V.x;
+					if(V.y > MaxY)
+						MaxY = V.y;
+					if(V.z > MinZ)
+						MaxZ = V.z;
+				}
+
+				VoxelSceneSize = vec3
+				(
+					(2.0f - 0.1f) / abs(MaxX - MinX),
+					(2.0f - 0.1f) / abs(MaxY - MinY),
+					(2.0f - 0.1f) / abs(MaxZ - MinZ)
+				);
+			}
+			PipelineContext->SetImageBarriers({{Window.Gfx.VoxelGridTarget, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u}}, PSF_TopOfPipe, PSF_FragmentShader);
+
+			PipelineContext->FillTexture(Window.Gfx.VoxelGridTarget, barrier_state::general, vec4(0));
+			Window.Gfx.VoxelizationContext->Begin(PipelineContext, Window.Gfx.VoxelGridTarget->Width, Window.Gfx.VoxelGridTarget->Height);
+			Window.Gfx.VoxelizationContext->SetColorTarget(Window.Gfx.VoxelGridTarget->Width, Window.Gfx.VoxelGridTarget->Height, {}, {0, 0, 0, 1});
+			Window.Gfx.VoxelizationContext->SetConstant((void*)&VoxelSceneSize, sizeof(vec3));
+			Window.Gfx.VoxelizationContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
+			Window.Gfx.VoxelizationContext->End();
+			Window.Gfx.VoxelizationContext->Clear();
+
+			PipelineContext->GenerateMips(Window.Gfx.VoxelGridTarget, barrier_state::general);
+		}
+
+		{
+			PipelineContext->SetImageBarriers({{Window.Gfx.NoiseTexture, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}, 
+										   {Window.Gfx.AmbientOcclusionData, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u}},
+										   PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({Window.Gfx.RandomSamplesBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
+			PipelineContext->SetImageBarriers({{Window.Gfx.GBuffer, AF_ColorAttachmentWrite, AF_ShaderRead, barrier_state::color_attachment, barrier_state::shader_read, ~0u}, 
+											  {{Window.Gfx.GfxDepthTarget}, 0, AF_ShaderRead, barrier_state::depth_stencil_attachment, barrier_state::shader_read, ~0u}}, PSF_ColorAttachment, PSF_Compute);
 
 			Window.Gfx.AmbientOcclusionContext->Begin(PipelineContext);
 			Window.Gfx.AmbientOcclusionContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
@@ -570,6 +646,7 @@ struct render_system : public entity_system
 			{
 				{{Window.Gfx.GfxColorTarget[(PipelineContext->BackBufferIndex + 1) % 2]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.HdrColorTarget}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
+				{{Window.Gfx.VoxelGridTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
 				{{Window.Gfx.BrightTarget}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.AmbientOcclusionData}, AF_ShaderRead, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
 				{{Window.Gfx.RandomAnglesTexture}, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
@@ -583,6 +660,7 @@ struct render_system : public entity_system
 			PipelineContext->SetBufferBarrier({Window.Gfx.PoissonDiskBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
 
 			Window.Gfx.ColorPassContext->Begin(PipelineContext);
+			Window.Gfx.ColorPassContext->SetConstant((void*)&VoxelSceneSize, sizeof(vec3));
 			Window.Gfx.ColorPassContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.ColorPassContext->End();
 			Window.Gfx.ColorPassContext->Clear();

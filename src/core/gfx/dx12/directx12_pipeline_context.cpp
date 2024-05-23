@@ -109,6 +109,16 @@ FillBuffer(buffer* Buffer, u32 Value)
 }
 
 void directx12_global_pipeline_context::
+FillTexture(texture* Buffer, barrier_state CurrentState, vec4 Value)
+{
+}
+
+void directx12_global_pipeline_context::
+GenerateMips(texture* Texture, barrier_state CurrentState)
+{
+}
+
+void directx12_global_pipeline_context::
 CopyImage(texture* Dst, texture* Src)
 {
 }
@@ -273,7 +283,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 
 	D3D12_RASTERIZER_DESC RasterDesc = {};
 	RasterDesc.FillMode = D3D12_FILL_MODE_SOLID;
-	RasterDesc.CullMode = InputData.UseBackFace ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_FRONT;
+	RasterDesc.CullMode = GetDXCullMode(InputData.CullMode);
 	RasterDesc.FrontCounterClockwise = true;
 	RasterDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
 	RasterDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
@@ -707,7 +717,7 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 
 	bool HaveDrawID = false;
 	D3D12_COMPUTE_PIPELINE_STATE_DESC PipelineDesc = {};
-	PipelineDesc.CS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+	PipelineDesc.CS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines, &BlockSizeX, &BlockSizeY, &BlockSizeZ);
 
 	std::vector<D3D12_ROOT_PARAMETER> Parameters;
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)

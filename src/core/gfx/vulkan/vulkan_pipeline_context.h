@@ -44,6 +44,8 @@ struct vulkan_global_pipeline_context : public global_pipeline_context
 	void Present() override;
 
 	void FillBuffer(buffer* Buffer, u32 Value) override;
+	void FillTexture(texture* Texture, barrier_state CurrentState, vec4 Value) override;
+	void GenerateMips(texture* Texture, barrier_state CurrentState) override;
 
 	void CopyImage(texture* Dst, texture* Src) override;
 
@@ -81,7 +83,7 @@ public:
 	vulkan_render_context() = default;
 
 	vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::initializer_list<const std::string> ShaderList, 
-						  const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
+						  const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
 
 	vulkan_render_context(const vulkan_render_context&) = delete;
 	vulkan_render_context& operator=(const vulkan_render_context&) = delete;
@@ -100,11 +102,17 @@ public:
 		Device(std::move(other.Device)),
 		Pipeline(std::move(other.Pipeline))
 	{
+		NullTexture1D = other.NullTexture1D;
+		other.NullTexture1D = nullptr;
+
 		NullTexture2D = other.NullTexture2D;
 		other.NullTexture2D = nullptr;
 
 		NullTexture3D = other.NullTexture3D;
 		other.NullTexture3D = nullptr;
+
+		NullTextureCube = other.NullTextureCube;
+		other.NullTextureCube = nullptr;
 	}
 
     vulkan_render_context& operator=(vulkan_render_context&& other) noexcept 
@@ -125,11 +133,17 @@ public:
 			std::swap(Device, other.Device);
 			std::swap(Pipeline, other.Pipeline);
 
+			NullTexture1D = other.NullTexture1D;
+			other.NullTexture1D = nullptr;
+
 			NullTexture2D = other.NullTexture2D;
 			other.NullTexture2D = nullptr;
 
 			NullTexture3D = other.NullTexture3D;
 			other.NullTexture3D = nullptr;
+
+			NullTextureCube = other.NullTextureCube;
+			other.NullTextureCube = nullptr;
         }
         return *this;
     }
@@ -194,8 +208,10 @@ private:
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>> RenderingAttachmentInfoArrays;
 
 	vulkan_global_pipeline_context* PipelineContext;
+	texture* NullTexture1D;
 	texture* NullTexture2D;
 	texture* NullTexture3D;
+	texture* NullTextureCube;
 
 	VkDevice Device;
 	VkPipeline Pipeline;
@@ -231,11 +247,17 @@ public:
 		Device(std::move(other.Device)),
 		Pipeline(other.Pipeline)
     {
+		NullTexture1D = other.NullTexture1D;
+		other.NullTexture1D = nullptr;
+
 		NullTexture2D = other.NullTexture2D;
 		other.NullTexture2D = nullptr;
 
 		NullTexture3D = other.NullTexture3D;
 		other.NullTexture3D = nullptr;
+
+		NullTextureCube = other.NullTextureCube;
+		other.NullTextureCube = nullptr;
     }
 
     vulkan_compute_context& operator=(vulkan_compute_context&& other) noexcept 
@@ -256,11 +278,17 @@ public:
 			std::swap(Device, other.Device);
 			std::swap(Pipeline, other.Pipeline);
 
+			NullTexture1D = other.NullTexture1D;
+			other.NullTexture1D = nullptr;
+
 			NullTexture2D = other.NullTexture2D;
 			other.NullTexture2D = nullptr;
 
 			NullTexture3D = other.NullTexture3D;
 			other.NullTexture3D = nullptr;
+
+			NullTextureCube = other.NullTextureCube;
+			other.NullTextureCube = nullptr;
         }
         return *this;
     }
@@ -302,8 +330,10 @@ private:
 	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
 
 	vulkan_global_pipeline_context* PipelineContext;
+	texture* NullTexture1D;
 	texture* NullTexture2D;
 	texture* NullTexture3D;
+	texture* NullTextureCube;
 
 	VkDevice Device;
 	VkPipeline Pipeline;

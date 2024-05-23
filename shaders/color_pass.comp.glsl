@@ -3,6 +3,7 @@
 #extension GL_EXT_scalar_block_layout: require
 
 #define SAMPLES_COUNT 16
+#define CONE_SAMPLES  6
 #define light_type_none 0
 #define light_type_directional 1
 #define light_type_point 2
@@ -26,6 +27,9 @@ vec3 CascadeColors[] =
 	vec3(0, 1, 1),
 	vec3(1, 1, 1),
 };
+
+const vec3  DiffuseConeDirections[CONE_SAMPLES] = {vec3(0.0, 1.0, 0.0), vec3(0.0, 0.5, 0.866025), vec3(0.823639, 0.5, 0.267617), vec3(0.509037, 0.5, -0.7006629), vec3(-0.50937, 0.5, -0.7006629), vec3(-0.823639, 0.5, 0.267617)};
+const float DiffuseConeWeights[CONE_SAMPLES]    = {Pi / 4.0, 3.0 * Pi / 20.0, 3.0 * Pi / 20.0, 3.0 * Pi / 20.0, 3.0 * Pi / 20.0, 3.0 * Pi / 20.0};
 
 struct global_world_data
 {
@@ -57,21 +61,24 @@ struct light_source
 	uint Type;
 };
 
-layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
-layout(set = 0, binding = 1) readonly buffer b1 { light_source LightSources[LIGHT_SOURCES_MAX_COUNT]; };
-layout(set = 0, binding = 2) readonly buffer b2 { vec2 PoissonDisk[SAMPLES_COUNT]; };
-layout(set = 0, binding = 3) readonly buffer b3 { vec4 HemisphereSamples[SAMPLES_COUNT]; };
-layout(set = 0, binding = 4) uniform sampler2D PrevColorTarget;
-layout(set = 0, binding = 5) uniform sampler2D DepthTarget;
-layout(set = 0, binding = 6) uniform sampler3D RandomAnglesTexture;
-layout(set = 0, binding = 7) uniform sampler2D GBuffer[GBUFFER_COUNT];
-layout(set = 0, binding = 8) uniform writeonly image2D ColorTarget;
-layout(set = 0, binding = 9) uniform writeonly image2D BrightTarget;
+layout(set = 0, binding = 0)  readonly buffer b0 { global_world_data WorldUpdate; };
+layout(set = 0, binding = 1)  readonly buffer b1 { light_source LightSources[LIGHT_SOURCES_MAX_COUNT]; };
+layout(set = 0, binding = 2)  readonly buffer b2 { vec2 PoissonDisk[SAMPLES_COUNT]; };
+layout(set = 0, binding = 3)  readonly buffer b3 { vec4 HemisphereSamples[SAMPLES_COUNT]; };
+layout(set = 0, binding = 4)  uniform sampler2D PrevColorTarget;
+layout(set = 0, binding = 5)  uniform sampler2D DepthTarget;
+layout(set = 0, binding = 6)  uniform sampler3D VoxelGrid;
+layout(set = 0, binding = 7)  uniform sampler3D RandomAnglesTexture;
+layout(set = 0, binding = 8)  uniform sampler2D GBuffer[GBUFFER_COUNT];
+layout(set = 0, binding = 9)  uniform writeonly image2D ColorTarget;
+layout(set = 0, binding = 10) uniform writeonly image2D BrightTarget;
 
 layout(set = 1, binding = 0) uniform sampler2D AmbientOcclusionBuffer;
 layout(set = 2, binding = 0) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
 layout(set = 3, binding = 0) uniform sampler2D ShadowMaps[LIGHT_SOURCES_MAX_COUNT];
 layout(set = 4, binding = 0) uniform samplerCube PointShadowMaps[LIGHT_SOURCES_MAX_COUNT];
+
+layout(push_constant) uniform pushConstant { vec3 VoxelSceneSize; };
 
 float GetRandomValue(vec2 Seed)
 {
@@ -235,73 +242,6 @@ float GetPointLightShadow(samplerCube ShadowSampler, vec3 Position, vec3 LightPo
 	return Result;
 }
 
-vec3 DoDiffuse(vec3 LightCol, vec3 ToLightDir, vec3 Normal)
-{
-	float  NdotL = max(dot(ToLightDir, Normal), 0);
-	return LightCol * NdotL;
-}
-
-vec3 DoSpecular(vec3 LightCol, vec3 ToLightDir, vec3 CameraDir, vec3 Normal, float Specular)
-{
-	vec3 Half = normalize(ToLightDir + CameraDir);
-	return LightCol * pow(max(dot(Half, Normal), 0), Specular) * max(dot(ToLightDir, Normal), 0.0);
-}
-
-float DoAttenuation(float Radius, float Distance)
-{
-	return 1.0 - smoothstep(Radius * 0.75, Radius, Distance);
-}
-
-float DoSpotCone(float Radius, vec3 ToLightDir, vec3 LightView)
-{
-	float MinCos = cos(radians(Radius));
-	float MaxCos = (MinCos + 1.0f) / 2.0f;
-	float CosA   = dot(-ToLightDir, LightView);
-	float SpotIntensity = smoothstep(MinCos, MaxCos, CosA);
-	return SpotIntensity;
-}
-
-void DirectionalLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Normal, vec3 CameraDir, vec3 LightDir, vec3 LightCol, float Intensity, vec3 Diffuse, float Specular)
-{
-	vec3  ToLightDir = LightDir;
-	float Distance   = length(ToLightDir);
-	ToLightDir = normalize(ToLightDir);
-
-	vec3 NewDiffuse  = DoDiffuse(LightCol, ToLightDir, Normal) * Intensity;
-	vec3 NewSpecular = DoSpecular(LightCol, ToLightDir, CameraDir, Normal, Specular) * Intensity;
-
-	DiffuseResult  += NewDiffuse.rgb;
-	SpecularResult += NewSpecular.rgb;
-}
-
-void PointLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord, vec3 Normal, vec3 CameraDir, vec3 LightPos, float Radius, vec3 LightCol, float Intensity, vec3 Diffuse, float Specular)
-{
-	vec3  ToLightDir = LightPos - Coord;
-	float Distance   = length(ToLightDir);
-	ToLightDir = normalize(ToLightDir);
-
-	float Attenuation = DoAttenuation(Radius, Distance);
-	vec3  NewDiffuse  = DoDiffuse(LightCol, ToLightDir, Normal) * Attenuation * Intensity;
-	vec3  NewSpecular = DoSpecular(LightCol, ToLightDir, CameraDir, Normal, Specular) * Attenuation * Intensity;
-
-	DiffuseResult  += NewDiffuse;
-	SpecularResult += NewSpecular;
-}
-
-void SpotLight(inout vec3 DiffuseResult, inout vec3 SpecularResult, vec3 Coord, vec3 Normal, vec3 CameraDir, vec3 LightPos, float Radius, vec3 LightView, vec3 LightCol, float Intensity, vec3 Diffuse, float Specular)
-{
-	vec3  LightPosDir = LightPos - Coord;
-	float Distance    = length(LightPosDir);
-
-	float Attenuation   = DoAttenuation(Radius, Distance);
-	float SpotIntensity = DoSpotCone(Radius, LightPosDir, LightView.xyz);
-	vec3  NewDiffuse    = DoDiffuse(LightCol, LightPosDir, Normal) * Attenuation * SpotIntensity * Intensity;
-	vec3  NewSpecular   = DoSpecular(LightCol, LightPosDir, CameraDir, Normal, Specular) * Attenuation * SpotIntensity * Intensity;
-
-	DiffuseResult  += NewDiffuse;
-	SpecularResult += NewSpecular;
-}
-
 float MieScattering(float Angle)
 {
 	return (1.0 - GScat * GScat) / (4.0 * Pi * pow(1.0 + GScat * GScat - 2.0 * GScat * Angle, 1.5));
@@ -347,8 +287,8 @@ void GetPBRColor(inout vec3 DiffuseColor, inout vec3 SpecularColor, vec3 Coord, 
 {
 	vec3  Half        = normalize(LightDir + CameraDir);
 	float Distance    = length(LightDir);
-	float Attenuation = DoAttenuation(Radius, Distance);
-	//float Attenuation = 1.0 / ((1 + 0.22 * Distance / Radius) * (1 + 0.2 * Distance * Distance / (Radius * Radius)));
+	//float Attenuation = 1.0 - smoothstep(Radius * 0.75, Radius, Distance);
+	float Attenuation = 1.0 / ((1 + 0.22 * Distance / Radius) * (1 + 0.2 * Distance * Distance / (Radius * Radius)));
 
 	float NdotL = max(dot(Normal, LightDir ), 0.0);
 	float NdotV = max(dot(Normal, CameraDir), 0.0);
@@ -440,6 +380,38 @@ vec2 ReflectedRayCast(vec3 Coord, vec3 ReflDir)
 	return vec2(-1);
 }
 
+bool IsInsideUnitCube(vec3 Coord)
+{
+	return abs(Coord.x) < 1.0 && abs(Coord.y) < 1.0 && abs(Coord.z) < 1.0;
+}
+
+vec4 ConeTrace(vec3 Coord, vec3 Direction, vec3 Normal)
+{
+	float Angle = Pi / 3.0;
+	float Aperture = tan(Angle / 2.0);
+	float Distance = 0.01;
+	vec3  AccumColor = vec3(0);
+	float AccumOcclusion = 0.0;
+
+	vec3 StartPos   = (Coord - WorldUpdate.CameraPos.xyz) * VoxelSceneSize;
+	while(Distance <= 1.0 && AccumOcclusion < 1.0)
+	{
+		vec3 ConePos = StartPos + Direction * Distance * VoxelSceneSize;
+
+		float Diameter = 2.0 * Aperture * Distance;
+		float Mip = log2(Distance * VoxelSceneSize.x);
+		vec4 VoxelSample = textureLod(VoxelGrid, ConePos * 0.5 + 0.5, Mip);
+
+		AccumColor += (1.0 - AccumOcclusion) * VoxelSample.rgb;
+		AccumOcclusion += (1.0 - AccumOcclusion) * VoxelSample.a;
+
+		Distance += Diameter;
+	}
+
+	AccumOcclusion = min(AccumOcclusion, 1.0);
+	return vec4(AccumColor, AccumOcclusion);
+}
+
 
 void main()
 {
@@ -477,6 +449,7 @@ void main()
 		uint LightSamplesCount = 64;
 		vec3 RayP = WorldUpdate.CameraPos.xyz;
 		vec3 RayD = LightViewDir * (1.0 / LightSamplesCount);
+
 		for(uint StepIdx = 0; StepIdx < LightSamplesCount; ++StepIdx)
 		{
 			RayP += RayD;
@@ -504,7 +477,6 @@ void main()
 			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(Volumetric, 1));
 		else
 			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
-		imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
 		return;
 	}
 
@@ -512,30 +484,32 @@ void main()
 	vec2  Rotation2D = vec2(cos(RotationAngles.x), sin(RotationAngles.y));
 	vec3  Rotation3D = vec3(cos(RotationAngles.x)*sin(RotationAngles.y), sin(RotationAngles.x)*sin(RotationAngles.y), cos(RotationAngles.y));
 
-	vec3  Diffuse  = texelFetch(GBuffer[1], ivec2(TextCoord), 0).rgb;
-	vec3  Emmit    = texelFetch(GBuffer[2], ivec2(TextCoord), 0).rgb;
-	float Specular = texelFetch(GBuffer[3], ivec2(TextCoord), 0).r;
-	float EmmitSze = texelFetch(GBuffer[3], ivec2(TextCoord), 0).g;
+	vec3  Diffuse  = texelFetch(GBuffer[2], ivec2(TextCoord), 0).rgb;
+	vec3  Emmit    = texelFetch(GBuffer[3], ivec2(TextCoord), 0).rgb;
+	float Specular = texelFetch(GBuffer[4], ivec2(TextCoord), 0).r;
+	float EmmitSze = texelFetch(GBuffer[4], ivec2(TextCoord), 0).g;
 	float AmbientOcclusion = texelFetch(AmbientOcclusionBuffer, ivec2(TextCoord), 0).r;
 
-	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[0], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
+	vec3  VertexNormalWS = normalize(texelFetch(GBuffer[0], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
+	vec3  VertexNormalVS = normalize(inverse(transpose(mat3(WorldUpdate.DebugView))) * VertexNormalWS).xyz;
+	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[1], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
 	vec3  FragmentNormalVS = normalize(inverse(transpose(mat3(WorldUpdate.DebugView))) * FragmentNormalWS).xyz;
 
 	vec3  ViewDirVS = normalize(-CoordVS);
-	vec3  ReflDirVS = normalize(reflect(CoordVS, FragmentNormalVS));
+	vec3  ReflDirVS = normalize(reflect(-ViewDirVS, VertexNormalVS));
 
 	vec3  Jitt = mix(vec3(0.0), VecHash(CoordWS), Specular);
-	float FresnelSSR = 2.0 * pow(1.0 - max(dot(ViewDirVS, FragmentNormalVS), 0.0), 2.0);
+	float FresnelSSR = 5.0 * pow(1.0 - max(dot(ViewDirVS, FragmentNormalVS), 0.0), 2.0);
 
 	vec2  ReflTextCoord = ReflectedRayCast(CoordVS, ReflDirVS + Jitt);
 	if(ReflTextCoord.x > 0.0)
 	{
-		vec2  dReflCoord = smoothstep(0.2, 0.6, abs(vec2(0.5) - ReflTextCoord));
+		vec2  dReflCoord = smoothstep(0.2, 0.6, abs(vec2(0.6) - ReflTextCoord));
 		float ScreenEdgeFactor = clamp(1.0 - (dReflCoord.x + dReflCoord.y), 0.0, 1.0);
 		float ReflectionMultiplier = pow(Metallic, 3.0) * ScreenEdgeFactor * -ReflDirVS.z;
-		vec3  ReflDiffuse = texture(PrevColorTarget, ReflTextCoord).rgb * clamp(ReflectionMultiplier, 0.0, 0.8) * FresnelSSR;
+		vec3  ReflDiffuse = texture(PrevColorTarget, ReflTextCoord).rgb * FresnelSSR;
 
-		Diffuse = ReflDiffuse; //mix(ReflDiffuse, Diffuse, 0.4);
+		Diffuse = mix(Diffuse, ReflDiffuse, clamp(ReflectionMultiplier, 0.0, 0.8));
 	}
 
 	vec4 ShadowPosLS[4];
@@ -585,6 +559,34 @@ void main()
 	}
 	LightShadow /= float(TotalLightSourceCount);
 
+	vec4 IndirectSpecular = vec4(0);
+	{
+		vec3 ViewDirWS = normalize(WorldUpdate.CameraPos.xyz - CoordWS);
+		vec3 ReflDirWS = normalize(reflect(-ViewDirWS, VertexNormalWS));
+		IndirectSpecular = ConeTrace(CoordWS, ReflDirWS, VertexNormalWS);
+		IndirectSpecular.rgb *= Specular;
+	}
+
+	vec4 IndirectDiffuse = vec4(0);
+	{
+		vec3 Guide = vec3(0, 1, 0);
+		if(abs(dot(VertexNormalWS, Guide)) == 1.0)
+			Guide  = vec3(0, 0, 1);
+		vec3 Right = normalize(Guide - dot(Guide, VertexNormalWS) * VertexNormalWS);
+		vec3 Up    = cross(Right, VertexNormalWS);
+
+		for(uint i = 0; i < CONE_SAMPLES; i++)
+		{
+			vec3 ConeDirection = VertexNormalWS;
+			ConeDirection += DiffuseConeDirections[i].x * Right + DiffuseConeDirections[i].z * Up;
+			ConeDirection  = normalize(ConeDirection);
+
+			IndirectDiffuse += ConeTrace(CoordWS, ConeDirection, VertexNormalWS) * DiffuseConeWeights[i];
+		}
+
+		IndirectDiffuse.rgb *= Diffuse * 0.1;
+	}
+
 	float GlobalShadow = 0.0;
 	vec3  CascadeCol;
 	{
@@ -613,8 +615,9 @@ void main()
 	}
 	else
 	{
-		vec3 FinalLight = (LightDiffuse + LightSpecular);// * AmbientOcclusion;
-			 FinalLight = Volumetric + Emmit * EmmitSze + mix(vec3(0.001), FinalLight, 1.0 - Shadow);
+		vec3 IndirectLight = IndirectDiffuse.rgb + IndirectSpecular.rgb;
+		vec3 FinalLight = (LightDiffuse + LightSpecular);
+			 FinalLight = Volumetric + IndirectLight + Emmit * EmmitSze + mix(vec3(0.001), FinalLight, 1.0 - Shadow);
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(FinalLight, 1));
 		if(dot(FinalLight, vec3(0.2126, 0.7152, 0.0722)) > 1.0)
 			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(FinalLight, 1));

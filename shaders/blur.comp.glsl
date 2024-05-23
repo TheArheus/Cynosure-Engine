@@ -47,5 +47,5 @@ void main()
 			Result += texelFetch(InTexture, ivec2(TextCoord + vec2(0, y)), 0) * Weights[int(y + ConvY)];
 		}
 	}
-	imageStore(OutTexture, ivec2(TextCoord), Result);
+	imageStore(OutTexture, ivec2(TextCoord), texelFetch(InTexture, ivec2(TextCoord), 0));
 }

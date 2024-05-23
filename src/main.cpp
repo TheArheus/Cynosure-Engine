@@ -14,11 +14,13 @@
 #include <string_view>
 
 
-// TODO: Image Based Lighting
-// TODO: Sky
-// TODO: Volumetric clouds
-// TODO: Volumetric lighting
 // TODO: Global Illumination
+// TODO: Sky
+// TODO: Image Based Lighting
+// TODO: Atmospheric scattering
+// TODO: Better shadows and shadow maps
+// TODO: Ambient Occlusion fix or a better one
+// TODO: Volumetric clouds
 //
 // TODO: Add more flexibility to activate/disable features
 //			Maybe I would need to add render graphs or just automatic barriers for it

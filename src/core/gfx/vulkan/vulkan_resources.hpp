@@ -284,7 +284,7 @@ private:
 // TODO: Better image view handling
 struct vulkan_texture : public texture
 {
-	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, barrier_state::undefined})
+	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear, barrier_state::undefined})
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
@@ -302,9 +302,9 @@ struct vulkan_texture : public texture
 
 		VkSamplerCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
 		CreateInfo.pNext = &ReductionMode;
-		CreateInfo.magFilter = VK_FILTER_NEAREST;
-		CreateInfo.minFilter = VK_FILTER_NEAREST;
-		CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+		CreateInfo.minFilter = GetVKFilter(Info.MinFilter);
+		CreateInfo.magFilter = GetVKFilter(Info.MagFilter);
+		CreateInfo.mipmapMode = GetVKMipmapMode(Info.MipmapMode);
 		CreateInfo.addressModeU = CreateInfo.addressModeV = CreateInfo.addressModeW = GetVKSamplerAddressMode(Info.AddressMode);
 		CreateInfo.borderColor = GetVKBorderColor(Info.BorderColor);
 		CreateInfo.compareEnable = false;
@@ -340,8 +340,8 @@ struct vulkan_texture : public texture
 		Region.imageExtent = {u32(Width), u32(Height), u32(Depth)};
 		vkCmdCopyBufferToImage(*CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
 
-		CopyBarrier = CreateImageBarrier(Handle, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &CopyBarrier);
+		//CopyBarrier = CreateImageBarrier(Handle, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		//vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &CopyBarrier);
 
 		CommandQueue->ExecuteAndRemove(CommandList);
 
@@ -379,6 +379,7 @@ struct vulkan_texture : public texture
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 		vulkan_memory_heap* VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
+		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		MemoryProperties = Gfx->MemoryProperties;
 		Device = Gfx->Device;
@@ -415,15 +416,31 @@ struct vulkan_texture : public texture
 			CreateInfo.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 		if(Info.Usage & image_flags::TF_CopySrc)
 			CreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-		if(Info.Usage & image_flags::TF_CopyDst)
+		//if(Info.Usage & image_flags::TF_CopyDst)
 			CreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
+		VkClearColorValue ClearColor = {};
+		VkClearDepthStencilValue ClearDepthStencil = {};
 		if(Info.Usage & image_flags::TF_ColorAttachment || Info.Usage & image_flags::TF_ColorTexture)
+		{
 			Aspect |= VK_IMAGE_ASPECT_COLOR_BIT;
+			ClearColor.float32[0] = 0.0f;
+			ClearColor.float32[1] = 0.0f;
+			ClearColor.float32[2] = 0.0f;
+			ClearColor.float32[3] = 1.0f;
+		}
 		if(Info.Usage & image_flags::TF_DepthTexture)
+		{
 			Aspect |= VK_IMAGE_ASPECT_DEPTH_BIT;
+			ClearDepthStencil.depth = 1.0f;
+			ClearDepthStencil.stencil = 0;
+		}
 		if(Info.Usage & image_flags::TF_StencilTexture)
+		{
 			Aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
+			ClearDepthStencil.depth = 1.0f;
+			ClearDepthStencil.stencil = 0;
+		}
 
 		VmaAllocationCreateInfo AllocCreateInfo = {};
 		AllocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;

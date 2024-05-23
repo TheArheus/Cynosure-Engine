@@ -41,8 +41,10 @@ Begin()
 	CommandQueue->Reset(CommandList);
 
 	SetImageBarriers({
+						{Gfx->NullTexture1D, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}, 
 						{Gfx->NullTexture2D, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}, 
-						{Gfx->NullTexture3D, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}
+						{Gfx->NullTexture3D, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
+						{Gfx->NullTextureCube, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u}, 
 					 }, PSF_TopOfPipe, PSF_Compute);
 }
 
@@ -120,13 +122,32 @@ FillBuffer(buffer* Buffer, u32 Value)
 }
 
 void vulkan_global_pipeline_context::
+FillTexture(texture* Texture, barrier_state CurrentState, vec4 Value)
+{
+	VkClearColorValue ClearColor = {};
+	ClearColor.float32[0] = Value.x;
+	ClearColor.float32[1] = Value.y;
+	ClearColor.float32[2] = Value.z;
+	ClearColor.float32[3] = Value.w;
+
+	VkImageSubresourceRange ClearRange = {};
+	ClearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	ClearRange.baseMipLevel = 0;
+	ClearRange.baseArrayLayer = 0;
+	ClearRange.levelCount = VK_REMAINING_MIP_LEVELS;
+	ClearRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+
+	vkCmdClearColorImage(*CommandList, static_cast<vulkan_texture*>(Texture)->Handle, GetVKLayout(CurrentState), &ClearColor, 1, &ClearRange);
+}
+
+void vulkan_global_pipeline_context::
 CopyImage(texture* Dst, texture* Src)
 {
 	vulkan_texture* SrcTexture = static_cast<vulkan_texture*>(Src);
 	vulkan_texture* DstTexture = static_cast<vulkan_texture*>(Dst);
 
-	SetImageBarriers({{SrcTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_src, -1}, 
-					  {DstTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_dst, -1}}, 
+	SetImageBarriers({{SrcTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_src, ~0u}, 
+					  {DstTexture, 0, AF_TransferWrite, barrier_state::undefined, barrier_state::transfer_dst, ~0u}}, 
 					 PSF_ColorAttachment, PSF_Transfer);
 
 	VkImageCopy ImageCopyRegion = {};
@@ -137,6 +158,38 @@ CopyImage(texture* Dst, texture* Src)
 	ImageCopyRegion.extent = {(u32)Src->Width, (u32)Src->Height, 1};
 
 	vkCmdCopyImage(*CommandList, SrcTexture->Handle, GetVKLayout(barrier_state::transfer_src), DstTexture->Handle, GetVKLayout(barrier_state::transfer_dst), 1, &ImageCopyRegion);
+}
+
+void vulkan_global_pipeline_context::
+GenerateMips(texture* Texture, barrier_state CurrentState)
+{
+	vulkan_texture* VulkanTexture = static_cast<vulkan_texture*>(Texture);
+
+	SetImageBarriers({{VulkanTexture, 0, AF_TransferWrite, CurrentState, barrier_state::transfer_dst, ~0u}}, PSF_Transfer, PSF_Transfer);
+	SetImageBarriers({{VulkanTexture, AF_TransferWrite, AF_TransferRead, barrier_state::transfer_dst, barrier_state::transfer_src, 0}}, PSF_Transfer, PSF_Transfer);
+
+	for(u32 MipIdx = 1; MipIdx < VulkanTexture->Info.MipLevels; ++MipIdx)
+	{
+		VkImageBlit Blit = {};
+		Blit.srcSubresource.aspectMask = VulkanTexture->Aspect;
+		Blit.srcSubresource.layerCount = 1;
+		Blit.srcSubresource.mipLevel   = MipIdx - 1;
+		Blit.srcOffsets[1].x = Max(1, s32(Texture->Width  >> (MipIdx - 1)));
+		Blit.srcOffsets[1].y = Max(1, s32(Texture->Height >> (MipIdx - 1)));
+		Blit.srcOffsets[1].z = Max(1, s32(Texture->Depth  >> (MipIdx - 1)));
+
+		Blit.dstSubresource.aspectMask = VulkanTexture->Aspect;
+		Blit.dstSubresource.layerCount = 1;
+		Blit.dstSubresource.mipLevel   = MipIdx;
+		Blit.dstOffsets[1].x = Max(1, s32(Texture->Width  >> MipIdx));
+		Blit.dstOffsets[1].y = Max(1, s32(Texture->Height >> MipIdx));
+		Blit.dstOffsets[1].z = Max(1, s32(Texture->Depth  >> MipIdx));
+
+		vkCmdBlitImage(*CommandList, VulkanTexture->Handle, GetVKLayout(barrier_state::transfer_src), VulkanTexture->Handle, GetVKLayout(barrier_state::transfer_dst), 1, &Blit, VK_FILTER_LINEAR);
+		SetImageBarriers({{VulkanTexture, 0, AF_TransferRead, barrier_state::transfer_dst, barrier_state::transfer_src, MipIdx}}, PSF_Transfer, PSF_Transfer);
+	}
+
+	SetImageBarriers({{VulkanTexture, AF_TransferRead, 0, barrier_state::transfer_src, CurrentState, ~0u}}, PSF_Transfer, PSF_Transfer);
 }
 
 void vulkan_global_pipeline_context::
@@ -325,8 +378,10 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	: LoadOp(NewLoadOp), StoreOp(NewStoreOp)
 {
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+	NullTexture1D = static_cast<vulkan_texture*>(Gfx->NullTexture1D);
 	NullTexture2D = static_cast<vulkan_texture*>(Gfx->NullTexture2D);
 	NullTexture3D = static_cast<vulkan_texture*>(Gfx->NullTexture3D);
+	NullTextureCube = static_cast<vulkan_texture*>(Gfx->NullTextureCube);
 	Device = Gfx->Device;
 
 	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
@@ -570,19 +625,19 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	ColorBlendState.attachmentCount = ColorAttachmentState.size();
 
 	VkPipelineDepthStencilStateCreateInfo DepthStencilState = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-	DepthStencilState.depthTestEnable = true;
+	DepthStencilState.depthTestEnable  = InputData.UseDepth;
 	DepthStencilState.depthWriteEnable = true;
 	DepthStencilState.minDepthBounds = 0.0f;
 	DepthStencilState.maxDepthBounds = 1.0f;
 	DepthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
 
 	VkPipelineViewportStateCreateInfo ViewportState = {VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-	ViewportState.viewportCount = 1;
-	ViewportState.scissorCount = 1;
+	ViewportState.viewportCount = 1; //int(InputData.UseColor);
+	ViewportState.scissorCount  = 1; //int(InputData.UseColor);
 
 	VkPipelineRasterizationStateCreateInfo RasterizationState = {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
 	RasterizationState.lineWidth = 1.0f;
-	RasterizationState.cullMode  = InputData.UseBackFace ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_FRONT_BIT;
+	RasterizationState.cullMode  = GetVKCullMode(InputData.CullMode);
 	RasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
 	VkPipelineDynamicStateCreateInfo DynamicState = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
@@ -957,10 +1012,14 @@ SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_
 	}
 
 	vulkan_texture* NullData = nullptr;
-	if(Type == image_type::Texture2D)
+	if(Type == image_type::Texture1D)
+		NullData = static_cast<vulkan_texture*>(NullTexture1D);
+	else if(Type == image_type::Texture2D)
 		NullData = static_cast<vulkan_texture*>(NullTexture2D);
-	else
+	else if(Type == image_type::Texture3D)
 		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	else if(Type == image_type::TextureCube)
+		NullData = static_cast<vulkan_texture*>(NullTextureCube);
 	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
 	{
 		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
@@ -996,10 +1055,14 @@ SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_
 	}
 
 	vulkan_texture* NullData = nullptr;
-	if(Type == image_type::Texture2D)
+	if(Type == image_type::Texture1D)
+		NullData = static_cast<vulkan_texture*>(NullTexture1D);
+	else if(Type == image_type::Texture2D)
 		NullData = static_cast<vulkan_texture*>(NullTexture2D);
-	else
+	else if(Type == image_type::Texture3D)
 		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	else if(Type == image_type::TextureCube)
+		NullData = static_cast<vulkan_texture*>(NullTextureCube);
 	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
 	{
 		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
@@ -1034,10 +1097,14 @@ SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_
 	}
 
 	vulkan_texture* NullData = nullptr;
-	if(Type == image_type::Texture2D)
+	if(Type == image_type::Texture1D)
+		NullData = static_cast<vulkan_texture*>(NullTexture1D);
+	else if(Type == image_type::Texture2D)
 		NullData = static_cast<vulkan_texture*>(NullTexture2D);
-	else
+	else if(Type == image_type::Texture3D)
 		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	else if(Type == image_type::TextureCube)
+		NullData = static_cast<vulkan_texture*>(NullTextureCube);
 	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
 	{
 		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
@@ -1062,8 +1129,10 @@ vulkan_compute_context::
 vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, const std::vector<shader_define>& ShaderDefines)
 {
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+	NullTexture1D = static_cast<vulkan_texture*>(Gfx->NullTexture1D);
 	NullTexture2D = static_cast<vulkan_texture*>(Gfx->NullTexture2D);
 	NullTexture3D = static_cast<vulkan_texture*>(Gfx->NullTexture3D);
+	NullTextureCube = static_cast<vulkan_texture*>(Gfx->NullTextureCube);
 	Device = Gfx->Device;
 
 	std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>> ShaderRootLayout;
@@ -1071,7 +1140,7 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 
 	ComputeStage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
 	ComputeStage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
-	ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines);
+	ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines, &BlockSizeX, &BlockSizeY, &BlockSizeZ);
 	ComputeStage.pName  = "main";
 
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
@@ -1192,7 +1261,7 @@ StaticUpdate()
 void vulkan_compute_context::
 Execute(u32 X, u32 Y, u32 Z)
 {
-	vkCmdDispatch(*PipelineContext->CommandList, (X + 31) / 32, (Y + 31) / 32, (Z + 31) / 32);
+	vkCmdDispatch(*PipelineContext->CommandList, (X + BlockSizeX - 1) / BlockSizeX, (Y + BlockSizeX - 1) / BlockSizeX, (Z + BlockSizeX - 1) / BlockSizeX);
 }
 
 void vulkan_compute_context::
@@ -1303,10 +1372,14 @@ SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_
 	}
 
 	vulkan_texture* NullData = nullptr;
-	if(Type == image_type::Texture2D)
+	if(Type == image_type::Texture1D)
+		NullData = static_cast<vulkan_texture*>(NullTexture1D);
+	else if(Type == image_type::Texture2D)
 		NullData = static_cast<vulkan_texture*>(NullTexture2D);
-	else
+	else if(Type == image_type::Texture3D)
 		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	else if(Type == image_type::TextureCube)
+		NullData = static_cast<vulkan_texture*>(NullTextureCube);
 	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
 	{
 		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
@@ -1341,10 +1414,14 @@ SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_
 	}
 
 	vulkan_texture* NullData = nullptr;
-	if(Type == image_type::Texture2D)
+	if(Type == image_type::Texture1D)
+		NullData = static_cast<vulkan_texture*>(NullTexture1D);
+	else if(Type == image_type::Texture2D)
 		NullData = static_cast<vulkan_texture*>(NullTexture2D);
-	else
+	else if(Type == image_type::Texture3D)
 		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	else if(Type == image_type::TextureCube)
+		NullData = static_cast<vulkan_texture*>(NullTextureCube);
 	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
 	{
 		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
@@ -1379,10 +1456,14 @@ SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_
 	}
 
 	vulkan_texture* NullData = nullptr;
-	if(Type == image_type::Texture2D)
+	if(Type == image_type::Texture1D)
+		NullData = static_cast<vulkan_texture*>(NullTexture1D);
+	else if(Type == image_type::Texture2D)
 		NullData = static_cast<vulkan_texture*>(NullTexture2D);
-	else
+	else if(Type == image_type::Texture3D)
 		NullData = static_cast<vulkan_texture*>(NullTexture3D);
+	else if(Type == image_type::TextureCube)
+		NullData = static_cast<vulkan_texture*>(NullTextureCube);
 	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
 	{
 		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);

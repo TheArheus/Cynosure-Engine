@@ -6,8 +6,9 @@ PlatformCppFiles="../src/linux_main.cpp"
 
 DepthCascades="-DDEPTH_CASCADES_COUNT=3"
 UseDebugColorBlend="-DDEBUG_COLOR_BLEND=0"
-GBufferCount="-DGBUFFER_COUNT=4"
+GBufferCount="-DGBUFFER_COUNT=5"
 LightSourcesMax="-DLIGHT_SOURCES_MAX_COUNT=256"
+VoxelGridSize="-DVOXEL_SIZE=256"
 
 mkdir -p ../build ../build/scenes
 
@@ -27,7 +28,7 @@ done
 popd
 
 pushd ../build
-g++ $CommonCompFlags ../src/main.cpp $PlatformCppFiles -I../src -I../src/core/vendor -o "Cynosure Engine" -ldl -lglfw -lglslang -lvulkan -lMachineIndependent -lOSDependent -lGenericCodeGen -lOGLCompiler -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt -lglslang-default-resource-limits -lSPVRemapper -lspirv-cross-core -lspirv-cross-cpp -lspirv-cross-glsl -lspirv-cross-hlsl -lassimp -lpthread $UseDebugColorBlend $DepthCascades $GBufferCount $LightSourcesMax
+g++ $CommonCompFlags ../src/main.cpp $PlatformCppFiles -I../src -I../src/core/vendor -o "Cynosure Engine" -ldl -lglfw -lglslang -lvulkan -lMachineIndependent -lOSDependent -lGenericCodeGen -lOGLCompiler -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt -lglslang-default-resource-limits -lSPVRemapper -lspirv-cross-core -lspirv-cross-cpp -lspirv-cross-glsl -lspirv-cross-hlsl -lassimp -lpthread $UseDebugColorBlend $DepthCascades $GBufferCount $LightSourcesMax $VoxelGridSize
 popd
 
 exit 0

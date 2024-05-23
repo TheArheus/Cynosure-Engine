@@ -67,5 +67,5 @@ void main()
 
 	vec3 TexelA = texture(A, TextCoord / TextureDimsA).rgb;
 	vec3 TexelB = UpscaleTent(TextCoord, TextureDimsB, 0.5);
-	imageStore(OutTexture, ivec2(TextCoord), vec4(pow(aces((TexelA + TexelB) * 0.5), vec3(1.0 / 2.0)), 1.0));
+	imageStore(OutTexture, ivec2(TextCoord), vec4(pow(aces(TexelA + TexelB), vec3(1.0 / 2.0)), 1.0));
 }

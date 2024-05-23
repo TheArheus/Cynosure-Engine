@@ -84,7 +84,7 @@ void main()
 	vec3  Bitangent = cross(FragmentNormalVS, Tangent);
 	mat3  TBNVS     = mat3(Tangent, Bitangent, FragmentNormalVS);
 
-	float Radius = 0.1;
+	float Radius = 0.05;
 	float OcclusionResult = 0.0;
 	for(uint SampleIdx = 0; SampleIdx < SAMPLES_COUNT; ++SampleIdx)
 	{

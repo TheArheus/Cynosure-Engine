@@ -123,14 +123,14 @@ struct world_update_system : entity_system
 			//DebugMeshInstances.push_back({vec4(0), vec4(1), DebugGeometries.Load(DebugFrustum, FrustrumIndices)});
 			//DebugMeshVisibility.push_back(true);
 
-			vec3 FrustumCenter(0);
+			vec3 FrustumCenter(0.0f);
 			for(vec3 V : CameraViewCorners)
 			{
 				FrustumCenter += V;
 			}
 			FrustumCenter /= 8.0;
 
-			float Radius = -INFINITY;
+			float Radius = 0.0f;
 			for(vec3 V : CameraViewCorners)
 			{
 				float Dist = Length(V - FrustumCenter);

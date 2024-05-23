@@ -27,8 +27,15 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	GfxDepthTarget = PushTexture("DepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	DebugCameraViewDepthTarget = PushTexture("DebugCameraViewDepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 
-	TextureInputData.Format    = image_format::R11G11B10_SFLOAT;
+	TextureInputData.Type	   = image_type::Texture3D;
+	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
+	TextureInputData.MipLevels = GetImageMipLevels(VOXEL_SIZE, VOXEL_SIZE);
+	VoxelGridTarget   = PushTexture("VoxelGridTarget", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+
+	TextureInputData.Type	   = image_type::Texture2D;
+	TextureInputData.Format    = image_format::R11G11B10_SFLOAT;
+	TextureInputData.MipLevels = 1;
 	HdrColorTarget = PushTexture("HdrColorTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TextureInputData.MipLevels = 6;
 	TextureInputData.AddressMode = sampler_address_mode::clamp_to_border;
@@ -160,6 +167,9 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc | image_flags::TF_ColorTexture;
 	TextureInputData.MipLevels = GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height));
 	TextureInputData.ReductionMode = sampler_reduction_mode::max;
+	TextureInputData.MinFilter = filter::nearest;
+	TextureInputData.MagFilter = filter::nearest;
+	TextureInputData.MipmapMode = mipmap_mode::nearest;
 	DepthPyramid = PushTexture("DepthPyramid", PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height), 1, TextureInputData);
 
 	GBuffer.resize(GBUFFER_COUNT);
@@ -169,12 +179,13 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Layers    = 1;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc;
 	TextureInputData.Format    = image_format::R16G16B16A16_SNORM;
-	GBuffer[0] = PushTexture("GBuffer_Normals",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Fragment Normals
+	GBuffer[0] = PushTexture("GBuffer_VertexNormals",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Vertex   Normals
+	GBuffer[1] = PushTexture("GBuffer_FragmentNormals",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Fragment Normals
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
-	GBuffer[1] = PushTexture("GBuffer_Diffuse",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Diffuse Color
-	GBuffer[2] = PushTexture("GBuffer_Emmit",    nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Emmit Color
+	GBuffer[2] = PushTexture("GBuffer_Diffuse",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Diffuse Color
+	GBuffer[3] = PushTexture("GBuffer_Emmit",    nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Emmit Color
 	TextureInputData.Format    = image_format::R32G32_SFLOAT;
-	GBuffer[3] = PushTexture("GBuffer_Specular", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular + Light Emmission Ammount
+	GBuffer[4] = PushTexture("GBuffer_Specular", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular + Light Emmission Ammount
 	AmbientOcclusionData = PushTexture("AmbientOcclusionData", Backend->Width, Backend->Height, 1, TextureInputData);
 	BlurTemp			 = PushTexture("BlurTemp", Backend->Width, Backend->Height, 1, TextureInputData);
 
@@ -182,15 +193,17 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	utils::render_context::input_data RendererInputData = {};
 	RendererInputData.UseColor	  = true;
 	RendererInputData.UseDepth	  = true;
-	RendererInputData.UseBackFace = true;
+	RendererInputData.CullMode    = cull_mode::back;
 	RendererInputData.UseOutline  = true;
-	GfxContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.vert.glsl", "../shaders/mesh.frag.glsl"}, GBuffer, {true, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
+	GfxContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.vert.glsl", "../shaders/mesh.frag.glsl"}, GBuffer, {cull_mode::back, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
 	DebugContext = CreateRenderContext(load_op::load, store_op::store, {"../shaders/mesh.dbg.vert.glsl", "../shaders/mesh.dbg.frag.glsl"}, {GfxColorTarget[0]}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	DebugComputeContext = CreateComputeContext("../shaders/mesh.dbg.comp.glsl");
 
 	RendererInputData = {};
+	VoxelizationContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/voxel.vert.glsl", "../shaders/voxel.geom.glsl", "../shaders/voxel.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}});
+
 	RendererInputData.UseDepth = true;
-	RendererInputData.UseBackFace  = true;
+	RendererInputData.CullMode = cull_mode::front;
 	CascadeShadowContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.sdw.vert.glsl", "../shaders/mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	ShadowContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.sdw.vert.glsl", "../shaders/mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 
@@ -220,7 +233,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 
 	for(u32 MipIdx = 0; MipIdx < GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height)); ++MipIdx)
 	{
-		DepthReduceContext.push_back(CreateComputeContext("../shaders/texel_reduce.comp.glsl"));
+		DepthReduceContext.push_back(CreateComputeContext("../shaders/texel_reduce_2d.comp.glsl"));
 	}
 
 	for(u32 MipIdx = 0; MipIdx < 5; ++MipIdx)
@@ -251,6 +264,7 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 	NoiseTexture(std::move(Oth.NoiseTexture)),
 	CubeMapShadowContexts(std::move(Oth.CubeMapShadowContexts)),
 	GfxContext(std::move(Oth.GfxContext)),
+	VoxelizationContext(std::move(Oth.VoxelizationContext)),
 	CascadeShadowContext(std::move(Oth.CascadeShadowContext)),
 	ShadowContext(std::move(Oth.ShadowContext)),
 	DebugCameraViewContext(std::move(Oth.DebugCameraViewContext)),
@@ -270,6 +284,7 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 {
 	GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
 	GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
+	VoxelGridTarget = std::move(Oth.VoxelGridTarget);
 	HdrColorTarget = std::move(Oth.HdrColorTarget);
 	BrightTarget = std::move(Oth.BrightTarget);
 	TempBrTarget = std::move(Oth.TempBrTarget);
@@ -287,6 +302,7 @@ operator=(global_graphics_context&& Oth) noexcept
 		GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
 		GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
 		GfxDepthTarget = std::move(Oth.GfxDepthTarget);
+		VoxelGridTarget = std::move(Oth.VoxelGridTarget);
 		HdrColorTarget = std::move(Oth.HdrColorTarget);
 		BrightTarget = std::move(Oth.BrightTarget);
 		TempBrTarget = std::move(Oth.TempBrTarget);
@@ -300,6 +316,7 @@ operator=(global_graphics_context&& Oth) noexcept
 		NoiseTexture = std::move(Oth.NoiseTexture);
 		CubeMapShadowContexts = std::move(Oth.CubeMapShadowContexts);
 		GfxContext = std::move(Oth.GfxContext);
+		VoxelizationContext = std::move(Oth.VoxelizationContext);
 		CascadeShadowContext = std::move(Oth.CascadeShadowContext);
 		ShadowContext = std::move(Oth.ShadowContext);
 		DebugCameraViewContext = std::move(Oth.DebugCameraViewContext);

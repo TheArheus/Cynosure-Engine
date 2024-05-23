@@ -226,7 +226,7 @@ struct directx12_buffer : public buffer
 
 struct directx12_texture : public texture
 {
-	directx12_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average})
+	directx12_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear, barrier_state::undefined})
 	{
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		Device = Gfx->Device.Get();
@@ -243,7 +243,7 @@ struct directx12_texture : public texture
         D3D12_SAMPLER_DESC SamplerDesc = {};
         SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(InputData.AddressMode);
         SamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NONE;
-        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(filter::nearest), GetDXFilter(filter::nearest), GetDXFilter(filter::nearest), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(Info.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
+        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(Info.MinFilter), GetDXFilter(Info.MagFilter), GetDXMipmapMode(Info.MipmapMode), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(Info.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
         SamplerDesc.MaxLOD = InputData.MipLevels;
 
         switch(InputData.BorderColor)

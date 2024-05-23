@@ -501,6 +501,19 @@ D3D12_FILTER_TYPE GetDXFilter(filter Filter)
 	}
 }
 
+D3D12_FILTER_TYPE GetDXMipmapMode(mipmap_mode Mode)
+{
+	switch(Mode)
+	{
+	case mipmap_mode::nearest:
+		return D3D12_FILTER_TYPE_POINT;
+	case mipmap_mode::linear:
+		return D3D12_FILTER_TYPE_LINEAR;
+	default:
+		return D3D12_FILTER_TYPE_LINEAR;
+	}
+}
+
 D3D12_FILTER_REDUCTION_TYPE GetDXSamplerReductionMode(sampler_reduction_mode Mode)
 {
 	switch(Mode)

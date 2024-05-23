@@ -184,7 +184,7 @@ dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool N
 }
 
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines)
+LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {
 	auto FoundCompiledShader = CompiledShaders.find(Path);
 	if(FoundCompiledShader != CompiledShaders.end())
@@ -194,6 +194,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 		HavePushConstant = FoundCompiledShader->second.HavePushConstant;
 		PushConstantSize = FoundCompiledShader->second.PushConstantSize;
 		HaveDrawID       = FoundCompiledShader->second.HaveDrawID;
+		LocalSizeX ? *LocalSizeX = FoundCompiledShader->second.LocalSizeX : 0;
+		LocalSizeY ? *LocalSizeY = FoundCompiledShader->second.LocalSizeY : 0;
+		LocalSizeZ ? *LocalSizeZ = FoundCompiledShader->second.LocalSizeZ : 0;
 		return FoundCompiledShader->second.Handle;
 	}
 
@@ -294,9 +297,19 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 		glslang::FinalizeProcess();
 
+		u32 LocalSizeIdX;
+		u32 LocalSizeIdY;
+		u32 LocalSizeIdZ;
 		std::vector<op_info> ShaderInfo;
 		std::set<u32> DescriptorIndices;
-		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices);
+		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices, LocalSizeIdX, LocalSizeIdY, LocalSizeIdZ);
+
+		LocalSizeX ? *LocalSizeX = ShaderInfo[LocalSizeIdX].Constant : 0;
+		LocalSizeY ? *LocalSizeY = ShaderInfo[LocalSizeIdY].Constant : 0;
+		LocalSizeZ ? *LocalSizeZ = ShaderInfo[LocalSizeIdZ].Constant : 0;
+		CompiledShaders[Path].LocalSizeX = LocalSizeX ? *LocalSizeX : 0;
+		CompiledShaders[Path].LocalSizeY = LocalSizeY ? *LocalSizeY : 0;
+		CompiledShaders[Path].LocalSizeZ = LocalSizeZ ? *LocalSizeZ : 0;
 
 		for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
 		{

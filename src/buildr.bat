@@ -15,8 +15,9 @@ set PlatformCppFiles="..\src\win32_main.cpp"
 
 set DepthCascades=-DDEPTH_CASCADES_COUNT=3
 set UseDebugColorBlend=-DDEBUG_COLOR_BLEND=0
-set GBufferCount=-DGBUFFER_COUNT=4
+set GBufferCount=-DGBUFFER_COUNT=5
 set LightSourcesMax=-DLIGHT_SOURCES_MAX_COUNT=256
+set VoxelGridSize=-DVOXEL_SIZE=256
 
 if not exist ..\build\ mkdir ..\build\
 if not exist ..\build\scenes\ mkdir ..\build\scenes\
@@ -38,7 +39,7 @@ popd
 
 pushd ..\build\
 del *.pdb > NUL 2> NUL
-cl %CommonCompFlags% /I%VulkanInc% /I"..\src" /I"..\src\core\vendor" user32.lib kernel32.lib gdi32.lib shell32.lib d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib ..\libs\dxcompiler.lib vulkan-1.lib glslang.lib HLSL.lib OGLCompiler.lib OSDependent.lib MachineIndependent.lib SPIRV.lib SPIRV-Tools.lib SPIRV-Tools-opt.lib GenericCodeGen.lib glslang-default-resource-limits.lib SPVRemapper.lib spirv-cross-core.lib spirv-cross-cpp.lib spirv-cross-glsl.lib spirv-cross-hlsl.lib ..\libs\assimp-vc143-mt.lib ..\src\main.cpp %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
+cl %CommonCompFlags% /I%VulkanInc% /I"..\src" /I"..\src\core\vendor" user32.lib kernel32.lib gdi32.lib shell32.lib d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib ..\libs\dxcompiler.lib vulkan-1.lib glslang.lib HLSL.lib OGLCompiler.lib OSDependent.lib MachineIndependent.lib SPIRV.lib SPIRV-Tools.lib SPIRV-Tools-opt.lib GenericCodeGen.lib glslang-default-resource-limits.lib SPVRemapper.lib spirv-cross-core.lib spirv-cross-cpp.lib spirv-cross-glsl.lib spirv-cross-hlsl.lib ..\libs\assimp-vc143-mt.lib ..\src\main.cpp %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% %VoxelGridSize% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
 popd
 
 endlocal

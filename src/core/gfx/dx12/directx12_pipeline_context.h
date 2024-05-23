@@ -42,6 +42,8 @@ struct directx12_global_pipeline_context : public global_pipeline_context
 	void Present() override;
 
 	void FillBuffer(buffer* Buffer, u32 Value) override;
+	void FillTexture(texture* Texture, barrier_state CurrentState, vec4 Value) override;
+	void GenerateMips(texture* Texture, barrier_state CurrentState) override;
 
 	void CopyImage(texture* Dst, texture* Src) override;
 
@@ -80,7 +82,7 @@ public:
 	directx12_render_context() = default;
 
 	directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::initializer_list<const std::string> ShaderList, 
-			const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
+			const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
 
 	directx12_render_context(const directx12_render_context&) = delete;
 	directx12_render_context& operator=(const directx12_render_context&) = delete;

@@ -7,9 +7,9 @@ namespace utils
 		// TODO: Make better abstraction
 		struct input_data
 		{
+			cull_mode CullMode;
 			bool UseColor;
 			bool UseDepth;
-			bool UseBackFace;
 			bool UseOutline;
 			bool UseMultiview;
 			u32  ViewMask;
@@ -29,6 +29,9 @@ namespace utils
 			border_color BorderColor;
 			sampler_address_mode AddressMode;
 			sampler_reduction_mode ReductionMode;
+			filter MinFilter;
+			filter MagFilter;
+			mipmap_mode MipmapMode;
 			barrier_state InitialState;
 		};
 	};
@@ -99,6 +102,8 @@ struct global_pipeline_context
 	virtual void Present() = 0;
 
 	virtual void FillBuffer(buffer* Buffer, u32 Value) = 0;
+	virtual void FillTexture(texture* Texture, barrier_state CurrentState, vec4 Value) = 0;
+	virtual void GenerateMips(texture* Texture, barrier_state CurrentState) = 0;
 
 	virtual void CopyImage(texture* Dst, texture* Src) = 0;
 
@@ -192,6 +197,10 @@ public:
 	virtual void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 	virtual void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 	virtual void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+
+	u32 BlockSizeX;
+	u32 BlockSizeY;
+	u32 BlockSizeZ;
 };
 
 struct buffer

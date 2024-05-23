@@ -255,16 +255,21 @@ vulkan_backend(window* Window)
 
 	// TODO: Custom initial resource state
 	utils::texture::input_data TextureInputData = {};
-	TextureInputData.Type	   = image_type::Texture2D;
+	TextureInputData.Type	   = image_type::Texture1D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_ColorTexture;
 	TextureInputData.InitialState = barrier_state::shader_read;
+	NullTexture1D = GlobalHeap->PushTexture(this, "NullT_1D", nullptr, 1, 1, 1, TextureInputData);
+	TextureInputData.Type	   = image_type::Texture2D;
 	NullTexture2D = GlobalHeap->PushTexture(this, "NullT_2D", nullptr, 1, 1, 1, TextureInputData);
 	TextureInputData.Type	   = image_type::Texture3D;
-	TextureInputData.Usage    |= image_flags::TF_CubeMap;
 	NullTexture3D = GlobalHeap->PushTexture(this, "NullT_3D", nullptr, 1, 1, 1, TextureInputData);
+	TextureInputData.Type	   = image_type::Texture2D;
+	TextureInputData.Layers    = 6;
+	TextureInputData.Usage    |= image_flags::TF_CubeMap;
+	NullTextureCube = GlobalHeap->PushTexture(this, "NullT_CUBE", nullptr, 1, 1, 1, TextureInputData);
 
 	VkDescriptorPoolSize ImGuiPoolSizes[] = 
 	{
@@ -389,7 +394,7 @@ VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
 // TODO: Parse for push constant sizes
 // TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
 VkShaderModule vulkan_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines)
+LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {
 	auto FoundCompiledShader = CompiledShaders.find(Path);
 	if(FoundCompiledShader != CompiledShaders.end())
@@ -398,6 +403,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		DescriptorTypeCounts.insert(FoundCompiledShader->second.DescriptorTypeCounts.begin(), FoundCompiledShader->second.DescriptorTypeCounts.end());
 		HavePushConstant = FoundCompiledShader->second.HavePushConstant;
 		PushConstantSize = FoundCompiledShader->second.PushConstantSize;
+		LocalSizeX ? *LocalSizeX = FoundCompiledShader->second.LocalSizeX : 0;
+		LocalSizeY ? *LocalSizeY = FoundCompiledShader->second.LocalSizeY : 0;
+		LocalSizeZ ? *LocalSizeZ = FoundCompiledShader->second.LocalSizeZ : 0;
 		return FoundCompiledShader->second.Handle;
 	}
 
@@ -511,9 +519,19 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 
 		glslang::FinalizeProcess();
 
+		u32 LocalSizeIdX;
+		u32 LocalSizeIdY;
+		u32 LocalSizeIdZ;
 		std::vector<op_info> ShaderInfo;
 		std::set<u32> DescriptorIndices;
-		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices);
+		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices, LocalSizeIdX, LocalSizeIdY, LocalSizeIdZ);
+
+		LocalSizeX ? *LocalSizeX = ShaderInfo[LocalSizeIdX].Constant : 0;
+		LocalSizeY ? *LocalSizeY = ShaderInfo[LocalSizeIdY].Constant : 0;
+		LocalSizeZ ? *LocalSizeZ = ShaderInfo[LocalSizeIdZ].Constant : 0;
+		CompiledShaders[Path].LocalSizeX = LocalSizeX ? *LocalSizeX : 0;
+		CompiledShaders[Path].LocalSizeY = LocalSizeY ? *LocalSizeY : 0;
+		CompiledShaders[Path].LocalSizeZ = LocalSizeZ ? *LocalSizeZ : 0;
 
 		VkShaderModuleCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
 		CreateInfo.codeSize = SpirvCode.size() * sizeof(u32);
