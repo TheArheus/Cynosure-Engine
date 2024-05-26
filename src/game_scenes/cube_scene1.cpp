@@ -39,7 +39,7 @@ struct cube_scene1 : scene
 		vec4 Scaling = vec4(vec3(1.0f / 2.0), 1.0);
 
 		entity LightComponent0 = Registry.CreateEntity();
-		LightComponent0.AddComponent<light_component>()->PointLight(vec3(0,  0,  0), 10, vec3(1, 1, 1), 0.02);
+		LightComponent0.AddComponent<light_component>()->PointLight(vec3(0,  0,  0), 10, vec3(1, 1, 1), 1.0);
 
 		CubeObject.GetComponent<static_instances_component>()->AddInstance(vec4(-2.5, 0.0, 0.0, 0.0), Scaling, true);
 		PlaneObject.GetComponent<static_instances_component>()->AddInstance(vec4(2.5, 0.0, 0.0, 0.0), Scaling, true);

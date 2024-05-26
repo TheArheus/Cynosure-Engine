@@ -64,7 +64,7 @@ struct render_system : public entity_system
 	{
 	}
 
-	void Setup(window& Window, mesh_comp_culling_common_input& MeshCommonCullingInput)
+	void Setup(window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCommonCullingInput)
 	{
 		texture_data Texture = {};
 		mesh::material NewMaterial = {};
@@ -74,6 +74,9 @@ struct render_system : public entity_system
 		TextureInputData.Type	   = image_type::Texture2D;
 		TextureInputData.MipLevels = 1;
 		TextureInputData.Layers    = 1;
+
+		vec3 SceneMin = vec3( FLT_MAX);
+		vec3 SceneMax = vec3(-FLT_MAX);
 
 		u32 TextureIdx   = 0;
 		u32 NormalMapIdx = 0;
@@ -137,6 +140,9 @@ struct render_system : public entity_system
 				Texture.Delete();
 			}
 
+			vec3 MeshCenter = Mesh->Data.Offsets[0].BoundingSphere.Center.xyz;
+			vec3 MeshMin = Mesh->Data.Offsets[0].AABB.Min.xyz;
+			vec3 MeshMax = Mesh->Data.Offsets[0].AABB.Max.xyz;
 			if(Mesh)
 			{
 				Geometries.Load(Mesh->Data);
@@ -150,11 +156,37 @@ struct render_system : public entity_system
 				{
 					StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), EntityIdx });
 					StaticMeshVisibility.push_back(true);
+
+					vec3 Scale = EntityInstance.Scale.xyz;
+					vec3 Trans = EntityInstance.Translate.xyz;
+					vec3 WorldCenter = MeshCenter * Scale + Trans;
+					vec3 WorldMin = MeshMin * Scale + Trans;
+					vec3 WorldMax = MeshMax * Scale + Trans;
+
+					if(SceneMin.x > WorldMin.x) SceneMin.x = WorldMin.x;
+					if(SceneMin.y > WorldMin.y) SceneMin.y = WorldMin.y;
+					if(SceneMin.z > WorldMin.z) SceneMin.z = WorldMin.z;
+
+					if(SceneMax.x < WorldMax.x) SceneMax.x = WorldMax.x;
+					if(SceneMax.y < WorldMax.y) SceneMax.y = WorldMax.y;
+					if(SceneMax.z < WorldMax.z) SceneMax.z = WorldMax.z;
 				}
 			}
 
 			Materials.push_back(NewMaterial);
 		}
+
+#if 1
+		WorldUpdate.SceneScale  = vec4
+		(
+			 (2.0 - 0.001) / (SceneMax.x - SceneMin.x),
+			 (2.0 - 0.001) / (SceneMax.y - SceneMin.y),
+			 (2.0 - 0.001) / (SceneMax.z - SceneMin.z), 1.0
+		);
+#else
+		WorldUpdate.SceneScale  = vec4(vec3((2.0 - 0.1) / 256.0), 1.0);
+#endif
+		WorldUpdate.SceneCenter = vec4(vec3((SceneMax + SceneMin) * 0.5f), 1.0);
 
 		MeshCommonCullingInput.DrawCount = StaticMeshInstances.size();
 		MeshCommonCullingInput.MeshCount = Geometries.MeshCount;
@@ -237,6 +269,7 @@ struct render_system : public entity_system
 		}
 		Window.Gfx.ColorPassContext->StaticUpdate();
 
+		Window.Gfx.FrustCullingContext->SetStorageBufferView(WorldUpdateBuffer);
 		Window.Gfx.FrustCullingContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 		Window.Gfx.FrustCullingContext->SetStorageBufferView(GeometryOffsets);
 		Window.Gfx.FrustCullingContext->SetStorageBufferView(MeshDrawCommandDataBuffer);
@@ -530,62 +563,12 @@ struct render_system : public entity_system
 			Window.Gfx.GfxContext->Clear();
 		}
 
-		vec3 VoxelSceneSize = {};
 		{
-			{
-				mat4 Proj = PerspRH(45.0f, WorldUpdate.ScreenWidth, WorldUpdate.ScreenHeight, WorldUpdate.CascadeSplits[0], WorldUpdate.CascadeSplits[1]);
-				mat4 InverseProjectViewMatrix = Inverse(WorldUpdate.DebugView * Proj);
-
-				std::vector<vec4> CameraViewCorners = 
-				{
-					// Near
-					vec4{-1.0f, -1.0f, 0.0f, 1.0f},
-					vec4{ 1.0f, -1.0f, 0.0f, 1.0f},
-					vec4{ 1.0f,  1.0f, 0.0f, 1.0f},
-					vec4{-1.0f,  1.0f, 0.0f, 1.0f},
-					// Far
-					vec4{-1.0f, -1.0f, 1.0f, 1.0f},
-					vec4{ 1.0f, -1.0f, 1.0f, 1.0f},
-					vec4{ 1.0f,  1.0f, 1.0f, 1.0f},
-					vec4{-1.0f,  1.0f, 1.0f, 1.0f},
-				};
-
-				for(size_t i = 0; i < CameraViewCorners.size(); i++)
-				{
-					CameraViewCorners[i] = InverseProjectViewMatrix * CameraViewCorners[i];
-					CameraViewCorners[i] = CameraViewCorners[i] / CameraViewCorners[i].w;
-				}
-
-				float MinX = FLT_MAX, MinY = FLT_MAX, MinZ = FLT_MAX, MaxX = -FLT_MAX, MaxY = -FLT_MAX, MaxZ = -FLT_MAX;
-				for(vec3 V : CameraViewCorners)
-				{
-					if(V.x < MinX)
-						MinX = V.x;
-					if(V.y < MinY)
-						MinY = V.y;
-					if(V.z < MinZ)
-						MinZ = V.z;
-					if(V.x > MaxX)
-						MaxX = V.x;
-					if(V.y > MaxY)
-						MaxY = V.y;
-					if(V.z > MinZ)
-						MaxZ = V.z;
-				}
-
-				VoxelSceneSize = vec3
-				(
-					(2.0f - 0.1f) / abs(MaxX - MinX),
-					(2.0f - 0.1f) / abs(MaxY - MinY),
-					(2.0f - 0.1f) / abs(MaxZ - MinZ)
-				);
-			}
 			PipelineContext->SetImageBarriers({{Window.Gfx.VoxelGridTarget, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u}}, PSF_TopOfPipe, PSF_FragmentShader);
 
 			PipelineContext->FillTexture(Window.Gfx.VoxelGridTarget, barrier_state::general, vec4(0));
 			Window.Gfx.VoxelizationContext->Begin(PipelineContext, Window.Gfx.VoxelGridTarget->Width, Window.Gfx.VoxelGridTarget->Height);
 			Window.Gfx.VoxelizationContext->SetColorTarget(Window.Gfx.VoxelGridTarget->Width, Window.Gfx.VoxelGridTarget->Height, {}, {0, 0, 0, 1});
-			Window.Gfx.VoxelizationContext->SetConstant((void*)&VoxelSceneSize, sizeof(vec3));
 			Window.Gfx.VoxelizationContext->DrawIndirect(Geometries.MeshCount, IndexBuffer, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.VoxelizationContext->End();
 			Window.Gfx.VoxelizationContext->Clear();
@@ -646,7 +629,7 @@ struct render_system : public entity_system
 			{
 				{{Window.Gfx.GfxColorTarget[(PipelineContext->BackBufferIndex + 1) % 2]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.HdrColorTarget}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
-				{{Window.Gfx.VoxelGridTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
+				{{Window.Gfx.VoxelGridTarget}, 0, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
 				{{Window.Gfx.BrightTarget}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.AmbientOcclusionData}, AF_ShaderRead, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
 				{{Window.Gfx.RandomAnglesTexture}, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
@@ -660,7 +643,6 @@ struct render_system : public entity_system
 			PipelineContext->SetBufferBarrier({Window.Gfx.PoissonDiskBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
 
 			Window.Gfx.ColorPassContext->Begin(PipelineContext);
-			Window.Gfx.ColorPassContext->SetConstant((void*)&VoxelSceneSize, sizeof(vec3));
 			Window.Gfx.ColorPassContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
 			Window.Gfx.ColorPassContext->End();
 			Window.Gfx.ColorPassContext->Clear();

@@ -31,6 +31,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
 	TextureInputData.MipLevels = GetImageMipLevels(VOXEL_SIZE, VOXEL_SIZE);
+	TextureInputData.AddressMode = sampler_address_mode::clamp_to_border;
 	VoxelGridTarget   = PushTexture("VoxelGridTarget", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
 
 	TextureInputData.Type	   = image_type::Texture2D;
@@ -222,7 +223,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	ColorPassContext = CreateComputeContext("../shaders/color_pass.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	AmbientOcclusionContext = CreateComputeContext("../shaders/screen_space_ambient_occlusion.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	ShadowComputeContext = CreateComputeContext("../shaders/mesh.dbg.comp.glsl");
-	FrustCullingContext  = CreateComputeContext("../shaders/indirect_cull_frust.comp.glsl");
+	FrustCullingContext  = CreateComputeContext("../shaders/indirect_cull_frust.comp.glsl", {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
 	OcclCullingContext   = CreateComputeContext("../shaders/indirect_cull_occl.comp.glsl");
 	BlurContextV = CreateComputeContext("../shaders/blur.comp.glsl");
 	BlurContextH = CreateComputeContext("../shaders/blur.comp.glsl");

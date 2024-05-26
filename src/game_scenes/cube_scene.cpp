@@ -41,8 +41,8 @@ struct cube_scene : scene
 
 		entity LightComponent0 = Registry.CreateEntity();
 		entity LightComponent1 = Registry.CreateEntity();
-		LightComponent0.AddComponent<light_component>()->PointLight(vec3(-4,  4,  2), 10, vec3(1, 0, 1), 0.02);
-		LightComponent1.AddComponent<light_component>()->PointLight(vec3( 4, -4, -3), 10, vec3(0, 1, 1), 0.02);
+		LightComponent0.AddComponent<light_component>()->PointLight(vec3(-4,  4,  2), 10, vec3(1, 0, 1), 0.2);
+		LightComponent1.AddComponent<light_component>()->PointLight(vec3( 4, -4, -3), 10, vec3(0, 1, 1), 0.2);
 
 		u32  SceneRadius = 10;
 		for(u32 DataIdx = 0;

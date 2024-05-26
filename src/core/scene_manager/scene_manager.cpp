@@ -157,7 +157,7 @@ StartScene(window& Window)
 
 		Scenes[CurrentScene]->Registry.UpdateSystems();
 
-		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->Setup(Window, MeshCompCullingCommonData);
+		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->Setup(Window, WorldUpdate, MeshCompCullingCommonData);
 		Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Setup(Window, MeshCompCullingCommonData);
 	}
 }

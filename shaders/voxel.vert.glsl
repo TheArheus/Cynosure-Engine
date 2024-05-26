@@ -46,6 +46,8 @@ struct global_world_data
 	vec4  CameraPos;
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
+	vec4  SceneScale;
+	vec4  SceneCenter;
 	float GlobalLightSize;
 	uint  PointLightSourceCount;
 	uint  SpotLightSourceCount;
@@ -100,7 +102,6 @@ layout(set = 0, binding = 1) readonly buffer b1 { vert_in In[]; };
 layout(set = 0, binding = 2) readonly buffer b2 { mesh_draw_command MeshDrawCommands[]; };
 layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
 layout(set = 0, binding = 4) readonly buffer b4 { offset Offsets[]; };
-layout(push_constant) uniform pushConstant { vec3 SceneSize; };
 
 layout(location = 0) out vec4 CoordOut;
 layout(location = 1) out vec4 NormOut;
@@ -127,5 +128,5 @@ void main()
 	NormOut      = vec4(Normal, 0.0);
 	TextCoordOut = In[VertexIndex].TexPos;
 
-	gl_Position  = vec4((CoordOut.xyz - WorldUpdate.CameraPos.xyz) * SceneSize, 1.0);
+	gl_Position  = vec4((CoordOut.xyz - WorldUpdate.SceneCenter.xyz) * WorldUpdate.SceneScale.xyz, 1.0);
 }

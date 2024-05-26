@@ -41,6 +41,8 @@ struct global_world_data
 	vec4  CameraPos;
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
+	vec4  SceneScale;
+	vec4  SceneCenter;
 	float GlobalLightSize;
 	uint  PointLightSourceCount;
 	uint  SpotLightSourceCount;
@@ -78,9 +80,8 @@ layout(set = 2, binding = 0) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
 layout(set = 3, binding = 0) uniform sampler2D ShadowMaps[LIGHT_SOURCES_MAX_COUNT];
 layout(set = 4, binding = 0) uniform samplerCube PointShadowMaps[LIGHT_SOURCES_MAX_COUNT];
 
-layout(push_constant) uniform pushConstant { vec3 VoxelSceneSize; };
 
-float GetRandomValue(vec2 Seed)
+float rand(vec2 Seed)
 {
     float  RandomValue = fract(sin(dot(Seed, vec2(12.9898, 78.233))) * 43758.5453);
     return RandomValue;
@@ -293,7 +294,7 @@ void GetPBRColor(inout vec3 DiffuseColor, inout vec3 SpecularColor, vec3 Coord, 
 	float NdotL = max(dot(Normal, LightDir ), 0.0);
 	float NdotV = max(dot(Normal, CameraDir), 0.0);
 
-	vec3  Radiance = LightCol * Attenuation;
+	vec3  Radiance = LightCol * Intensity * Attenuation;
 
 	vec3 F0 = mix(vec3(0.04), Diffuse, Metalness);
 	vec3  F = FresnelSchlick(NdotV, F0);
@@ -385,25 +386,44 @@ bool IsInsideUnitCube(vec3 Coord)
 	return abs(Coord.x) < 1.0 && abs(Coord.y) < 1.0 && abs(Coord.z) < 1.0;
 }
 
-vec4 ConeTrace(vec3 Coord, vec3 Direction, vec3 Normal)
+vec3 GetJitteredPosition(vec3 Position, float Distance, vec3 Direction, float JitterAmount, vec2 uv) {
+    vec3 Jitter = vec3(
+        rand(uv + vec2(0.1, 0.2)),
+        rand(uv + vec2(0.3, 0.4)),
+        rand(uv + vec2(0.5, 0.6))
+    ) * JitterAmount;
+    return Position + Distance * Direction + Jitter;
+}
+
+vec4 TraceCone(vec3 Coord, vec3 Direction, vec3 Normal, float Angle)
 {
-	float Angle = Pi / 3.0;
-	float Aperture = tan(Angle / 2.0);
-	float Distance = 0.01;
+	vec2 uv = gl_GlobalInvocationID.xy / textureSize(GBuffer[0], 0).xy;
+	vec3 VoxelSceneScale = WorldUpdate.SceneScale.xyz;
+
+	float Aperture  = max(0.00001, tan(Angle / 2.0));
+	float Aperture8 = max(0.00001, tan(Angle / 8.0));
+	float Distance  = 0.1;
 	vec3  AccumColor = vec3(0);
 	float AccumOcclusion = 0.0;
 
-	vec3 StartPos   = (Coord - WorldUpdate.CameraPos.xyz) * VoxelSceneSize;
-	while(Distance <= 1.0 && AccumOcclusion < 1.0)
+	float StepCorrection = (1.0 + Aperture8) / (1.0 - Aperture8);
+	float Step = StepCorrection * 256.0 / 2.0;
+
+	vec3 StartPos   = (Coord - WorldUpdate.SceneCenter.xyz) * VoxelSceneScale + Normal * Distance * VoxelSceneScale;
+	while(Distance <= 1.0 && AccumOcclusion < 0.9)
 	{
-		vec3 ConePos = StartPos + Direction * Distance * VoxelSceneSize;
+		vec3  ConePos = StartPos + Direction * Distance * VoxelSceneScale;
+		if(!IsInsideUnitCube(ConePos)) break;
 
 		float Diameter = 2.0 * Aperture * Distance;
-		float Mip = log2(Distance * VoxelSceneSize.x);
-		vec4 VoxelSample = textureLod(VoxelGrid, ConePos * 0.5 + 0.5, Mip);
+		float Mip = log2(Distance * 256.0);
+		vec4  VoxelSample = textureLod(VoxelGrid, ConePos * 0.5 + 0.5, Mip);
 
-		AccumColor += (1.0 - AccumOcclusion) * VoxelSample.rgb;
-		AccumOcclusion += (1.0 - AccumOcclusion) * VoxelSample.a;
+		if(VoxelSample.a > 0.0)
+		{
+			AccumColor += (1.0 - AccumOcclusion) * VoxelSample.rgb * VoxelSample.a;
+			AccumOcclusion += (1.0 - AccumOcclusion) * VoxelSample.a;
+		}
 
 		Distance += Diameter;
 	}
@@ -559,19 +579,12 @@ void main()
 	}
 	LightShadow /= float(TotalLightSourceCount);
 
+	vec4 IndirectDiffuse  = vec4(0);
 	vec4 IndirectSpecular = vec4(0);
-	{
-		vec3 ViewDirWS = normalize(WorldUpdate.CameraPos.xyz - CoordWS);
-		vec3 ReflDirWS = normalize(reflect(-ViewDirWS, VertexNormalWS));
-		IndirectSpecular = ConeTrace(CoordWS, ReflDirWS, VertexNormalWS);
-		IndirectSpecular.rgb *= Specular;
-	}
-
-	vec4 IndirectDiffuse = vec4(0);
 	{
 		vec3 Guide = vec3(0, 1, 0);
 		if(abs(dot(VertexNormalWS, Guide)) == 1.0)
-			Guide  = vec3(0, 0, 1);
+			 Guide = vec3(0, 0, 1);
 		vec3 Right = normalize(Guide - dot(Guide, VertexNormalWS) * VertexNormalWS);
 		vec3 Up    = cross(Right, VertexNormalWS);
 
@@ -581,10 +594,17 @@ void main()
 			ConeDirection += DiffuseConeDirections[i].x * Right + DiffuseConeDirections[i].z * Up;
 			ConeDirection  = normalize(ConeDirection);
 
-			IndirectDiffuse += ConeTrace(CoordWS, ConeDirection, VertexNormalWS) * DiffuseConeWeights[i];
+			IndirectDiffuse += TraceCone(CoordWS, ConeDirection, VertexNormalWS, Pi / 4.0) * DiffuseConeWeights[i];
 		}
 
-		IndirectDiffuse.rgb *= Diffuse * 0.1;
+		IndirectDiffuse.rgb *= Diffuse * 0.01;
+	}
+
+	{
+		vec3 ViewDirWS = normalize(WorldUpdate.CameraPos.xyz - CoordWS);
+		vec3 ReflDirWS = normalize(reflect(-ViewDirWS, VertexNormalWS));
+		IndirectSpecular = TraceCone(CoordWS, ReflDirWS, VertexNormalWS, Pi / 12.0);
+		IndirectSpecular.rgb *= Specular;
 	}
 
 	float GlobalShadow = 0.0;
@@ -605,13 +625,13 @@ void main()
 
 	float Shadow    = (GlobalShadow + LightShadow) / 2.0;
 #if DEBUG_COLOR_BLEND
-	imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), pow(vec4(Diffuse, 1), vec4(1.0 / 2.0)));
+	imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), Diffuse);
 #else
 	if(WorldUpdate.DebugColors)
 	{
 		vec3 ShadowCol  = vec3(0.2) * (1.0 - Shadow);
 		vec3 FinalLight = ShadowCol * CascadeCol;
-		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(pow(FinalLight, vec3(1.0 / 2.0)), 1.0));
+		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(FinalLight, 1.0));
 	}
 	else
 	{

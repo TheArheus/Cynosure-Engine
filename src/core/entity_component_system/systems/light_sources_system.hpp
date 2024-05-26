@@ -25,9 +25,6 @@ struct light_sources_system : public entity_system
 		{
 			light_component* Light = Entity.GetComponent<light_component>();
 
-			if(Light->Type == light_type_directional)
-			{
-			}
 			if(Light->Type == light_type_point)
 			{
 				WorldUpdate.PointLightSourceCount++;

@@ -151,6 +151,8 @@ vulkan_backend(window* Window)
 		VK_KHR_MULTIVIEW_EXTENSION_NAME,
 		"VK_KHR_dynamic_rendering",
 		"VK_EXT_descriptor_indexing",
+		"VK_EXT_shader_atomic_float",
+		"VK_EXT_shader_atomic_int64",
 	};
 
 	u32 DeviceExtensionsCount = 0;

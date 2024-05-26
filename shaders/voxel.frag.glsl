@@ -19,6 +19,8 @@ struct global_world_data
 	vec4  CameraPos;
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
+	vec4  SceneScale;
+	vec4  SceneCenter;
 	float GlobalLightSize;
 	uint  PointLightSourceCount;
 	uint  SpotLightSourceCount;
@@ -129,13 +131,11 @@ void GetPBRColor(inout vec3 DiffuseColor, vec3 Coord, vec3 Normal, vec3 CameraDi
 {
 	vec3  Half        = normalize(LightDir + CameraDir);
 	float Distance    = length(LightDir);
-	float Attenuation = 1.0 / ((1 + 0.22 * Distance) * (1 + 0.2 * Distance * Distance));
+	float Attenuation = 1.0 / ((1 + 0.22 * Distance / Radius) * (1 + 0.2 * Distance * Distance / (Radius * Radius)));
 
 	float NdotL = max(dot(Normal, LightDir), 0.0);
 
-	vec3  Radiance = LightCol * Attenuation;
-
-	vec3 RadianceAmmount = Radiance * NdotL;
+	vec3 RadianceAmmount = LightCol * Attenuation * NdotL;
 	DiffuseColor += RadianceAmmount;
 }
 
@@ -159,7 +159,7 @@ void main()
 
 	vec3 Diffuse = MeshMaterials[MatIdx].LightDiffuse.rgb;
 	if(MeshMaterials[MatIdx].HasTexture)
-		Diffuse = texture(DiffuseSamplers[TextureIdx], TextCoord).rgb;
+		 Diffuse = texture(DiffuseSamplers[TextureIdx], TextCoord).rgb;
 
 	vec3 ViewDirWS = normalize(WorldUpdate.CameraPos.xyz - CoordWS.xyz);
 

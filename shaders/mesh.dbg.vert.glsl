@@ -56,6 +56,8 @@ struct global_world_data
 	vec4  CameraPos;
 	vec4  CameraDir;
 	vec4  GlobalLightPos;
+	vec4  SceneScale;
+	vec4  SceneCenter;
 	float GlobalLightSize;
 	uint  PointLightSourceCount;
 	uint  SpotLightSourceCount;
