@@ -83,7 +83,7 @@ public:
 	vulkan_render_context() = default;
 
 	vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::initializer_list<const std::string> ShaderList, 
-						  const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
+						  const std::vector<texture*>& ColorTargets, const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
 
 	vulkan_render_context(const vulkan_render_context&) = delete;
 	vulkan_render_context& operator=(const vulkan_render_context&) = delete;

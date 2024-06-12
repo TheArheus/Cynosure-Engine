@@ -831,7 +831,7 @@ struct op_info
 	bool NonWritable;
 };
 
-void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std::set<u32>& DescriptorIndices, u32& LocalSizeIdX, u32& LocalSizeIdY, u32& LocalSizeIdZ)
+void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std::set<u32>& DescriptorIndices, u32* LocalSizeIdX, u32* LocalSizeIdY, u32* LocalSizeIdZ, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {
 	assert(Binary[0] == SpvMagicNumber);
 
@@ -848,15 +848,26 @@ void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std:
 
 		switch(OpCode)
 		{
+			case SpvOpExecutionMode:
+			{
+				ResultId = Binary[Offset + 1];
+
+				if(Binary[Offset + 2] == SpvExecutionModeLocalSize)
+				{
+					LocalSizeX ? *LocalSizeX = Binary[Offset + 3] : NULL;
+					LocalSizeY ? *LocalSizeY = Binary[Offset + 4] : NULL;
+					LocalSizeZ ? *LocalSizeZ = Binary[Offset + 5] : NULL;
+				}
+			} break;
 			case SpvOpExecutionModeId:
 			{
 				ResultId = Binary[Offset + 1];
 
 				if(Binary[Offset + 2] == SpvExecutionModeLocalSizeId)
 				{
-					LocalSizeIdX = Binary[Offset + 3];
-					LocalSizeIdY = Binary[Offset + 4];
-					LocalSizeIdZ = Binary[Offset + 5];
+					LocalSizeIdX ? *LocalSizeIdX = Binary[Offset + 3] : NULL;
+					LocalSizeIdY ? *LocalSizeIdY = Binary[Offset + 4] : NULL;
+					LocalSizeIdZ ? *LocalSizeIdZ = Binary[Offset + 5] : NULL;
 				}
 			} break;
 			case SpvOpMemberDecorate:

@@ -28,7 +28,7 @@ done
 popd
 
 pushd ../build
-g++ $CommonCompFlags ../src/main.cpp $PlatformCppFiles -I../src -I../src/core/vendor -o "Cynosure Engine" -ldl -lglfw -lglslang -lvulkan -lMachineIndependent -lOSDependent -lGenericCodeGen -lOGLCompiler -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt -lglslang-default-resource-limits -lSPVRemapper -lspirv-cross-core -lspirv-cross-cpp -lspirv-cross-glsl -lspirv-cross-hlsl -lassimp -lpthread $UseDebugColorBlend $DepthCascades $GBufferCount $LightSourcesMax $VoxelGridSize
+g++ $CommonCompFlags ../src/main.cpp $PlatformCppFiles -I../src -I../src/core/vendor -o "Cynosure Engine" -Wl,-rpath=../libs/ -L../libs/ -ldxcompiler -ldl -lglfw -lglslang -lvulkan -lMachineIndependent -lOSDependent -lGenericCodeGen -lOGLCompiler -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt -lglslang-default-resource-limits -lSPVRemapper -lspirv-cross-core -lspirv-cross-cpp -lspirv-cross-glsl -lspirv-cross-hlsl -lassimp -lpthread $UseDebugColorBlend $DepthCascades $GBufferCount $LightSourcesMax $VoxelGridSize
 popd
 
 exit 0

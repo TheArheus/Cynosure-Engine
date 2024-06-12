@@ -15,6 +15,9 @@
 #include <Volk/volk.h>
 #include <Volk/volk.c>
 
+#include <dxc/dxcapi.h>
+//#include <dxc/WinAdapter.h>
+
 #define  AMD_EXTENSIONS
 #define  NV_EXTENSIONS
 #include <glslang/SPIRV/GlslangToSpv.h>

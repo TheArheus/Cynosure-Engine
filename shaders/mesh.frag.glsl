@@ -83,9 +83,13 @@ void main()
 		ViewDir = normalize(transpose(TBN) * ViewDir);
 		float HeightScale = 0.04;
 
+		vec3 Guide = vec3(0, 1, 0);
+		if(abs(dot(ViewDir, Guide)) == 1.0)
+			 Guide = vec3(0, 0, 1);
+
 		const float MinLayers   = 64 ;
 		const float MaxLayers   = 256;
-		float LayersCount       = mix(MaxLayers, MinLayers, max(dot(vec3(0, 0, 1), ViewDir), 0.0));
+		float LayersCount       = mix(MaxLayers, MinLayers, max(dot(Guide, ViewDir), 0.0));
 		float LayersDepth       = 1.0 / LayersCount;
 		float CurrentLayerDepth = 0.0;
 

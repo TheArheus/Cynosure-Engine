@@ -12,6 +12,7 @@ namespace utils
 			bool UseDepth;
 			bool UseOutline;
 			bool UseMultiview;
+			bool UseConservativeRaster;
 			u32  ViewMask;
 		};
 	};
@@ -125,10 +126,34 @@ struct global_pipeline_context
 	virtual void DebugGuiBegin(texture* RenderTarget) = 0;
 	virtual void DebugGuiEnd()   = 0;
 
-	u32 BackBufferIndex;
+	u32 BackBufferIndex = 0;
 };
 
-class render_context
+class general_context
+{
+public:
+	general_context() = default;
+	virtual ~general_context() = default;
+
+	general_context(const general_context&) = delete;
+	general_context operator=(const general_context&) = delete;
+
+	virtual void SetConstant(void* Data, size_t Size) = 0;
+
+	virtual void DestroyObject() = 0;
+	virtual void StaticUpdate() = 0;
+
+	// NOTE: If with counter, then it is using 2 bindings instead of 1
+	virtual void SetStorageBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
+	virtual void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
+
+	// TODO: Remove image layouts and move them inside texture structure
+	virtual void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+};
+
+class render_context : public general_context
 {
 public:
 	render_context() = default;
@@ -147,29 +172,16 @@ public:
 	virtual void SetDepthTarget(u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
 	virtual void SetStencilTarget(u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
 
-	virtual void StaticUpdate() = 0;
-
 	// TODO: Remove this draw
 	virtual void Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount) = 0;
 
 	virtual void DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance = 0, u32 InstanceCount = 1) = 0;
 	virtual void DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands, u32 CommandStructureSize) = 0;
 
-	virtual void SetConstant(void* Data, size_t Size) = 0;
-
-	// NOTE: If with counter, then it is using 2 bindings instead of 1
-	virtual void SetStorageBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
-	virtual void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
-
-	// TODO: Remove image layouts and move them inside texture structure
-	virtual void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-
 	utils::render_context::input_data Info;
 };
 
-class compute_context
+class compute_context : public general_context
 {
 public:
 	compute_context() = default;
@@ -184,19 +196,7 @@ public:
 	virtual void End()   = 0;
 	virtual void Clear() = 0;
 
-	virtual void StaticUpdate() = 0;
-
 	virtual void Execute(u32 X = 1, u32 Y = 1, u32 Z = 1) = 0;
-
-	virtual void SetConstant(void* Data, size_t Size) = 0;
-
-	virtual void SetStorageBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
-	virtual void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
-
-	// TODO: Remove image layouts and move them inside texture structure
-	virtual void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 
 	u32 BlockSizeX;
 	u32 BlockSizeY;

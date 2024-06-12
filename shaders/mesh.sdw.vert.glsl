@@ -70,4 +70,3 @@ void main()
 	vec4 Pos = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
 	gl_Position = ShadowMatrix * Pos;
 }
-

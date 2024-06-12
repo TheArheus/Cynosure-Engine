@@ -58,18 +58,17 @@ struct material
 
 layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
-layout(set = 0, binding = 5) readonly buffer b4 { light_source LightSources[LIGHT_SOURCES_MAX_COUNT]; };
+layout(set = 0, binding = 5) readonly buffer b5 { light_source LightSources[LIGHT_SOURCES_MAX_COUNT]; };
 layout(set = 0, binding = 6) uniform writeonly image3D VoxelTexture;
 layout(set = 1, binding = 0) uniform sampler2D DiffuseSamplers[256];
 layout(set = 2, binding = 0) uniform sampler2D NormalSamplers[256];
 layout(set = 3, binding = 0) uniform sampler2D SpecularSamplers[256];
 layout(set = 4, binding = 0) uniform sampler2D HeightSamplers[256];
 
-layout(location = 0) in vec4 Pos;
-layout(location = 1) in vec4 CoordWS;
-layout(location = 2) in vec4 Norm;
-layout(location = 3) in vec2 TextCoord;
-layout(location = 4) in flat uint MatIdx;
+layout(location = 0) in vec4 CoordWS;
+layout(location = 1) in vec4 Norm;
+layout(location = 2) in vec2 TextCoord;
+layout(location = 3) in flat uint MatIdx;
 
 
 vec3 DoDiffuse(vec3 LightCol, vec3 ToLightDir, vec3 Normal)
@@ -139,14 +138,23 @@ void GetPBRColor(inout vec3 DiffuseColor, vec3 Coord, vec3 Normal, vec3 CameraDi
 	DiffuseColor += RadianceAmmount;
 }
 
-bool IsInsideUnitCube()
+bool IsInsideUnitCube(vec3 V)
 {
-	return abs(Pos.x) < 1.0 && abs(Pos.y) < 1.0 && abs(Pos.z) < 1.0;
+	return abs(V.x) < 1.0 && abs(V.y) < 1.0 && abs(V.z) < 1.0;
+}
+
+bool IsSaturated(vec3 V)
+{
+	vec3   A = clamp(V, 0.0, 1.0);
+	return V == A;
 }
 
 void main()
 {
-	if(!IsInsideUnitCube()) return;
+	vec3 VoxelSize = imageSize(VoxelTexture);
+	vec3 VoxelPos = (CoordWS.xyz - WorldUpdate.SceneCenter.xyz) * WorldUpdate.SceneScale.xyz;
+
+	if(!IsInsideUnitCube(VoxelPos)) return;
 
 	vec4 ColDiffuse = MeshMaterials[MatIdx].LightDiffuse;
 	vec4 ColEmmit   = MeshMaterials[MatIdx].LightEmmit;
@@ -190,9 +198,7 @@ void main()
 		}
 	}
 
-	ivec3 VoxelSize = imageSize(VoxelTexture);
-	vec3  VoxelPos  = Pos.xyz * 0.5 + 0.5;
-		  VoxelPos *= vec3(VoxelSize);
-
+	VoxelPos = VoxelPos * 0.5 + 0.5;
+	VoxelPos = VoxelPos * VoxelSize;
 	imageStore(VoxelTexture, ivec3(VoxelPos), vec4(LightDiffuse, 1));
 }

@@ -26,6 +26,7 @@ vulkan_backend(window* Window)
 		VK_KHR_SURFACE_EXTENSION_NAME,
 		VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #endif
+		VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 		VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
 		"VK_EXT_debug_utils",
 	};
@@ -49,6 +50,7 @@ vulkan_backend(window* Window)
 	std::vector<VkExtensionProperties> AvailableInstanceExtensions(AvailableInstanceExtensionCount);
 	vkEnumerateInstanceExtensionProperties(nullptr, &AvailableInstanceExtensionCount, AvailableInstanceExtensions.data());
 
+	std::cout << "Instance:" << std::endl;
 	for(const char* Required : RequiredInstanceLayers)
 	{
 		bool Found = false;
@@ -152,7 +154,7 @@ vulkan_backend(window* Window)
 		"VK_KHR_dynamic_rendering",
 		"VK_EXT_descriptor_indexing",
 		"VK_EXT_shader_atomic_float",
-		"VK_EXT_shader_atomic_int64",
+		"VK_EXT_conservative_rasterization",
 	};
 
 	u32 DeviceExtensionsCount = 0;
@@ -160,6 +162,7 @@ vulkan_backend(window* Window)
 	std::vector<VkExtensionProperties> AvailableDeviceExtensions(DeviceExtensionsCount);
 	vkEnumerateDeviceExtensionProperties(PhysicalDevice, nullptr, &DeviceExtensionsCount, AvailableDeviceExtensions.data());
 
+	std::cout << "Device:" << std::endl;
 	for(const char* Required : RequiredDeviceExtensions)
 	{
 		bool Found = false;
@@ -207,6 +210,9 @@ vulkan_backend(window* Window)
 
 	vkGetPhysicalDeviceFeatures2(PhysicalDevice, &Features2);
 	VK_CHECK(vkCreateDevice(PhysicalDevice, &DeviceCreateInfo, nullptr, &Device), true);
+
+	Properties2.pNext = &ConservativeRasterProps;
+	vkGetPhysicalDeviceProperties2(PhysicalDevice, &Properties2);
 
 #if _WIN32
 	VkWin32SurfaceCreateInfoKHR SurfaceCreateInfo = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
@@ -393,6 +399,7 @@ VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
 	}
 }
 
+
 // TODO: Parse for push constant sizes
 // TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
 VkShaderModule vulkan_backend::
@@ -415,15 +422,48 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 	std::ifstream File(Path);
 	if(File)
 	{
+		std::vector<std::wstring> LongArgs;
+		std::vector<LPCWSTR> ShaderCompileArgs;
+		ShaderCompileArgs.push_back(L"-spirv");
+		ShaderCompileArgs.push_back(L"-E");
+		ShaderCompileArgs.push_back(L"main");
+
+		ShaderCompileArgs.push_back(L"-T");
+		if (ShaderType == shader_stage::vertex)
+			ShaderCompileArgs.push_back(L"vs_6_2");
+		else if (ShaderType == shader_stage::fragment)
+			ShaderCompileArgs.push_back(L"ps_6_2");
+		else if (ShaderType == shader_stage::compute)
+			ShaderCompileArgs.push_back(L"cs_6_2");
+		else if (ShaderType == shader_stage::geometry)
+			ShaderCompileArgs.push_back(L"gs_6_2");
+		else if (ShaderType == shader_stage::tessellation_control)
+			ShaderCompileArgs.push_back(L"hs_6_2");
+		else if (ShaderType == shader_stage::tessellation_eval)
+			ShaderCompileArgs.push_back(L"ds_6_2");
+
 		std::string ShaderDefinesResult;
 		for(const shader_define& Define : ShaderDefines)
 		{
+			std::string  ArgParam = Define.Name + "=" + Define.Value;
+			std::wstring ResParam(ArgParam.begin(), ArgParam.end());
+
+			LongArgs.push_back(ResParam);
+			ShaderCompileArgs.push_back(L"-D");
+			ShaderCompileArgs.push_back(LongArgs.back().c_str());
+
 			ShaderDefinesResult += std::string("#define " + Define.Name + " " + Define.Value + "\n");
 		}
 
+		ComPtr<IDxcCompiler3> DxcCompiler;
+		ComPtr<IDxcLibrary> DxcLib;
+		ComPtr<IDxcUtils> DxcUtils;
+		DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&DxcCompiler));
+		DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&DxcLib));
+		DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&DxcUtils));
+
 		std::string ShaderCode((std::istreambuf_iterator<char>(File)), (std::istreambuf_iterator<char>()));
 		std::vector<u32> SpirvCode;
-
 		size_t VerPos = ShaderCode.find("#version");
 		if (VerPos != std::string::npos)
 		{
@@ -504,18 +544,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		}
 
 		glslang::SpvOptions CompileOptions;
-#ifdef _DEBUG
-		CompileOptions.emitNonSemanticShaderDebugSource = true;
-		CompileOptions.emitNonSemanticShaderDebugInfo = true;
-		CompileOptions.generateDebugInfo = true;
-		CompileOptions.disableOptimizer = true;
-		CompileOptions.optimizeSize = false;
-#else
-		CompileOptions.stripDebugInfo = true;
-		CompileOptions.disableOptimizer = false;
-		CompileOptions.optimizeSize = true;
-#endif
-
 		glslang::TIntermediate *Intermediate = Program.getIntermediate(ShaderModule.getStage());
 		glslang::GlslangToSpv(*Intermediate, SpirvCode, &CompileOptions);
 
@@ -526,7 +554,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		u32 LocalSizeIdZ;
 		std::vector<op_info> ShaderInfo;
 		std::set<u32> DescriptorIndices;
-		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices, LocalSizeIdX, LocalSizeIdY, LocalSizeIdZ);
+		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices, &LocalSizeIdX, &LocalSizeIdY, &LocalSizeIdZ, nullptr, nullptr, nullptr);
 
 		LocalSizeX ? *LocalSizeX = ShaderInfo[LocalSizeIdX].Constant : 0;
 		LocalSizeY ? *LocalSizeY = ShaderInfo[LocalSizeIdY].Constant : 0;

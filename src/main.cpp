@@ -22,6 +22,7 @@
 // TODO: Volumetric clouds
 //
 // TODO: Runtime shader recompilation
+// TODO: Move to DirectXShaderCompiler for more shader types to be available, so that both vulkan and dx12 could run
 //
 // TODO: Add more flexibility to activate/disable features
 //			Maybe I would need to add render graphs or just automatic barriers for it

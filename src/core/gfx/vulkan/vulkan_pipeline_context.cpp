@@ -635,10 +635,15 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	ViewportState.viewportCount = 1; //int(InputData.UseColor);
 	ViewportState.scissorCount  = 1; //int(InputData.UseColor);
 
+	VkPipelineRasterizationConservativeStateCreateInfoEXT ConservativeRasterState = {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT};
+	ConservativeRasterState.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT;
+	ConservativeRasterState.extraPrimitiveOverestimationSize = Gfx->ConservativeRasterProps.maxExtraPrimitiveOverestimationSize;
+
 	VkPipelineRasterizationStateCreateInfo RasterizationState = {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
 	RasterizationState.lineWidth = 1.0f;
 	RasterizationState.cullMode  = GetVKCullMode(InputData.CullMode);
 	RasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	RasterizationState.pNext = InputData.UseConservativeRaster ? &ConservativeRasterState : nullptr;
 
 	VkPipelineDynamicStateCreateInfo DynamicState = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
 	VkDynamicState DynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};

@@ -67,6 +67,13 @@ struct world_update_system : entity_system
 		WorldUpdate.FarZ			= FarZ;
 		WorldUpdate.DebugColors		= IsDebugColors;
 
+		WorldUpdate.SceneScale  = vec4(vec3(1.0 / 8.0), 0.0);
+		WorldUpdate.SceneCenter = vec4(
+				vec3(floorf(WorldUpdate.CameraPos.x / WorldUpdate.SceneScale.x) * WorldUpdate.SceneScale.x,
+					 floorf(WorldUpdate.CameraPos.y / WorldUpdate.SceneScale.y) * WorldUpdate.SceneScale.y,
+					 floorf(WorldUpdate.CameraPos.z / WorldUpdate.SceneScale.z) * WorldUpdate.SceneScale.z), 
+				0.0);
+
 		// TODO: UI
 		MeshCompCullingCommonData.NearZ = NearZ;
 

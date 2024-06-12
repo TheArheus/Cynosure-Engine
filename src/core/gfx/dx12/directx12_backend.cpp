@@ -204,9 +204,45 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 	std::ifstream File(Path);
 	if(File)
 	{
+		ComPtr<IDxcCompiler3> DxcCompiler3;
+		ComPtr<IDxcCompiler> DxcCompiler;
+		ComPtr<IDxcLibrary> DxcLib;
+		ComPtr<IDxcUtils> DxcUtils;
+		HRESULT hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&DxcCompiler3));
+				hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&DxcCompiler));
+				hr = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&DxcLib));
+		        hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&DxcUtils));
+
+		std::vector<std::wstring> LongArgs;
+		std::vector<LPCWSTR> ShaderCompileArgs;
+		ShaderCompileArgs.push_back(L"-spirv");
+		ShaderCompileArgs.push_back(L"-E");
+		ShaderCompileArgs.push_back(L"main");
+
+		ShaderCompileArgs.push_back(L"-T");
+		if (ShaderType == shader_stage::vertex)
+			ShaderCompileArgs.push_back(L"vs_6_2");
+		else if (ShaderType == shader_stage::fragment)
+			ShaderCompileArgs.push_back(L"ps_6_2");
+		else if (ShaderType == shader_stage::compute)
+			ShaderCompileArgs.push_back(L"cs_6_2");
+		else if (ShaderType == shader_stage::geometry)
+			ShaderCompileArgs.push_back(L"gs_6_2");
+		else if (ShaderType == shader_stage::tessellation_control)
+			ShaderCompileArgs.push_back(L"hs_6_2");
+		else if (ShaderType == shader_stage::tessellation_eval)
+			ShaderCompileArgs.push_back(L"ds_6_2");
+
 		std::string ShaderDefinesResult;
 		for(const shader_define& Define : ShaderDefines)
 		{
+			std::string  ArgParam = Define.Name + "=" + Define.Value;
+			std::wstring ResParam(ArgParam.begin(), ArgParam.end());
+			LongArgs.push_back(ResParam);
+
+			ShaderCompileArgs.push_back(L"-D");
+			ShaderCompileArgs.push_back(LongArgs.back().c_str());
+
 			ShaderDefinesResult += std::string("#define " + Define.Name + " " + Define.Value + "\n");
 		}
 
@@ -220,93 +256,109 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 			ShaderCode = ShaderCode.substr(0, LineEnd) + "\n" + ShaderDefinesResult + ShaderCode.substr(LineEnd);
 		}
 
-		glslang::InitializeProcess();
-
-		EShLanguage LanguageStage = EShLangVertex;
-		glslang::EShTargetClientVersion ClientVersion = glslang::EShTargetVulkan_1_0;
-		glslang::EShTargetLanguageVersion TargetLanguageVersion = glslang::EShTargetSpv_1_0;
-		switch (ShaderType)
+		if (ShaderType == shader_stage::geometry || 
+			ShaderType == shader_stage::tessellation_control || 
+			ShaderType == shader_stage::tessellation_eval)
 		{
-			case shader_stage::vertex:
+			DxcBuffer ShaderBuffer = {};
+			ShaderBuffer.Ptr  = ShaderCode.c_str();
+			ShaderBuffer.Size = ShaderCode.size();
+
+			ComPtr<IDxcResult> ShaderResult;
+			DxcCompiler3->Compile(&ShaderBuffer, ShaderCompileArgs.data(), ShaderCompileArgs.size(), nullptr, IID_PPV_ARGS(&ShaderResult));
+
+			ComPtr<IDxcBlobUtf8> ShaderErrors;
+			ShaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&ShaderErrors), nullptr);
+			if(ShaderErrors->GetStringLength())
 			{
-#if 0
-				size_t MainPos = ShaderCode.find("void main");
-				if (MainPos != std::string::npos)
-				{
-					ShaderCode = ShaderCode.substr(0, MainPos) + "\n" + "uint GetDrawID() { return 0; }\n\n" + ShaderCode.substr(MainPos);
-				}
-#endif
+				std::cout << ShaderErrors->GetStringPointer() << std::endl;
+			}
 
-				std::string ReplaceString = "gl_DrawID";
-				size_t DrawIdPos = ShaderCode.find(ReplaceString);
-				if (DrawIdPos != std::string::npos)
-				{
-					HaveDrawID = true;
-					ShaderCode.replace(DrawIdPos, ReplaceString.length(), "0");
-				}
-			} break;
-			case shader_stage::tessellation_control:
-				LanguageStage = EShLangTessControl;
-				break;
-			case shader_stage::tessellation_eval:
-				LanguageStage = EShLangTessEvaluation;
-				break;
-			case shader_stage::geometry:
-				LanguageStage = EShLangGeometry;
-				break;
-			case shader_stage::fragment:
-				LanguageStage = EShLangFragment;
-				break;
-			case shader_stage::compute:
-				LanguageStage = EShLangCompute;
-				break;
+			ComPtr<IDxcBlob> ShaderBlob;
+			ShaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&ShaderBlob), nullptr);
+
+			const void* BlobDataPtr = ShaderBlob->GetBufferPointer();
+			size_t BlobDataSize = ShaderBlob->GetBufferSize();
+
+			SpirvCode.resize(BlobDataSize / sizeof(uint32_t));
+			memcpy(SpirvCode.data(), BlobDataPtr, BlobDataSize);
 		}
-
-		const char* GlslSource = ShaderCode.c_str();
-		glslang::TShader ShaderModule(LanguageStage);
-		ShaderModule.setStrings(&GlslSource, 1);
-
-		ShaderModule.setEnvInput(glslang::EShSourceGlsl, LanguageStage, glslang::EShClientVulkan, 100);
-		ShaderModule.setEnvClient(glslang::EShClientVulkan, ClientVersion);
-		ShaderModule.setEnvTarget(glslang::EshTargetSpv, TargetLanguageVersion);
-
-		const char* ShaderStrings[1];
-		ShaderStrings[0] = ShaderCode.c_str();
-		ShaderModule.setStrings(ShaderStrings, 1);
-
-		TBuiltInResource DefaultBuiltInResource = GetDefaultBuiltInResource();
-		if (!ShaderModule.parse(&DefaultBuiltInResource, 100, false, static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgDefault)))
+		else
 		{
-			std::cerr << ShaderModule.getInfoLog() << std::endl;
-			std::cerr << ShaderModule.getInfoDebugLog() << std::endl;
-			return {};
+			glslang::InitializeProcess();
+
+			EShLanguage LanguageStage = EShLangVertex;
+			glslang::EShTargetClientVersion ClientVersion = glslang::EShTargetVulkan_1_0;
+			glslang::EShTargetLanguageVersion TargetLanguageVersion = glslang::EShTargetSpv_1_0;
+			switch (ShaderType)
+			{
+				case shader_stage::vertex:
+				{
+					std::string ReplaceString = "gl_DrawID";
+					size_t DrawIdPos = ShaderCode.find(ReplaceString);
+					if (DrawIdPos != std::string::npos)
+					{
+						HaveDrawID = true;
+						ShaderCode.replace(DrawIdPos, ReplaceString.length(), "0");
+					}
+				} break;
+				case shader_stage::tessellation_control:
+					LanguageStage = EShLangTessControl;
+					break;
+				case shader_stage::tessellation_eval:
+					LanguageStage = EShLangTessEvaluation;
+					break;
+				case shader_stage::geometry:
+					LanguageStage = EShLangGeometry;
+					break;
+				case shader_stage::fragment:
+					LanguageStage = EShLangFragment;
+					break;
+				case shader_stage::compute:
+					LanguageStage = EShLangCompute;
+					break;
+			}
+
+			const char* GlslSource = ShaderCode.c_str();
+			glslang::TShader ShaderModule(LanguageStage);
+			ShaderModule.setStrings(&GlslSource, 1);
+
+			ShaderModule.setEnvInput(glslang::EShSourceGlsl, LanguageStage, glslang::EShClientVulkan, 100);
+			ShaderModule.setEnvClient(glslang::EShClientVulkan, ClientVersion);
+			ShaderModule.setEnvTarget(glslang::EshTargetSpv, TargetLanguageVersion);
+
+			const char* ShaderStrings[1];
+			ShaderStrings[0] = ShaderCode.c_str();
+			ShaderModule.setStrings(ShaderStrings, 1);
+
+			TBuiltInResource DefaultBuiltInResource = GetDefaultBuiltInResource();
+			if (!ShaderModule.parse(&DefaultBuiltInResource, 100, false, static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgDefault)))
+			{
+				std::cerr << ShaderModule.getInfoLog() << std::endl;
+				std::cerr << ShaderModule.getInfoDebugLog() << std::endl;
+				return {};
+			}
+
+			glslang::TProgram Program;
+			Program.addShader(&ShaderModule);
+
+			if (!Program.link(static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules)))
+			{
+				std::cerr << Program.getInfoLog() << std::endl;
+				std::cerr << Program.getInfoDebugLog() << std::endl;
+				return {};
+			}
+
+			glslang::TIntermediate *Intermediate = Program.getIntermediate(ShaderModule.getStage());
+			glslang::GlslangToSpv(*Intermediate, SpirvCode);
+
+			glslang::FinalizeProcess();
 		}
 
-		glslang::TProgram Program;
-		Program.addShader(&ShaderModule);
-
-		if (!Program.link(static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules)))
-		{
-			std::cerr << Program.getInfoLog() << std::endl;
-			std::cerr << Program.getInfoDebugLog() << std::endl;
-			return {};
-		}
-
-		glslang::TIntermediate *Intermediate = Program.getIntermediate(ShaderModule.getStage());
-		glslang::GlslangToSpv(*Intermediate, SpirvCode);
-
-		glslang::FinalizeProcess();
-
-		u32 LocalSizeIdX;
-		u32 LocalSizeIdY;
-		u32 LocalSizeIdZ;
 		std::vector<op_info> ShaderInfo;
 		std::set<u32> DescriptorIndices;
-		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices, LocalSizeIdX, LocalSizeIdY, LocalSizeIdZ);
+		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices, nullptr, nullptr, nullptr, LocalSizeX, LocalSizeY, LocalSizeZ);
 
-		LocalSizeX ? *LocalSizeX = ShaderInfo[LocalSizeIdX].Constant : 0;
-		LocalSizeY ? *LocalSizeY = ShaderInfo[LocalSizeIdY].Constant : 0;
-		LocalSizeZ ? *LocalSizeZ = ShaderInfo[LocalSizeIdZ].Constant : 0;
 		CompiledShaders[Path].LocalSizeX = LocalSizeX ? *LocalSizeX : 0;
 		CompiledShaders[Path].LocalSizeY = LocalSizeY ? *LocalSizeY : 0;
 		CompiledShaders[Path].LocalSizeZ = LocalSizeZ ? *LocalSizeZ : 0;
@@ -468,23 +520,44 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 		CompiledShaders[Path].PushConstantSize = PushConstantSize;
 		CompiledShaders[Path].HaveDrawID = HaveDrawID;
 
-		spirv_cross::CompilerHLSL Compiler(SpirvCode.data(), SpirvCode.size());
-		auto HlslResources = Compiler.get_shader_resources();
-
-		spirv_cross::CompilerHLSL::Options    HlslOptions;
-		spirv_cross::HLSLVertexAttributeRemap HlslAttribs;
-
-		HlslOptions.shader_model = 60; // SM6_0
-
-		Compiler.set_hlsl_options(HlslOptions);
-		Compiler.add_vertex_attribute_remap(HlslAttribs);
-
-		std::string HlslCode = Compiler.compile();
-
-		if(HaveDrawID)
+		std::string HlslCode;
+		if (ShaderType != shader_stage::geometry &&
+			ShaderType != shader_stage::tessellation_control &&
+			ShaderType != shader_stage::tessellation_eval)
 		{
-			HlslCode.insert(0, "cbuffer root_constant\n{\n\tuint RootDrawID : register(c0);\n};\n\n");
+			try
+			{
+				spirv_cross::CompilerHLSL Compiler(SpirvCode.data(), SpirvCode.size());
+				auto HlslResources = Compiler.get_shader_resources();
 
+				spirv_cross::CompilerHLSL::Options    HlslOptions;
+				spirv_cross::HLSLVertexAttributeRemap HlslAttribs;
+
+				HlslOptions.shader_model = 62; // SM6_2
+				HlslOptions.use_entry_point_name = true;
+				HlslOptions.enable_16bit_types   = true;
+				//HlslOptions.support_nonzero_base_vertex_base_instance = true;
+
+				Compiler.set_hlsl_options(HlslOptions);
+				Compiler.add_vertex_attribute_remap(HlslAttribs);
+
+				HlslCode = Compiler.compile();
+			}
+			catch(const std::exception& e)
+			{
+				std::cout << e.what() << std::endl;
+				return {};
+			}
+		}
+		else
+		{
+			HlslCode.insert(0, ShaderCode);
+			HlslCode.insert(0, ShaderDefinesResult);
+		} 
+
+		if(HaveDrawID) 
+		{ 
+			HlslCode.insert(0, "cbuffer root_constant\n{\n\tuint RootDrawID : register(c0, space"+std::to_string(HavePushConstant)+");\n};\n\n"); 
 			std::string ReplaceString = "DrawID = 0u";
 			size_t DrawIdPos = HlslCode.find(ReplaceString);
 			if (DrawIdPos != std::string::npos)
@@ -493,28 +566,21 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 			}
 		}
 
-		ComPtr<IDxcCompiler> DxcCompiler;
-		ComPtr<IDxcLibrary> DxcLib;
-		ComPtr<IDxcUtils> DxcUtils;
-		HRESULT hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&DxcCompiler));
-				hr = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&DxcLib));
-		        hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&DxcUtils));
-
 		u32 CodePage = CP_UTF8;
 		ComPtr<IDxcBlobEncoding> SourceBlob;
 		DxcLib->CreateBlobWithEncodingFromPinned(HlslCode.c_str(), static_cast<u32>(HlslCode.size()), CodePage, &SourceBlob);
 
-		const wchar_t* TargetProfile = L"vs_6_0";
+		const wchar_t* TargetProfile = L"vs_6_2";
 		if (ShaderType == shader_stage::fragment)
-			TargetProfile = L"ps_6_0";
+			TargetProfile = L"ps_6_2";
 		else if (ShaderType == shader_stage::compute)
-			TargetProfile = L"cs_6_0";
+			TargetProfile = L"cs_6_2";
 		else if (ShaderType == shader_stage::geometry)
-			TargetProfile = L"gs_6_0";
+			TargetProfile = L"gs_6_2";
 		else if (ShaderType == shader_stage::tessellation_control)
-			TargetProfile = L"hs_6_0";
+			TargetProfile = L"hs_6_2";
 		else if (ShaderType == shader_stage::tessellation_eval)
-			TargetProfile = L"ds_6_0";
+			TargetProfile = L"ds_6_2";
 
 		std::vector<LPCWSTR> Arguments;
 		Arguments.push_back(DXC_ARG_OPTIMIZATION_LEVEL3);

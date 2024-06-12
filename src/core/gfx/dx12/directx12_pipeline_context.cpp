@@ -52,11 +52,11 @@ EmplaceColorTarget(texture* RenderTexture)
 
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers = 
 	{
-		CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), Texture->CurrentState, D3D12_RESOURCE_STATE_COPY_SOURCE),
+		CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), Texture->CurrentState[0], D3D12_RESOURCE_STATE_COPY_SOURCE),
 		CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[BackBufferIndex].Get(), Gfx->SwapchainCurrentState[BackBufferIndex], D3D12_RESOURCE_STATE_COPY_DEST)
 	};
 
-	Texture->CurrentState                       = D3D12_RESOURCE_STATE_COPY_SOURCE;
+	std::fill(Texture->CurrentState.begin(), Texture->CurrentState.end(), D3D12_RESOURCE_STATE_COPY_SOURCE);
 	Gfx->SwapchainCurrentState[BackBufferIndex] = D3D12_RESOURCE_STATE_COPY_DEST;
 	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
 
@@ -83,9 +83,9 @@ Present()
 	for(u32 Idx = 0; Idx < TexturesToCommon.size(); ++Idx)
 	{
 		directx12_texture* Resource = static_cast<directx12_texture*>(*std::next(TexturesToCommon.begin(), Idx));
-		if(Resource->CurrentState == D3D12_RESOURCE_STATE_COMMON) continue;
-		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), Resource->CurrentState, D3D12_RESOURCE_STATE_COMMON));
-		Resource->CurrentState = D3D12_RESOURCE_STATE_COMMON;
+		if(Resource->CurrentState[0] == D3D12_RESOURCE_STATE_COMMON) continue;
+		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), Resource->CurrentState[0], D3D12_RESOURCE_STATE_COMMON));
+		std::fill(Resource->CurrentState.begin(), Resource->CurrentState.end(), D3D12_RESOURCE_STATE_COMMON);
 	}
 
 	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
@@ -197,15 +197,20 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state,
 		directx12_texture* Texture = static_cast<directx12_texture*>(std::get<0>(Data));
 
 		u32 SubresourceIndex = std::get<5>(Data);
+		u32 MipIdx = SubresourceIndex;
+		if(SubresourceIndex == ~0u) SubresourceIndex = 0;
 		D3D12_RESOURCE_STATES CurrState = GetDXImageLayout(std::get<3>(Data), std::get<1>(Data), DstStageMask);
 		D3D12_RESOURCE_STATES NextState = GetDXImageLayout(std::get<4>(Data), std::get<2>(Data), DstStageMask);
 
-		if(Texture->CurrentState != NextState)
-			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), Texture->CurrentState, NextState, SubresourceIndex));
+		if(Texture->CurrentState[SubresourceIndex] != NextState)
+			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), Texture->CurrentState[SubresourceIndex], NextState, MipIdx));
 		else
 			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Texture->Handle.Get()));
 
-		Texture->CurrentState = NextState;
+		if(MipIdx != ~0u)
+			Texture->CurrentState[SubresourceIndex] = NextState;
+		else
+			std::fill(Texture->CurrentState.begin(), Texture->CurrentState.end(), NextState);
 	}
 
 	if(Barriers.size())
@@ -221,6 +226,8 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, b
 	{
 		const std::vector<texture*>& Textures = std::get<0>(Data);
 		u32 SubresourceIndex = std::get<5>(Data);
+		u32 MipIdx = SubresourceIndex;
+		if(SubresourceIndex == ~0u) SubresourceIndex = 0;
 		if(!Textures.size()) continue;
 		for(texture* TextureData : Textures)
 		{
@@ -229,12 +236,15 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, b
 			D3D12_RESOURCE_STATES CurrState = GetDXImageLayout(std::get<3>(Data), std::get<1>(Data), DstStageMask);
 			D3D12_RESOURCE_STATES NextState = GetDXImageLayout(std::get<4>(Data), std::get<2>(Data), DstStageMask);
 
-			if(Texture->CurrentState != NextState)
-				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), Texture->CurrentState, NextState, SubresourceIndex));
+			if(Texture->CurrentState[SubresourceIndex] != NextState)
+				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), Texture->CurrentState[SubresourceIndex], NextState, MipIdx));
 			else
 				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Texture->Handle.Get()));
 
-			Texture->CurrentState = NextState;
+			if(MipIdx != ~0u)
+				Texture->CurrentState[SubresourceIndex] = NextState;
+			else
+				std::fill(Texture->CurrentState.begin(), Texture->CurrentState.end(), NextState);
 		}
 	}
 
@@ -248,14 +258,14 @@ DebugGuiBegin(texture* RenderTarget)
 	directx12_texture* Clr = static_cast<directx12_texture*>(RenderTarget);
 
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers;
-	if(Clr->CurrentState != D3D12_RESOURCE_STATE_RENDER_TARGET) 
-		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Clr->Handle.Get(), Clr->CurrentState, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	if(Clr->CurrentState[0] != D3D12_RESOURCE_STATE_RENDER_TARGET) 
+		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Clr->Handle.Get(), Clr->CurrentState[0], D3D12_RESOURCE_STATE_RENDER_TARGET));
 	else
 		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Clr->Handle.Get()));
 
 	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
 
-	Clr->CurrentState = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	std::fill(Clr->CurrentState.begin(), Clr->CurrentState.end(), D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	ImGui_ImplDX12_NewFrame();
 
@@ -307,11 +317,12 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
 
 	std::unordered_map<u32, u32> DescriptorHeapSizes;
+	D3D12_ROOT_PARAMETER DrawConstantDesc = {};
 	D3D12_ROOT_PARAMETER PushConstantDesc = {};
 
 	std::string GlobalName;
 	std::vector<ComPtr<ID3DBlob>> ShadersBlob;
-	for(const std::string Shader : ShaderList)
+	for(std::string Shader : ShaderList)
 	{
 		GlobalName = Shader.substr(Shader.find("."));
 		if(Shader.find(".vert.") != std::string::npos)
@@ -320,14 +331,17 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 		}
 		if(Shader.find(".doma.") != std::string::npos)
 		{
+			Shader.replace(Shader.find("glsl"), 4, "hlsl");
 			PipelineDesc.DS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if(Shader.find(".hull.") != std::string::npos)
 		{
+			Shader.replace(Shader.find("glsl"), 4, "hlsl");
 			PipelineDesc.HS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if (Shader.find(".geom.") != std::string::npos)
 		{
+			Shader.replace(Shader.find("glsl"), 4, "hlsl");
 			PipelineDesc.GS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if(Shader.find(".frag.") != std::string::npos)
@@ -340,9 +354,11 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 
 	if(HaveDrawID)
 	{
-		PushConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-		PushConstantDesc.Constants.Num32BitValues = 1;
-		Parameters.push_back(PushConstantDesc);
+		DrawConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+		DrawConstantDesc.Constants.ShaderRegister = HavePushConstant;
+		DrawConstantDesc.Constants.Num32BitValues = 1;
+		DrawConstantDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+		Parameters.push_back(DrawConstantDesc);
 	}
 
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
@@ -360,6 +376,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	{
 		PushConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 		PushConstantDesc.Constants.Num32BitValues = PushConstantSize / sizeof(u32);
+		PushConstantDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 		Parameters.push_back(PushConstantDesc);
 	}
 
@@ -567,7 +584,7 @@ DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands,
 	directx12_buffer* Indirect = static_cast<directx12_buffer*>(IndirectCommands);
 	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {Indices->Handle->GetGPUVirtualAddress(), (u32)Indices->Size, DXGI_FORMAT_R32_UINT};
 
-	PipelineContext->CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Info.UseDepth, &DepthStencilTarget);
+	PipelineContext->CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Info.UseDepth, Info.UseDepth ? &DepthStencilTarget : nullptr);
 	PipelineContext->CommandList->IASetIndexBuffer(&IndexBufferView);
 	PipelineContext->CommandList->ExecuteIndirect(IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), !HaveDrawID * 4, Indirect->CounterHandle.Get(), 0);
 
@@ -714,6 +731,7 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 
 	std::unordered_map<u32, u32> DescriptorHeapSizes;
 	D3D12_ROOT_PARAMETER PushConstantDesc = {};
+	PushConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 
 	bool HaveDrawID = false;
 	D3D12_COMPUTE_PIPELINE_STATE_DESC PipelineDesc = {};
@@ -733,9 +751,8 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 
 	if(HavePushConstant)
 	{
-		PushConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 		PushConstantDesc.Constants.Num32BitValues = PushConstantSize / sizeof(u32);
-		DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += PushConstantDesc.Constants.Num32BitValues;
+		PushConstantDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 		Parameters.push_back(PushConstantDesc);
 	}
 

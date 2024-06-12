@@ -386,44 +386,29 @@ bool IsInsideUnitCube(vec3 Coord)
 	return abs(Coord.x) < 1.0 && abs(Coord.y) < 1.0 && abs(Coord.z) < 1.0;
 }
 
-vec3 GetJitteredPosition(vec3 Position, float Distance, vec3 Direction, float JitterAmount, vec2 uv) {
-    vec3 Jitter = vec3(
-        rand(uv + vec2(0.1, 0.2)),
-        rand(uv + vec2(0.3, 0.4)),
-        rand(uv + vec2(0.5, 0.6))
-    ) * JitterAmount;
-    return Position + Distance * Direction + Jitter;
-}
-
 vec4 TraceCone(vec3 Coord, vec3 Direction, vec3 Normal, float Angle)
 {
-	vec2 uv = gl_GlobalInvocationID.xy / textureSize(GBuffer[0], 0).xy;
 	vec3 VoxelSceneScale = WorldUpdate.SceneScale.xyz;
 
-	float Aperture  = max(0.00001, tan(Angle / 2.0));
-	float Aperture8 = max(0.00001, tan(Angle / 8.0));
+	float Aperture  = max(0.01, tan(Angle / 2.0));
 	float Distance  = 0.1;
 	vec3  AccumColor = vec3(0);
 	float AccumOcclusion = 0.0;
 
-	float StepCorrection = (1.0 + Aperture8) / (1.0 - Aperture8);
-	float Step = StepCorrection * 256.0 / 2.0;
-
-	vec3 StartPos   = (Coord - WorldUpdate.SceneCenter.xyz) * VoxelSceneScale + Normal * Distance * VoxelSceneScale;
+	vec3 StartPos   = (Coord - WorldUpdate.SceneCenter.xyz) + Normal * Distance;
 	while(Distance <= 1.0 && AccumOcclusion < 0.9)
 	{
-		vec3  ConePos = StartPos + Direction * Distance * VoxelSceneScale;
+		vec3  ConePos = (StartPos + Direction * Distance) * VoxelSceneScale;
 		if(!IsInsideUnitCube(ConePos)) break;
 
-		float Diameter = 2.0 * Aperture * Distance;
-		float Mip = log2(Distance * 256.0);
-		vec4  VoxelSample = textureLod(VoxelGrid, ConePos * 0.5 + 0.5, Mip);
+		ConePos = ConePos * 0.5 + 0.5;
 
-		if(VoxelSample.a > 0.0)
-		{
-			AccumColor += (1.0 - AccumOcclusion) * VoxelSample.rgb * VoxelSample.a;
-			AccumOcclusion += (1.0 - AccumOcclusion) * VoxelSample.a;
-		}
+		float Diameter = 2.0 * Aperture * Distance;
+		int Mip = int(floor(log2(Distance)));
+		vec4  VoxelSample = textureLod(VoxelGrid, ConePos, Mip);
+
+		AccumColor += (1.0 - AccumOcclusion) * VoxelSample.rgb;
+		AccumOcclusion += (1.0 - AccumOcclusion) * VoxelSample.a;
 
 		Distance += Diameter;
 	}
@@ -554,12 +539,13 @@ void main()
 		LightIdx < TotalLightSourceCount;
 		++LightIdx)
 	{
-		vec3 LightSourcePosWS = LightSources[LightIdx].Pos.xyz;
+		vec3 LightSourcePosWS =  LightSources[LightIdx].Pos.xyz;
 		vec3 LightSourcePosVS = (WorldUpdate.DebugView * vec4(LightSourcePosWS, 1)).xyz;
-		vec3 LightSourceDirVS = (WorldUpdate.DebugView * vec4(LightSources[LightIdx].Dir.xyz, 1)).xyz;
-		vec3 LightSourceCol   = LightSources[LightIdx].Col.xyz;
-		float Intensity       = LightSources[LightIdx].Col.w;
-		float Radius          = LightSources[LightIdx].Pos.w;
+		vec3 LightSourceDirWS =  LightSources[LightIdx].Dir.xyz;
+		vec3 LightSourceDirVS = (WorldUpdate.DebugView * vec4(LightSourceDirWS, 1)).xyz;
+		vec3 LightSourceCol   =  LightSources[LightIdx].Col.xyz;
+		float Intensity       =  LightSources[LightIdx].Col.w;
+		float Radius          =  LightSources[LightIdx].Pos.w;
 
 		if(LightSources[LightIdx].Type == light_type_point)
 		{
@@ -569,6 +555,7 @@ void main()
 			{
 				LightShadow += GetPointLightShadow(PointShadowMaps[PointLightShadowMapIdx], CoordWS, LightSourcePosWS, FragmentNormalWS, TextCoord/TextureDims, Rotation2D, WorldUpdate.CascadeSplits[0], 0.1);
 			}
+
 			PointLightShadowMapIdx++;
 		}
 		else if(LightSources[LightIdx].Type == light_type_spot)
@@ -579,8 +566,8 @@ void main()
 	}
 	LightShadow /= float(TotalLightSourceCount);
 
-	vec4 IndirectDiffuse  = vec4(0);
-	vec4 IndirectSpecular = vec4(0);
+	vec4  IndirectDiffuse  = vec4(0);
+	vec4  IndirectSpecular = vec4(0);
 	{
 		vec3 Guide = vec3(0, 1, 0);
 		if(abs(dot(VertexNormalWS, Guide)) == 1.0)
@@ -623,7 +610,7 @@ void main()
 		}
 	}
 
-	float Shadow    = (GlobalShadow + LightShadow) / 2.0;
+	float Shadow = (GlobalShadow + LightShadow) / 2.0;
 #if DEBUG_COLOR_BLEND
 	imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), Diffuse);
 #else

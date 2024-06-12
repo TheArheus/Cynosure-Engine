@@ -103,10 +103,11 @@ layout(set = 0, binding = 2) readonly buffer b2 { mesh_draw_command MeshDrawComm
 layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
 layout(set = 0, binding = 4) readonly buffer b4 { offset Offsets[]; };
 
-layout(location = 0) out vec4 CoordOut;
-layout(location = 1) out vec4 NormOut;
-layout(location = 2) out vec2 TextCoordOut;
-layout(location = 3) out uint MatIdx;
+layout(location = 0) out vec4 CoordClip;
+layout(location = 1) out vec4 CoordOut;
+layout(location = 2) out vec4 NormOut;
+layout(location = 3) out vec2 TextCoordOut;
+layout(location = 4) out uint MatIdx;
 
 void main()
 {
@@ -128,5 +129,5 @@ void main()
 	NormOut      = vec4(Normal, 0.0);
 	TextCoordOut = In[VertexIndex].TexPos;
 
-	gl_Position  = vec4((CoordOut.xyz - WorldUpdate.SceneCenter.xyz) * WorldUpdate.SceneScale.xyz, 1.0);
+	CoordClip    = vec4((CoordOut.xyz - WorldUpdate.SceneCenter.xyz) * WorldUpdate.SceneScale.xyz, 1.0);
 }

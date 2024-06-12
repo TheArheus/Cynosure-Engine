@@ -323,7 +323,7 @@ struct directx12_texture : public texture
 
 		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
 		CommandList->ResourceBarrier(1, &BarrierData);
-		CurrentState = D3D12_RESOURCE_STATE_COMMON;
+		std::fill(CurrentState.begin(), CurrentState.end(), D3D12_RESOURCE_STATE_COMMON);
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -371,7 +371,7 @@ struct directx12_texture : public texture
 		PipelineContext->CommandList->CopyTextureRegion(&DstCopyLocation, 0, 0, 0, 
 														&SrcCopyLocation, nullptr);
 
-		CurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
+		std::fill(CurrentState.begin(), CurrentState.end(), D3D12_RESOURCE_STATE_COPY_DEST);
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override 
@@ -387,7 +387,7 @@ struct directx12_texture : public texture
 
 		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
 		CommandList->ResourceBarrier(1, &BarrierData);
-		CurrentState = D3D12_RESOURCE_STATE_COMMON;
+		std::fill(CurrentState.begin(), CurrentState.end(), D3D12_RESOURCE_STATE_COMMON);
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -402,6 +402,7 @@ struct directx12_texture : public texture
 	{
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
+		CurrentState.resize(InputData.MipLevels);
 
 		Name   = DebugName;
 		Width  = NewWidth;
@@ -507,7 +508,7 @@ struct directx12_texture : public texture
 				else if (Info.Type == image_type::Texture3D)
 				{
 					SrvDesc.ViewDimension             = D3D12_SRV_DIMENSION_TEXTURE3D;
-					SrvDesc.Texture3D.MipLevels       = Info.MipLevels;
+					SrvDesc.Texture3D.MipLevels       = 1;
 					SrvDesc.Texture3D.MostDetailedMip = MipIdx;
 				}
 
@@ -620,8 +621,10 @@ struct directx12_texture : public texture
 				}
 				else if (Info.Type == image_type::Texture3D)
 				{
-					RtvDesc.ViewDimension      = D3D12_RTV_DIMENSION_TEXTURE3D;
-					RtvDesc.Texture3D.MipSlice = MipIdx;
+					RtvDesc.ViewDimension		  = D3D12_RTV_DIMENSION_TEXTURE3D;
+					RtvDesc.Texture3D.MipSlice    = MipIdx;
+					RtvDesc.Texture3D.FirstWSlice = 0;
+					RtvDesc.Texture3D.WSize       = Info.Layers;
 				}
 
 				Gfx->Device->CreateRenderTargetView(Handle.Get(), &RtvDesc, RenderTargetView);
@@ -707,7 +710,7 @@ struct directx12_texture : public texture
 	ComPtr<ID3D12Resource> Handle;
 	ComPtr<ID3D12Resource> TempHandle;
 	ComPtr<D3D12MA::Allocation> Allocation;
-	D3D12_RESOURCE_STATES CurrentState = {};
+	std::vector<D3D12_RESOURCE_STATES> CurrentState;
 	D3D12_RESOURCE_STATES TempCurrentState = {};
 
 	D3D12_CPU_DESCRIPTOR_HANDLE Sampler = {};

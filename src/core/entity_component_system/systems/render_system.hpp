@@ -176,18 +176,6 @@ struct render_system : public entity_system
 			Materials.push_back(NewMaterial);
 		}
 
-#if 1
-		WorldUpdate.SceneScale  = vec4
-		(
-			 (2.0 - 0.001) / (SceneMax.x - SceneMin.x),
-			 (2.0 - 0.001) / (SceneMax.y - SceneMin.y),
-			 (2.0 - 0.001) / (SceneMax.z - SceneMin.z), 1.0
-		);
-#else
-		WorldUpdate.SceneScale  = vec4(vec3((2.0 - 0.1) / 256.0), 1.0);
-#endif
-		WorldUpdate.SceneCenter = vec4(vec3((SceneMax + SceneMin) * 0.5f), 1.0);
-
 		MeshCommonCullingInput.DrawCount = StaticMeshInstances.size();
 		MeshCommonCullingInput.MeshCount = Geometries.MeshCount;
 
@@ -317,6 +305,7 @@ struct render_system : public entity_system
 		{
 			Window.Gfx.BloomUpScaleContext[MipIdx]->SetImageSampler({MipIdx < Window.Gfx.BloomUpScaleContext.size() - 1 ? Window.Gfx.TempBrTarget : Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::shader_read, MipIdx + 1);
 			Window.Gfx.BloomUpScaleContext[MipIdx]->SetImageSampler({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::shader_read, MipIdx);
+			Window.Gfx.BloomUpScaleContext[MipIdx]->SetStorageImage({Window.Gfx.TempBrTarget}, image_type::Texture2D, barrier_state::general, MipIdx);
 			Window.Gfx.BloomUpScaleContext[MipIdx]->StaticUpdate();
 		}
 
@@ -709,6 +698,7 @@ struct render_system : public entity_system
 				{{Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.HdrColorTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
 				{{Window.Gfx.TempBrTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, 0},
+				{{Window.Gfx.TempBrTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, 5},
 			};
 			PipelineContext->SetImageBarriers(ColorPassBarrier, PSF_Compute, PSF_Compute);
 
@@ -734,7 +724,6 @@ struct render_system : public entity_system
 				{
 					std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state, u32>> MipBarrier;
 					MipBarrier.push_back({Window.Gfx.DepthPyramid, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, MipIdx - 1});
-					MipBarrier.push_back({Window.Gfx.DepthPyramid, 0, AF_ShaderWrite, barrier_state::general, barrier_state::general, MipIdx});
 					PipelineContext->SetImageBarriers(MipBarrier, PSF_Compute, PSF_Compute);
 				}
 
@@ -744,6 +733,7 @@ struct render_system : public entity_system
 				Window.Gfx.DepthReduceContext[MipIdx]->End();
 				Window.Gfx.DepthReduceContext[MipIdx]->Clear();
 			}
+			PipelineContext->SetImageBarriers({{Window.Gfx.DepthPyramid, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, Window.Gfx.DepthReduceContext.size() - 1}}, PSF_Compute, PSF_Compute);
 		}
 
 		{

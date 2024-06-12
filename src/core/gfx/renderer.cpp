@@ -201,8 +201,10 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	DebugComputeContext = CreateComputeContext("../shaders/mesh.dbg.comp.glsl");
 
 	RendererInputData = {};
+	RendererInputData.UseConservativeRaster = true;
 	VoxelizationContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/voxel.vert.glsl", "../shaders/voxel.geom.glsl", "../shaders/voxel.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}});
 
+	RendererInputData = {};
 	RendererInputData.UseDepth = true;
 	RendererInputData.CullMode = cull_mode::front;
 	CascadeShadowContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.sdw.vert.glsl", "../shaders/mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
@@ -234,7 +236,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 
 	for(u32 MipIdx = 0; MipIdx < GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height)); ++MipIdx)
 	{
-		DepthReduceContext.push_back(CreateComputeContext("../shaders/texel_reduce_2d.comp.glsl"));
+		DepthReduceContext.push_back(CreateComputeContext("../shaders/texel_reduce.comp.glsl"));
 	}
 
 	for(u32 MipIdx = 0; MipIdx < 5; ++MipIdx)
