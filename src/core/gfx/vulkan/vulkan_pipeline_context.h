@@ -76,6 +76,10 @@ struct vulkan_global_pipeline_context : public global_pipeline_context
 	vulkan_backend* Gfx;
 };
 
+class vulkan_general_context : public general_context
+{
+};
+
 // TODO: This is highly unefficient so I need to refactor this
 class vulkan_render_context : public render_context
 {

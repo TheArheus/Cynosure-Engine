@@ -71,8 +71,8 @@ layout(push_constant) uniform pushConstant
 void main()
 {
 	uint DrawID        = gl_DrawID;
-	uint VertexIndex   = gl_VertexIndex   + Offsets[DrawID].VertexOffset;
-	uint InstanceIndex = gl_InstanceIndex + Offsets[DrawID].InstanceOffset;
+	uint VertexIndex   = gl_VertexIndex   + Offsets[0].VertexOffset;
+	uint InstanceIndex = gl_InstanceIndex + Offsets[0].InstanceOffset;
 
 	OutPos = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
 	gl_Position = ShadowMatrix * OutPos;

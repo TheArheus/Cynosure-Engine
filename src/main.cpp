@@ -43,9 +43,11 @@
 
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
+	u32 Test = 1;
+	float V  = *(float*)&Test;
 	window Window(1280, 720, "3D Renderer");
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
 	global_pipeline_context* PipelineContext = Window.Gfx.CreateGlobalPipelineContext();
 

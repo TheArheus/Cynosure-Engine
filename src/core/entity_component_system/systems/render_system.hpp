@@ -207,7 +207,7 @@ struct render_system : public entity_system
 		Window.Gfx.ColorPassContext->SetStorageBufferView(LightSourcesBuffer);
 		Window.Gfx.ColorPassContext->SetStorageBufferView(Window.Gfx.PoissonDiskBuffer);
 		Window.Gfx.ColorPassContext->SetStorageBufferView(Window.Gfx.RandomSamplesBuffer);
-		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.GfxColorTarget[(BackBufferIndex + 1) % 2]}, image_type::Texture2D, barrier_state::general);
+		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.GfxColorTarget[(BackBufferIndex + 1) % 2]}, image_type::Texture2D, barrier_state::shader_read);
 		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.GfxDepthTarget}, image_type::Texture2D, barrier_state::shader_read);
 		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.VoxelGridTarget}, image_type::Texture3D, barrier_state::shader_read);
 		Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.RandomAnglesTexture}, image_type::Texture2D, barrier_state::shader_read);
@@ -437,6 +437,7 @@ struct render_system : public entity_system
 		PipelineContext->SetBufferBarriers({{ShadowIndirectDrawIndexedCommands, AF_ShaderWrite, AF_IndirectCommandRead}}, 
 										  PSF_Compute, PSF_DrawIndirect);
 		PipelineContext->SetBufferBarrier({VertexBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_VertexShader);
+		PipelineContext->SetBufferBarrier({GeometryOffsets, AF_ShaderWrite, AF_ShaderRead}, PSF_Compute, PSF_VertexShader);
 
 		for(u32 CascadeIdx = 0; CascadeIdx < DEPTH_CASCADES_COUNT; ++CascadeIdx)
 		{
@@ -449,6 +450,7 @@ struct render_system : public entity_system
 			Window.Gfx.CascadeShadowContext->End();
 		}
 		Window.Gfx.CascadeShadowContext->Clear();
+
 
 		// TODO: something better or/and efficient here
 		// TODO: render only when the actual light source have been changed
@@ -521,7 +523,6 @@ struct render_system : public entity_system
 
 			PipelineContext->SetBufferBarriers({{MeshDrawCommandBuffer, AF_ShaderWrite, AF_ShaderRead}}, PSF_Compute, PSF_VertexShader);
 			PipelineContext->SetBufferBarriers({{IndirectDrawIndexedCommands, AF_ShaderWrite, AF_IndirectCommandRead}}, PSF_Compute, PSF_DrawIndirect);
-			PipelineContext->SetBufferBarrier({GeometryOffsets, AF_ShaderWrite, AF_ShaderRead}, PSF_Compute, PSF_VertexShader);
 
 			Window.Gfx.DebugCameraViewContext->Begin(PipelineContext, Window.Gfx.DebugCameraViewDepthTarget->Width, Window.Gfx.DebugCameraViewDepthTarget->Height);
 			Window.Gfx.DebugCameraViewContext->SetDepthTarget(Window.Gfx.DebugCameraViewDepthTarget->Width, Window.Gfx.DebugCameraViewDepthTarget->Height, Window.Gfx.DebugCameraViewDepthTarget, {1, 0});
@@ -540,6 +541,7 @@ struct render_system : public entity_system
 											  {{Window.Gfx.GfxDepthTarget}, 0, AF_DepthStencilAttachmentWrite, barrier_state::undefined, barrier_state::depth_stencil_attachment, ~0u}},
 											 PSF_Compute, PSF_FragmentShader | PSF_ColorAttachment | PSF_EarlyFragment);
 
+			PipelineContext->SetBufferBarrier({LightSourcesBuffer, AF_TransferWrite, AF_ShaderRead}, PSF_Transfer, PSF_FragmentShader);
 			PipelineContext->SetBufferBarrier({WorldUpdateBuffer, AF_TransferWrite, AF_UniformRead}, PSF_Transfer, PSF_VertexShader|PSF_FragmentShader);
 			PipelineContext->SetBufferBarrier({MeshMaterialsBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_VertexShader|PSF_FragmentShader);
 
@@ -616,7 +618,8 @@ struct render_system : public entity_system
 		{
 			std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>> ColorPassBarrier = 
 			{
-				{{Window.Gfx.GfxColorTarget[(PipelineContext->BackBufferIndex + 1) % 2]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
+				{{Window.Gfx.GfxColorTarget[(PipelineContext->BackBufferIndex + 1) % 2]}, 0, AF_ShaderRead, barrier_state::undefined, barrier_state::shader_read, ~0u},
+				{{Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.HdrColorTarget}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.VoxelGridTarget}, 0, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
 				{{Window.Gfx.BrightTarget}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
@@ -628,7 +631,6 @@ struct render_system : public entity_system
 			};
 			PipelineContext->SetImageBarriers(ColorPassBarrier, PSF_EarlyFragment|PSF_Compute, PSF_Compute);
 
-			PipelineContext->SetBufferBarrier({LightSourcesBuffer, AF_TransferWrite, AF_ShaderRead}, PSF_Transfer, PSF_Compute);
 			PipelineContext->SetBufferBarrier({Window.Gfx.PoissonDiskBuffer, 0, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
 
 			Window.Gfx.ColorPassContext->Begin(PipelineContext);
@@ -695,7 +697,6 @@ struct render_system : public entity_system
 		{
 			std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>> ColorPassBarrier = 
 			{
-				{{Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, 0, AF_ShaderWrite, barrier_state::undefined, barrier_state::general, ~0u},
 				{{Window.Gfx.HdrColorTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, ~0u},
 				{{Window.Gfx.TempBrTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, 0},
 				{{Window.Gfx.TempBrTarget}, AF_ShaderWrite, AF_ShaderRead, barrier_state::general, barrier_state::shader_read, 5},

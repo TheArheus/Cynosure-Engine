@@ -536,7 +536,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 				HlslOptions.shader_model = 62; // SM6_2
 				HlslOptions.use_entry_point_name = true;
 				HlslOptions.enable_16bit_types   = true;
-				//HlslOptions.support_nonzero_base_vertex_base_instance = true;
 
 				Compiler.set_hlsl_options(HlslOptions);
 				Compiler.add_vertex_attribute_remap(HlslAttribs);

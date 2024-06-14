@@ -28,13 +28,14 @@ End()
 {
 	BuffersToCommon.clear();
 	Gfx->CommandQueue->Execute(CommandList);
-	Fence.Flush(Gfx->CommandQueue);
 
 	HRESULT DeviceResult = Gfx->Device->GetDeviceRemovedReason();
 	if(!SUCCEEDED(DeviceResult))
 	{
-		printf("%#08x\n", DeviceResult);
+		printf("Device removed reason: %#08x\n", DeviceResult);
 	}
+
+	Fence.Flush(Gfx->CommandQueue);
 }
 
 void directx12_global_pipeline_context::
@@ -91,16 +92,26 @@ Present()
 	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
 
 	Gfx->CommandQueue->Execute(CommandList);
-	Fence.Flush(Gfx->CommandQueue);
-
-	Gfx->SwapChain->Present(0, 0);
-	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
 
 	HRESULT DeviceResult = Gfx->Device->GetDeviceRemovedReason();
 	if(!SUCCEEDED(DeviceResult))
 	{
-		printf("%#08x\n", DeviceResult);
+		printf("Device removed reason: %#08x\n", DeviceResult);
+
+		ComPtr<ID3D12DeviceRemovedExtendedData1> pDred;
+		Gfx->Device->QueryInterface(IID_PPV_ARGS(&pDred));
+		D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 DredAutoBreadcrumbsOutput;
+		D3D12_DRED_PAGE_FAULT_OUTPUT1 DredPageFaultOutput;
+		pDred->GetAutoBreadcrumbsOutput1(&DredAutoBreadcrumbsOutput);
+		pDred->GetPageFaultAllocationOutput1(&DredPageFaultOutput);
+
+		int fin = 5;
 	}
+
+	Fence.Flush(Gfx->CommandQueue);
+
+	Gfx->SwapChain->Present(0, 0);
+	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
 }
 
 void directx12_global_pipeline_context::
@@ -302,7 +313,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	//RasterDesc.MultisampleEnable = MsaaState;
 	//RasterDesc.AntialiasedLineEnable = MsaaState;
 	RasterDesc.ForcedSampleCount = 0;
-	RasterDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+	RasterDesc.ConservativeRaster = InputData.UseConservativeRaster ? D3D12_CONSERVATIVE_RASTERIZATION_MODE_ON : D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
 	D3D12_DEPTH_STENCIL_DESC DepthStencilDesc = {};
 	DepthStencilDesc.DepthEnable = InputData.UseDepth;
@@ -352,15 +363,6 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 
 	std::vector<D3D12_ROOT_PARAMETER> Parameters;
 
-	if(HaveDrawID)
-	{
-		DrawConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-		DrawConstantDesc.Constants.ShaderRegister = HavePushConstant;
-		DrawConstantDesc.Constants.Num32BitValues = 1;
-		DrawConstantDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-		Parameters.push_back(DrawConstantDesc);
-	}
-
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
@@ -370,6 +372,15 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 				Parameters.push_back(ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx]);
 			}
 		}
+	}
+
+	if(HaveDrawID)
+	{
+		DrawConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+		DrawConstantDesc.Constants.ShaderRegister = HavePushConstant;
+		DrawConstantDesc.Constants.Num32BitValues = 1;
+		DrawConstantDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+		Parameters.push_back(DrawConstantDesc);
 	}
 
 	if(HavePushConstant)
@@ -425,10 +436,11 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	std::vector<D3D12_INDIRECT_ARGUMENT_DESC> IndirectArgs;
 	D3D12_INDIRECT_ARGUMENT_DESC IndirectArg = {};
 	IndirectArg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
-	IndirectArg.Constant.RootParameterIndex = 0;
+	IndirectArg.Constant.RootParameterIndex = Parameters.size() - 1;
 	IndirectArg.Constant.DestOffsetIn32BitValues = 0;
 	IndirectArg.Constant.Num32BitValuesToSet = 1;
 	if(HaveDrawID) IndirectArgs.push_back(IndirectArg);
+	IndirectArg = {};
 	IndirectArg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
 	IndirectArgs.push_back(IndirectArg);
 
@@ -463,19 +475,15 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 			case dx12_descriptor_type::constant_buffer_table:
 			case dx12_descriptor_type::sampler:
 			{
-				PipelineContext->CommandList->SetGraphicsRootDescriptorTable(HaveDrawID + BindingDesc.Idx, BindingDesc.TableBegin);
+				PipelineContext->CommandList->SetGraphicsRootDescriptorTable(BindingDesc.Idx, BindingDesc.TableBegin);
 			} break;
 			case dx12_descriptor_type::shader_resource:
 			{
-				PipelineContext->CommandList->SetGraphicsRootShaderResourceView(HaveDrawID + BindingDesc.Idx, BindingDesc.ResourceBegin);
+				PipelineContext->CommandList->SetGraphicsRootShaderResourceView(BindingDesc.Idx, BindingDesc.ResourceBegin);
 			} break;
 			case dx12_descriptor_type::unordered_access:
 			{
-				PipelineContext->CommandList->SetGraphicsRootUnorderedAccessView(HaveDrawID + BindingDesc.Idx, BindingDesc.ResourceBegin);
-			} break;
-			case dx12_descriptor_type::constant_buffer:
-			{
-				PipelineContext->CommandList->SetGraphicsRootConstantBufferView(HaveDrawID + BindingDesc.Idx, BindingDesc.ResourceBegin);
+				PipelineContext->CommandList->SetGraphicsRootUnorderedAccessView(BindingDesc.Idx, BindingDesc.ResourceBegin);
 			} break;
 		}
 	}
@@ -571,7 +579,8 @@ DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffse
 	directx12_buffer* Indices  = static_cast<directx12_buffer*>(IndexBuffer);
 	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {Indices->Handle->GetGPUVirtualAddress(), (u32)Indices->Size, DXGI_FORMAT_R32_UINT};
 
-	PipelineContext->CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Info.UseDepth, &DepthStencilTarget);
+	if((ColorTargets.size() > 0) || Info.UseDepth)
+		PipelineContext->CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Info.UseDepth, &DepthStencilTarget);
 	PipelineContext->CommandList->IASetIndexBuffer(&IndexBufferView);
 	PipelineContext->CommandList->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 	SetIndices.clear();
@@ -584,7 +593,8 @@ DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands,
 	directx12_buffer* Indirect = static_cast<directx12_buffer*>(IndirectCommands);
 	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {Indices->Handle->GetGPUVirtualAddress(), (u32)Indices->Size, DXGI_FORMAT_R32_UINT};
 
-	PipelineContext->CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Info.UseDepth, Info.UseDepth ? &DepthStencilTarget : nullptr);
+	if((ColorTargets.size() > 0) || Info.UseDepth)
+		PipelineContext->CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Info.UseDepth, &DepthStencilTarget);
 	PipelineContext->CommandList->IASetIndexBuffer(&IndexBufferView);
 	PipelineContext->CommandList->ExecuteIndirect(IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), !HaveDrawID * 4, Indirect->CounterHandle.Get(), 0);
 
@@ -823,10 +833,6 @@ Begin(global_pipeline_context* GlobalPipelineContext)
 			{
 				PipelineContext->CommandList->SetComputeRootUnorderedAccessView(BindingDesc.Idx, BindingDesc.ResourceBegin);
 			} break;
-			case dx12_descriptor_type::constant_buffer:
-			{
-				PipelineContext->CommandList->SetComputeRootConstantBufferView(BindingDesc.Idx, BindingDesc.ResourceBegin);
-			} break;
 		}
 	}
 }
@@ -854,7 +860,7 @@ Clear()
 void directx12_compute_context::
 Execute(u32 X, u32 Y, u32 Z)
 {
-	PipelineContext->CommandList->Dispatch((X + 31) / 32, (Y + 31) / 32, (Z + 31) / 32);
+	PipelineContext->CommandList->Dispatch((X + BlockSizeX - 1) / BlockSizeX, (Y + BlockSizeY - 1) / BlockSizeY, (Z + BlockSizeZ - 1) / BlockSizeZ);
 	PipelineContext->TexturesToCommon.insert(TexturesToCommon.begin(), TexturesToCommon.end());
 	PipelineContext->BuffersToCommon.insert(BuffersToCommon.begin(), BuffersToCommon.end());
 	SetIndices.clear();

@@ -1266,7 +1266,7 @@ StaticUpdate()
 void vulkan_compute_context::
 Execute(u32 X, u32 Y, u32 Z)
 {
-	vkCmdDispatch(*PipelineContext->CommandList, (X + BlockSizeX - 1) / BlockSizeX, (Y + BlockSizeX - 1) / BlockSizeX, (Z + BlockSizeX - 1) / BlockSizeX);
+	vkCmdDispatch(*PipelineContext->CommandList, (X + BlockSizeX - 1) / BlockSizeX, (Y + BlockSizeY - 1) / BlockSizeY, (Z + BlockSizeZ - 1) / BlockSizeZ);
 }
 
 void vulkan_compute_context::

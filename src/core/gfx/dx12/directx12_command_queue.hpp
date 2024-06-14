@@ -24,7 +24,7 @@ public:
 
 		D3D12_COMMAND_QUEUE_DESC CommandQueueDesc = {};
 		CommandQueueDesc.Type = NewType;
-		CommandQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+		CommandQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_DISABLE_GPU_TIMEOUT;
 		Device->CreateCommandQueue(&CommandQueueDesc, IID_PPV_ARGS(&Handle));
 
 		Device->CreateCommandAllocator(Type, IID_PPV_ARGS(&CommandAlloc));
@@ -68,6 +68,9 @@ public:
 		Execute(CommandList);
 		CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), CommandList), CommandLists.end());
 	}
+
+	ComPtr<ID3D12Fence> Fence;
+	HANDLE FenceEvent;
 };
 
 class directx12_fence
