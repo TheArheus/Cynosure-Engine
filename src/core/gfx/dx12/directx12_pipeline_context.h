@@ -42,23 +42,23 @@ struct directx12_global_pipeline_context : public global_pipeline_context
 	void Present() override;
 
 	void FillBuffer(buffer* Buffer, u32 Value) override;
-	void FillTexture(texture* Texture, barrier_state CurrentState, vec4 Value) override;
-	void GenerateMips(texture* Texture, barrier_state CurrentState) override;
+	void FillTexture(texture* Texture, vec4 Value) override;
+	void GenerateMips(texture* Texture) override;
 
 	void CopyImage(texture* Dst, texture* Src) override;
 
 	void SetMemoryBarrier(u32 SrcAccess, u32 DstAccess, u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetBufferBarrier(const std::tuple<buffer*, u32, u32>& BarrierData, 
+	void SetBufferBarrier(const std::tuple<buffer*, u32>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData, 
+	void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32>>& BarrierData, 
 						   u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
+	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
+	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrier_state, u32>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
 	void DebugGuiBegin(texture* RenderTarget) override;
@@ -130,16 +130,17 @@ private:
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> ColorTargets;
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilTarget;
 
+	std::map<u32, u32> BindingOffsets;
 	std::map<u32, u32> SetIndices;
 	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 	std::vector<descriptor_binding> BindingDescriptions;
 
-	u32 PushConstantSize       = 0;
-	u32 ResourceBindingIdx     = 0;
-	u32 SamplersBindingIdx     = 0;
-	u32 RootResourceBindingIdx = 0;
-	u32 RootSamplersBindingIdx = 0;
+	std::map<u32, u32> ResourceBindingIdx;
+	std::map<u32, u32> SamplersBindingIdx;
+	std::map<u32, u32> RootResourceBindingIdx;
+	std::map<u32, u32> RootSamplersBindingIdx;
 
+	u32  PushConstantSize	  = 0;
 	bool HaveDrawID           = false;
 	bool HavePushConstant     = false;
 	bool IsResourceHeapInited = false;
@@ -187,16 +188,17 @@ private:
 	std::unordered_set<buffer*>  BuffersToCommon;
 	std::unordered_set<texture*> TexturesToCommon;
 
+	std::map<u32, u32> BindingOffsets;
 	std::map<u32, u32> SetIndices;
 	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 	std::vector<descriptor_binding> BindingDescriptions;
 
-	u32 ResourceBindingIdx = 0;
-	u32 SamplersBindingIdx = 0;
-	u32 RootResourceBindingIdx = 0;
-	u32 RootSamplersBindingIdx = 0;
+	std::map<u32, u32> ResourceBindingIdx;
+	std::map<u32, u32> SamplersBindingIdx;
+	std::map<u32, u32> RootResourceBindingIdx;
+	std::map<u32, u32> RootSamplersBindingIdx;
 
-	u32 PushConstantSize  = 0;
+	u32  PushConstantSize = 0;
 	bool HavePushConstant = false;
 	bool IsResourceHeapInited = false;
 	bool IsSamplersHeapInited = false;

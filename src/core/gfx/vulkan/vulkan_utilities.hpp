@@ -875,46 +875,113 @@ VkImageLayout GetVKLayout(barrier_state State)
     }
 }
 
-VkAccessFlags GetVKAccessMask(u32 Layouts)
+VkAccessFlags GetVKAccessMask(u32 Layouts, u32 Stage)
 {
-	VkAccessFlags Result = {};
+    VkAccessFlags Result = 0;
 
-	if(Layouts & AF_IndirectCommandRead)
-		Result |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-	if(Layouts & AF_IndexRead)
-		Result |= VK_ACCESS_INDEX_READ_BIT;
-	if(Layouts & AF_VertexAttributeRead)
-		Result |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-	if(Layouts & AF_UniformRead)
-		Result |= VK_ACCESS_UNIFORM_READ_BIT;
-	if(Layouts & AF_InputAttachmentRead)
-		Result |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-	if(Layouts & AF_ShaderRead)
-		Result |= VK_ACCESS_SHADER_READ_BIT;
-	if(Layouts & AF_ShaderWrite)
-		Result |= VK_ACCESS_SHADER_WRITE_BIT;
-	if(Layouts & AF_ColorAttachmentRead)
-		Result |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-	if(Layouts & AF_ColorAttachmentWrite)
-		Result |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	if(Layouts & AF_DepthStencilAttachmentRead)
-		Result |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-	if(Layouts & AF_DepthStencilAttachmentWrite)
-		Result |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-	if(Layouts & AF_TransferRead)
-		Result |= VK_ACCESS_TRANSFER_READ_BIT;
-	if(Layouts & AF_TransferWrite)
-		Result |= VK_ACCESS_TRANSFER_WRITE_BIT;
-	if(Layouts & AF_HostRead)
-		Result |= VK_ACCESS_HOST_READ_BIT;
-	if(Layouts & AF_HostWrite)
-		Result |= VK_ACCESS_HOST_WRITE_BIT;
-	if(Layouts & AF_MemoryRead)
-		Result |= VK_ACCESS_MEMORY_READ_BIT;
-	if(Layouts & AF_MemoryWrite)
-		Result |= VK_ACCESS_MEMORY_WRITE_BIT;
+    if (Layouts & AF_IndirectCommandRead && 
+        (Stage & (PSF_DrawIndirect | PSF_AllCommands))) 
+	{
+        Result |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+    }
 
-	return Result;
+    if (Layouts & AF_IndexRead && 
+        (Stage & (PSF_VertexInput | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_INDEX_READ_BIT;
+    }
+
+    if (Layouts & AF_VertexAttributeRead && 
+        (Stage & (PSF_VertexInput | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    }
+
+    if (Layouts & AF_UniformRead && 
+        (Stage & (PSF_VertexShader | PSF_FragmentShader | PSF_Compute | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_UNIFORM_READ_BIT;
+    }
+
+    if (Layouts & AF_InputAttachmentRead && 
+        (Stage & (PSF_FragmentShader | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    }
+
+    if (Layouts & AF_ShaderRead && 
+        (Stage & (PSF_VertexShader | PSF_FragmentShader | PSF_Compute | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_SHADER_READ_BIT;
+    }
+
+    if (Layouts & AF_ShaderWrite && 
+        (Stage & (PSF_VertexShader | PSF_FragmentShader | PSF_Compute | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_SHADER_WRITE_BIT;
+    }
+
+    if (Layouts & AF_ColorAttachmentRead && 
+        (Stage & (PSF_ColorAttachment | PSF_LateFragment | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+    }
+
+    if (Layouts & AF_ColorAttachmentWrite && 
+        (Stage & (PSF_ColorAttachment | PSF_LateFragment | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+
+    if (Layouts & AF_DepthStencilAttachmentRead && 
+        (Stage & (PSF_EarlyFragment | PSF_LateFragment | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    }
+
+    if (Layouts & AF_DepthStencilAttachmentWrite && 
+        (Stage & (PSF_EarlyFragment | PSF_LateFragment | PSF_AllGraphics))) 
+	{
+        Result |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+
+    if (Layouts & AF_TransferRead && 
+        (Stage & (PSF_Transfer))) 
+	{
+        Result |= VK_ACCESS_TRANSFER_READ_BIT;
+    }
+
+    if (Layouts & AF_TransferWrite && 
+        (Stage & (PSF_Transfer))) 
+	{
+        Result |= VK_ACCESS_TRANSFER_WRITE_BIT;
+    }
+
+    if (Layouts & AF_HostRead && 
+        (Stage & (PSF_Host))) 
+	{
+        Result |= VK_ACCESS_HOST_READ_BIT;
+    }
+
+    if (Layouts & AF_HostWrite && 
+        (Stage & (PSF_Host))) 
+	{
+        Result |= VK_ACCESS_HOST_WRITE_BIT;
+    }
+
+    if (Layouts & AF_MemoryRead && 
+        (Stage & (PSF_TopOfPipe | PSF_DrawIndirect | PSF_VertexInput | PSF_VertexShader | PSF_FragmentShader | PSF_EarlyFragment | PSF_LateFragment | PSF_ColorAttachment | PSF_Compute | PSF_Transfer | PSF_BottomOfPipe | PSF_Host | PSF_AllGraphics | PSF_AllCommands))) 
+	{
+        Result |= VK_ACCESS_MEMORY_READ_BIT;
+    }
+
+    if (Layouts & AF_MemoryWrite && 
+        (Stage & (PSF_TopOfPipe | PSF_DrawIndirect | PSF_VertexInput | PSF_VertexShader | PSF_FragmentShader | PSF_EarlyFragment | PSF_LateFragment | PSF_ColorAttachment | PSF_Compute | PSF_Transfer | PSF_BottomOfPipe | PSF_Host | PSF_AllGraphics | PSF_AllCommands))) 
+	{
+        Result |= VK_ACCESS_MEMORY_WRITE_BIT;
+    }
+
+    return Result;
 }
 
 VkPipelineStageFlags GetVKPipelineStage(u32 Stages)

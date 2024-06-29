@@ -320,6 +320,7 @@ enum access_flags
 
 enum class barrier_state
 {
+	undefined,
 	general,
 	color_attachment,
 	depth_stencil_attachment,
@@ -330,7 +331,6 @@ enum class barrier_state
 	present,
 	transfer_src,
 	transfer_dst,
-	undefined,
 };
 
 enum resource_flags

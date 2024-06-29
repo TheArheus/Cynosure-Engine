@@ -44,24 +44,24 @@ struct vulkan_global_pipeline_context : public global_pipeline_context
 	void Present() override;
 
 	void FillBuffer(buffer* Buffer, u32 Value) override;
-	void FillTexture(texture* Texture, barrier_state CurrentState, vec4 Value) override;
-	void GenerateMips(texture* Texture, barrier_state CurrentState) override;
+	void FillTexture(texture* Texture, vec4 Value) override;
+	void GenerateMips(texture* Texture) override;
 
 	void CopyImage(texture* Dst, texture* Src) override;
 
 	void SetMemoryBarrier(u32 SrcAccess, u32 DstAccess, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetBufferBarrier(const std::tuple<buffer*, u32, u32>& BarrierData, 
+	void SetBufferBarrier(const std::tuple<buffer*, u32>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData, 
+	void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32>>& BarrierData, 
 						   u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
+	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
+	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrier_state, u32>>& BarrierData, 
 						  u32 SrcStageMask, u32 DstStageMask) override;
 
 	void DebugGuiBegin(texture* RenderTarget) override;
@@ -74,6 +74,9 @@ struct vulkan_global_pipeline_context : public global_pipeline_context
 	VkSemaphore AcquireSemaphore, ReleaseSemaphore;
 
 	vulkan_backend* Gfx;
+
+	std::unordered_set<buffer*>  BuffersToCommon;
+	std::unordered_set<texture*> TexturesToCommon;
 };
 
 class vulkan_general_context : public general_context
@@ -97,6 +100,7 @@ public:
 		SetIndices(std::move(other.SetIndices)),
 		Parameters(std::move(other.Parameters)),
 		ShaderStages(std::move(other.ShaderStages)),
+		PushDescriptorBindings(std::move(other.PushDescriptorBindings)),
 		StaticDescriptorBindings(std::move(other.StaticDescriptorBindings)),
 		BufferInfos(std::move(other.BufferInfos)),
 		BufferArrayInfos(std::move(other.BufferArrayInfos)),
@@ -127,6 +131,7 @@ public:
 			std::swap(SetIndices, other.SetIndices);
 			std::swap(Parameters, other.Parameters);
 			std::swap(ShaderStages, other.ShaderStages);
+			std::swap(PushDescriptorBindings, other.PushDescriptorBindings);
 			std::swap(StaticDescriptorBindings, other.StaticDescriptorBindings);
 			std::swap(BufferInfos, other.BufferInfos);
 			std::swap(BufferArrayInfos, other.BufferArrayInfos);
@@ -200,10 +205,15 @@ private:
 	std::unordered_map<u32, VkFramebuffer> FrameBuffers;
 	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
 
+	std::unordered_set<buffer*>  BuffersToCommon;
+	std::unordered_set<texture*> TexturesToCommon;
+
+	std::vector<bool> PushDescriptors;
 	std::vector<u32> DescriptorSizes;
 	std::vector<VkImageView> AttachmentViews;
 	std::vector<VkClearValue> RenderTargetClears;
 	std::vector<VkPipelineShaderStageCreateInfo> ShaderStages;
+	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;
 	std::vector<VkWriteDescriptorSet> StaticDescriptorBindings;
 	std::vector<VkDescriptorSet> Sets;
 	std::vector<std::unique_ptr<descriptor_info>>   BufferInfos;
@@ -242,6 +252,7 @@ public:
 
     vulkan_compute_context(vulkan_compute_context&& other) noexcept : 
 		ComputeStage(std::move(other.ComputeStage)),
+		PushDescriptorBindings(std::move(other.PushDescriptorBindings)),
 		StaticDescriptorBindings(std::move(other.StaticDescriptorBindings)),
 		BufferInfos(std::move(other.BufferInfos)),
 		BufferArrayInfos(std::move(other.BufferArrayInfos)),
@@ -270,7 +281,9 @@ public:
 		{
 			std::swap(ComputeStage, other.ComputeStage);
 
+			std::swap(PushDescriptorBindings, other.PushDescriptorBindings);
 			std::swap(StaticDescriptorBindings, other.StaticDescriptorBindings);
+
 			std::swap(BufferInfos, other.BufferInfos);
 			std::swap(BufferArrayInfos, other.BufferArrayInfos);
 
@@ -324,11 +337,16 @@ private:
 	u32 PushConstantSize = 0;
 	bool HavePushConstant = false;
 
+	std::vector<bool> PushDescriptors;
 	std::vector<u32> DescriptorSizes;
+	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;
 	std::vector<VkWriteDescriptorSet> StaticDescriptorBindings;
 	std::vector<VkDescriptorSet> Sets;
 	std::vector<std::unique_ptr<descriptor_info>> BufferInfos;
 	std::vector<std::unique_ptr<descriptor_info[]>> BufferArrayInfos;
+
+	std::unordered_set<buffer*>  BuffersToCommon;
+	std::unordered_set<texture*> TexturesToCommon;
 
 	std::map<u32, u32> SetIndices;
 	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;

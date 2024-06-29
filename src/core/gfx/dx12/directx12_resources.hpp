@@ -33,7 +33,7 @@ struct directx12_buffer : public buffer
 
 		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
 		CommandList->ResourceBarrier(1, &BarrierData);
-		CurrentState = D3D12_RESOURCE_STATE_COMMON;
+		CurrentLayout = 0;
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -58,7 +58,7 @@ struct directx12_buffer : public buffer
 
 		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
 		CommandList->ResourceBarrier(1, &BarrierData);
-		CurrentState = D3D12_RESOURCE_STATE_COMMON;
+		CurrentLayout = 0;
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -74,7 +74,7 @@ struct directx12_buffer : public buffer
 		TempHandle->Unmap(0, 0);
 
 		PipelineContext->CommandList->CopyResource(Handle.Get(), TempHandle.Get());
-		CurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
+		CurrentLayout = AF_TransferWrite;
 	}
 
 	void UpdateSize(void* Data, u32 UpdateByteSize, global_pipeline_context* GlobalPipeline) override 
@@ -88,7 +88,7 @@ struct directx12_buffer : public buffer
 		TempHandle->Unmap(0, 0);
 
 		PipelineContext->CommandList->CopyBufferRegion(Handle.Get(), 0, TempHandle.Get(), 0, UpdateByteSize);
-		CurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
+		CurrentLayout = AF_TransferWrite;
 	}
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
@@ -104,7 +104,7 @@ struct directx12_buffer : public buffer
 
 		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
 		CommandList->ResourceBarrier(1, &BarrierData);
-		CurrentState = D3D12_RESOURCE_STATE_COMMON;
+		CurrentLayout = 0;
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -121,7 +121,7 @@ struct directx12_buffer : public buffer
 
 		PipelineContext->CommandList->CopyBufferRegion(TempHandle.Get(), 0, Handle.Get(), 0, UpdateByteSize);
 
-		CurrentState = D3D12_RESOURCE_STATE_COPY_SOURCE;
+		CurrentLayout = AF_TransferRead;
 
 		void* CpuPtr;
 		TempHandle->Map(0, nullptr, &CpuPtr);
@@ -162,7 +162,6 @@ struct directx12_buffer : public buffer
 		CD3DX12_HEAP_PROPERTIES ResourceTempType = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		CD3DX12_RESOURCE_DESC TempDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, D3D12_RESOURCE_FLAG_NONE);
 		Gfx->Device->CreateCommittedResource(&ResourceTempType, D3D12_HEAP_FLAG_NONE, &TempDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempHandle));
-		TempCurrentState = D3D12_RESOURCE_STATE_GENERIC_READ;
 
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
@@ -220,8 +219,6 @@ struct directx12_buffer : public buffer
 	D3D12_CPU_DESCRIPTOR_HANDLE CounterUnorderedAccessView = {};
 
 	ComPtr<D3D12MA::Allocation> Allocation;
-	D3D12_RESOURCE_STATES CurrentState = {};
-	D3D12_RESOURCE_STATES TempCurrentState = {};
 };
 
 struct directx12_texture : public texture
@@ -323,7 +320,9 @@ struct directx12_texture : public texture
 
 		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
 		CommandList->ResourceBarrier(1, &BarrierData);
-		std::fill(CurrentState.begin(), CurrentState.end(), D3D12_RESOURCE_STATE_COMMON);
+
+		std::fill(CurrentLayout.begin(), CurrentLayout.end(), 0);
+		std::fill(CurrentState.begin(), CurrentState.end(), barrier_state::general);
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -371,7 +370,8 @@ struct directx12_texture : public texture
 		PipelineContext->CommandList->CopyTextureRegion(&DstCopyLocation, 0, 0, 0, 
 														&SrcCopyLocation, nullptr);
 
-		std::fill(CurrentState.begin(), CurrentState.end(), D3D12_RESOURCE_STATE_COPY_DEST);
+		std::fill(CurrentLayout.begin(), CurrentLayout.end(), AF_TransferWrite);
+		std::fill(CurrentState.begin(), CurrentState.end(), barrier_state::general);
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override 
@@ -387,7 +387,9 @@ struct directx12_texture : public texture
 
 		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
 		CommandList->ResourceBarrier(1, &BarrierData);
-		std::fill(CurrentState.begin(), CurrentState.end(), D3D12_RESOURCE_STATE_COMMON);
+
+		std::fill(CurrentLayout.begin(), CurrentLayout.end(), 0);
+		std::fill(CurrentState.begin(), CurrentState.end(), barrier_state::general);
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
@@ -402,6 +404,7 @@ struct directx12_texture : public texture
 	{
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
+		CurrentLayout.resize(InputData.MipLevels);
 		CurrentState.resize(InputData.MipLevels);
 
 		Name   = DebugName;
@@ -699,7 +702,6 @@ struct directx12_texture : public texture
 		CD3DX12_HEAP_PROPERTIES ResourceTempType = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		CD3DX12_RESOURCE_DESC TempDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
 		Device->CreateCommittedResource(&ResourceTempType, D3D12_HEAP_FLAG_NONE, &TempDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempHandle));
-		TempCurrentState = D3D12_RESOURCE_STATE_GENERIC_READ;
 	}
 
 	void DestroyResource() override {/*Handle.Reset();*/}
@@ -710,8 +712,6 @@ struct directx12_texture : public texture
 	ComPtr<ID3D12Resource> Handle;
 	ComPtr<ID3D12Resource> TempHandle;
 	ComPtr<D3D12MA::Allocation> Allocation;
-	std::vector<D3D12_RESOURCE_STATES> CurrentState;
-	D3D12_RESOURCE_STATES TempCurrentState = {};
 
 	D3D12_CPU_DESCRIPTOR_HANDLE Sampler = {};
 

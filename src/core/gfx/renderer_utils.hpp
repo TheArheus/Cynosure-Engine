@@ -103,24 +103,24 @@ struct global_pipeline_context
 	virtual void Present() = 0;
 
 	virtual void FillBuffer(buffer* Buffer, u32 Value) = 0;
-	virtual void FillTexture(texture* Texture, barrier_state CurrentState, vec4 Value) = 0;
-	virtual void GenerateMips(texture* Texture, barrier_state CurrentState) = 0;
+	virtual void FillTexture(texture* Texture, vec4 Value) = 0;
+	virtual void GenerateMips(texture* Texture) = 0;
 
 	virtual void CopyImage(texture* Dst, texture* Src) = 0;
 
 	virtual void SetMemoryBarrier(u32 SrcAccess, u32 DstAccess, 
 								  u32 SrcStageMask, u32 DstStageMask) = 0;
 
-	virtual void SetBufferBarrier(const std::tuple<buffer*, u32, u32>& BarrierData, 
+	virtual void SetBufferBarrier(const std::tuple<buffer*, u32>& BarrierData, 
 								  u32 SrcStageMask, u32 DstStageMask) = 0;
 
-	virtual void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData, 
+	virtual void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32>>& BarrierData, 
 								   u32 SrcStageMask, u32 DstStageMask) = 0;
 
-	virtual void SetImageBarriers(const std::vector<std::tuple<texture*, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
+	virtual void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32>>& BarrierData, 
 								  u32 SrcStageMask, u32 DstStageMask) = 0;
 
-	virtual void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, u32, barrier_state, barrier_state, u32>>& BarrierData, 
+	virtual void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrier_state, u32>>& BarrierData, 
 								  u32 SrcStageMask, u32 DstStageMask) = 0;
 
 	virtual void DebugGuiBegin(texture* RenderTarget) = 0;
@@ -172,7 +172,6 @@ public:
 	virtual void SetDepthTarget(u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
 	virtual void SetStencilTarget(u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
 
-	// TODO: Remove this draw
 	virtual void Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount) = 0;
 
 	virtual void DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance = 0, u32 InstanceCount = 1) = 0;
@@ -224,6 +223,9 @@ struct buffer
 	u64  Alignment     = 0;
 	u32  CounterOffset = 0;
 	bool WithCounter   = false;
+
+	u32 PrevShader = 0;
+	u32 CurrentLayout = 0;
 };
 
 struct texture
@@ -247,4 +249,8 @@ struct texture
 	u64 Size;
 
 	utils::texture::input_data Info;
+
+	u32 PrevShader = 0;
+	std::vector<u32> CurrentLayout;
+	std::vector<barrier_state> CurrentState;
 };

@@ -74,11 +74,11 @@ layout(set = 0, binding = 7)  uniform sampler3D RandomAnglesTexture;
 layout(set = 0, binding = 8)  uniform sampler2D GBuffer[GBUFFER_COUNT];
 layout(set = 0, binding = 9)  uniform writeonly image2D ColorTarget;
 layout(set = 0, binding = 10) uniform writeonly image2D BrightTarget;
+layout(set = 0, binding = 11) uniform sampler2D AmbientOcclusionBuffer;
+layout(set = 0, binding = 12) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
 
-layout(set = 1, binding = 0) uniform sampler2D AmbientOcclusionBuffer;
-layout(set = 2, binding = 0) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
-layout(set = 3, binding = 0) uniform sampler2D ShadowMaps[LIGHT_SOURCES_MAX_COUNT];
-layout(set = 4, binding = 0) uniform samplerCube PointShadowMaps[LIGHT_SOURCES_MAX_COUNT];
+layout(set = 1, binding = 0) uniform sampler2D ShadowMaps[LIGHT_SOURCES_MAX_COUNT];
+layout(set = 2, binding = 0) uniform samplerCube PointShadowMaps[LIGHT_SOURCES_MAX_COUNT];
 
 
 float rand(vec2 Seed)

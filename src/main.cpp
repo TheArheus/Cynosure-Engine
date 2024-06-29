@@ -22,10 +22,9 @@
 // TODO: Volumetric clouds
 //
 // TODO: Runtime shader recompilation
-// TODO: Move to DirectXShaderCompiler for more shader types to be available, so that both vulkan and dx12 could run
 //
 // TODO: Add more flexibility to activate/disable features
-//			Maybe I would need to add render graphs or just automatic barriers for it
+//			Maybe I would need to add render graphs or just automatic barriers for it(now there is only semi-automatic barriers)
 // TODO: Handle dynamic entities that updates every frame
 //			One entity - one instance for a group of the object(would be easy to handle each instance and add to them the component if needed)
 //
@@ -43,11 +42,9 @@
 
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
-	u32 Test = 1;
-	float V  = *(float*)&Test;
 	window Window(1280, 720, "3D Renderer");
-	//Window.InitVulkanGraphics();
-	Window.InitDirectx12Graphics();
+	Window.InitVulkanGraphics();
+	//Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
 	global_pipeline_context* PipelineContext = Window.Gfx.CreateGlobalPipelineContext();
 

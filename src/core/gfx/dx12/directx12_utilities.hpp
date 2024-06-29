@@ -529,7 +529,7 @@ D3D12_FILTER_REDUCTION_TYPE GetDXSamplerReductionMode(sampler_reduction_mode Mod
 	}
 }
 
-D3D12_RESOURCE_STATES GetDXBufferLayout(u32 Layouts, u32 PipelineStage)
+D3D12_RESOURCE_STATES GetDXBufferLayout(u32 Layouts, u32 PipelineStage = 0)
 {
     D3D12_RESOURCE_STATES Result = {};
 
@@ -542,11 +542,12 @@ D3D12_RESOURCE_STATES GetDXBufferLayout(u32 Layouts, u32 PipelineStage)
     if (Layouts & AF_ShaderWrite)
         Result |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     if (Layouts & AF_ShaderRead)
-	{
-		Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-		if(PipelineStage & PSF_EarlyFragment || PipelineStage & PSF_LateFragment || PipelineStage & PSF_FragmentShader)
-			Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-	}
+    {
+        Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+        if (PipelineStage & (PSF_EarlyFragment | PSF_LateFragment | PSF_FragmentShader))
+            Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    }
     if (Layouts & AF_TransferRead)
         Result |= D3D12_RESOURCE_STATE_COPY_SOURCE;
     if (Layouts & AF_TransferWrite)
@@ -556,10 +557,13 @@ D3D12_RESOURCE_STATES GetDXBufferLayout(u32 Layouts, u32 PipelineStage)
     if (Layouts & AF_MemoryRead)
         Result |= D3D12_RESOURCE_STATE_GENERIC_READ;
 
+    if ((Result & D3D12_RESOURCE_STATE_COPY_DEST) || (Result & D3D12_RESOURCE_STATE_UNORDERED_ACCESS))
+        Result &= ~D3D12_RESOURCE_STATE_GENERIC_READ;
+
     return Result;
 }
 
-D3D12_RESOURCE_STATES GetDXImageLayout(barrier_state State, u32 Layouts, u32 PipelineStage)
+D3D12_RESOURCE_STATES GetDXImageLayout(barrier_state State, u32 Layouts, u32 PipelineStage = 0)
 {
     D3D12_RESOURCE_STATES Result = D3D12_RESOURCE_STATE_COMMON;
 

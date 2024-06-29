@@ -1,5 +1,7 @@
 #pragma once
 
+
+// TODO: Make graph builder from this for render graph
 class global_graphics_context
 {
 	global_graphics_context(const global_graphics_context&) = delete;
@@ -120,7 +122,7 @@ public:
 	buffer* RandomSamplesBuffer;
 
 	std::vector<render_context*>  CubeMapShadowContexts;
-	std::vector<compute_context*> DepthReduceContext;
+	compute_context* DepthReduceContext;
 
 	render_context* GfxContext;
 	render_context* VoxelizationContext;
@@ -129,8 +131,8 @@ public:
 	render_context* DebugCameraViewContext;
 	render_context* DebugContext;
 
-	std::vector<compute_context*> BloomDownScaleContext;
-	std::vector<compute_context*> BloomUpScaleContext;
+	compute_context* BloomDownScaleContext;
+	compute_context* BloomUpScaleContext;
 	compute_context* BloomCombineContext;
 
 	compute_context* ColorPassContext;

@@ -230,24 +230,11 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	BlurContextV = CreateComputeContext("../shaders/blur.comp.glsl");
 	BlurContextH = CreateComputeContext("../shaders/blur.comp.glsl");
 
-	BloomDownScaleContext;
-	BloomUpScaleContext;
+	DepthReduceContext = CreateComputeContext("../shaders/texel_reduce.comp.glsl");
+
 	BloomCombineContext = CreateComputeContext("../shaders/bloom_combine.comp.glsl");
-
-	for(u32 MipIdx = 0; MipIdx < GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height)); ++MipIdx)
-	{
-		DepthReduceContext.push_back(CreateComputeContext("../shaders/texel_reduce.comp.glsl"));
-	}
-
-	for(u32 MipIdx = 0; MipIdx < 5; ++MipIdx)
-	{
-		BloomDownScaleContext.push_back(CreateComputeContext("../shaders/bloom_down.comp.glsl"));
-	}
-
-	for(u32 MipIdx = 0; MipIdx < 5; ++MipIdx)
-	{
-		BloomUpScaleContext.push_back(CreateComputeContext("../shaders/bloom_up.comp.glsl"));
-	}
+	BloomDownScaleContext = CreateComputeContext("../shaders/bloom_down.comp.glsl");
+	BloomUpScaleContext = CreateComputeContext("../shaders/bloom_up.comp.glsl");
 }
 
 global_graphics_context::

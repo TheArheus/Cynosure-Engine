@@ -24,7 +24,7 @@ public:
 
 		D3D12_COMMAND_QUEUE_DESC CommandQueueDesc = {};
 		CommandQueueDesc.Type = NewType;
-		CommandQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_DISABLE_GPU_TIMEOUT;
+		CommandQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 		Device->CreateCommandQueue(&CommandQueueDesc, IID_PPV_ARGS(&Handle));
 
 		Device->CreateCommandAllocator(Type, IID_PPV_ARGS(&CommandAlloc));

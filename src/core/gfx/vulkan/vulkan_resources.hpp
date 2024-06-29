@@ -180,6 +180,8 @@ struct vulkan_buffer : public buffer
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 		WithCounter = NewWithCounter;
 
+		CurrentLayout = 0;
+
 		Device = Gfx->Device;
 		Size = NewSize * Count + WithCounter * sizeof(u32);
 		CounterOffset = NewSize * Count;
@@ -380,6 +382,9 @@ struct vulkan_texture : public texture
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 		vulkan_memory_heap* VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
+
+		CurrentLayout.resize(InputData.MipLevels);
+		CurrentState.resize(InputData.MipLevels);
 
 		MemoryProperties = Gfx->MemoryProperties;
 		Device = Gfx->Device;
