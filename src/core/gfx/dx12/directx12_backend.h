@@ -104,6 +104,7 @@ struct directx12_backend : public renderer_backend
 {
 	struct compiled_shader_info
 	{
+		std::map<u32, std::map<u32, u32>> NewBindings;
 		std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 		std::unordered_map<u32, u32> DescriptorHeapSizes;
 		D3D12_SHADER_BYTECODE Handle;
@@ -119,7 +120,7 @@ struct directx12_backend : public renderer_backend
 	~directx12_backend() override = default;
 	void DestroyObject() override;
 
-	[[nodiscard]] D3D12_SHADER_BYTECODE LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines = {}, u32* LocalSizeX = nullptr, u32* LocalSizeY = nullptr, u32* LocalSizeZ = nullptr);
+	[[nodiscard]] D3D12_SHADER_BYTECODE LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, u32>>& NewBindings, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines = {}, u32* LocalSizeX = nullptr, u32* LocalSizeY = nullptr, u32* LocalSizeZ = nullptr);
 
 	void RecreateSwapchain(u32 NewWidth, u32 NewHeight) override;
 

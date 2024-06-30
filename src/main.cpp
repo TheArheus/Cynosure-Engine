@@ -21,8 +21,6 @@
 // TODO: Ambient Occlusion fix or a better one
 // TODO: Volumetric clouds
 //
-// TODO: Runtime shader recompilation
-//
 // TODO: Add more flexibility to activate/disable features
 //			Maybe I would need to add render graphs or just automatic barriers for it(now there is only semi-automatic barriers)
 // TODO: Handle dynamic entities that updates every frame
@@ -43,8 +41,8 @@
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
 	window Window(1280, 720, "3D Renderer");
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
 	global_pipeline_context* PipelineContext = Window.Gfx.CreateGlobalPipelineContext();
 

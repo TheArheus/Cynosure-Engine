@@ -155,9 +155,6 @@ struct render_debug_system : public entity_system
 			PipelineContext->SetBufferBarrier({MeshDrawDebugCommandBuffer, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({GeometryDebugOffsets, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 
-			Window.Gfx.DebugComputeContext->Begin(PipelineContext);
-			Window.Gfx.DebugComputeContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
-
 			Window.Gfx.DebugComputeContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 			Window.Gfx.DebugComputeContext->SetStorageBufferView(GeometryDebugOffsets);
 			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugMeshDrawCommandDataBuffer);
@@ -165,6 +162,8 @@ struct render_debug_system : public entity_system
 			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugIndirectDrawIndexedCommands);
 			Window.Gfx.DebugComputeContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
 
+			Window.Gfx.DebugComputeContext->Begin(PipelineContext);
+			Window.Gfx.DebugComputeContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
 			Window.Gfx.DebugComputeContext->Execute(StaticMeshInstances.size());
 			Window.Gfx.DebugComputeContext->End();
 			Window.Gfx.DebugComputeContext->Clear();
@@ -184,16 +183,15 @@ struct render_debug_system : public entity_system
 			PipelineContext->SetBufferBarrier({DebugIndirectDrawIndexedCommands, AF_IndirectCommandRead}, PSF_Compute, PSF_DrawIndirect);
 			PipelineContext->SetBufferBarrier({MeshDebugMaterialsBuffer, AF_ShaderRead}, PSF_TopOfPipe, PSF_VertexShader|PSF_FragmentShader);
 
-			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
-			Window.Gfx.DebugContext->SetColorTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, {0, 0, 0, 1});
-			Window.Gfx.DebugContext->SetDepthTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
-
 			Window.Gfx.DebugContext->SetStorageBufferView(WorldUpdateBuffer);
 			Window.Gfx.DebugContext->SetStorageBufferView(DebugVertexBuffer);
 			Window.Gfx.DebugContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
 			Window.Gfx.DebugContext->SetStorageBufferView(MeshDebugMaterialsBuffer);
 			Window.Gfx.DebugContext->SetStorageBufferView(GeometryDebugOffsets);
 
+			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
+			Window.Gfx.DebugContext->SetColorTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, {0, 0, 0, 1});
+			Window.Gfx.DebugContext->SetDepthTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
 			Window.Gfx.DebugContext->DrawIndirect(Geometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
 			Window.Gfx.DebugContext->End();
 			Window.Gfx.DebugContext->Clear();

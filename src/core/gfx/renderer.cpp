@@ -38,7 +38,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Format    = image_format::R11G11B10_SFLOAT;
 	TextureInputData.MipLevels = 1;
 	HdrColorTarget = PushTexture("HdrColorTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
-	TextureInputData.MipLevels = 6;
+	TextureInputData.MipLevels = 3;
 	TextureInputData.AddressMode = sampler_address_mode::clamp_to_border;
 	BrightTarget   = PushTexture("BrightTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TempBrTarget   = PushTexture("TempBrTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);

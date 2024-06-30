@@ -184,11 +184,12 @@ dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool N
 }
 
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
+LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, u32>>& NewBindings, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {
 	auto FoundCompiledShader = CompiledShaders.find(Path);
 	if(FoundCompiledShader != CompiledShaders.end())
 	{
+		NewBindings.insert(FoundCompiledShader->second.NewBindings.begin(), FoundCompiledShader->second.NewBindings.end());
 		ShaderRootLayout.insert(FoundCompiledShader->second.ShaderRootLayout.begin(), FoundCompiledShader->second.ShaderRootLayout.end());
 		DescriptorHeapSizes.insert(FoundCompiledShader->second.DescriptorHeapSizes.begin(), FoundCompiledShader->second.DescriptorHeapSizes.end());
 		HavePushConstant = FoundCompiledShader->second.HavePushConstant;
@@ -530,6 +531,111 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 				spirv_cross::CompilerHLSL Compiler(SpirvCode.data(), SpirvCode.size());
 				auto HlslResources = Compiler.get_shader_resources();
 
+				std::map<u32, std::map<u32, u32>> ParameterOffsets;
+				for (const auto &resource : HlslResources.sampled_images) 
+				{
+					uint32_t Size = Compiler.get_type(resource.type_id).array[0];
+					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
+					ParameterOffsets[Set][Binding] = Size;
+				}
+
+				for (const auto &resource : HlslResources.storage_images) 
+				{
+					uint32_t Size = Compiler.get_type(resource.type_id).array[0];
+					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
+					ParameterOffsets[Set][Binding] = Size;
+				}
+
+				for (const auto &resource : HlslResources.uniform_buffers) 
+				{
+					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
+					ParameterOffsets[Set][Binding] = 0;
+				}
+
+				for (const auto &resource : HlslResources.storage_buffers) 
+				{
+					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
+					ParameterOffsets[Set][Binding] = 0;
+				}
+
+				for (auto &SetBinding : NewBindings)
+				{
+					uint32_t Set = SetBinding.first;
+					uint32_t Offs = 0;
+					uint32_t Curr = 0;
+
+					for (auto &Binding : SetBinding.second)
+					{
+						uint32_t Old = Binding.first;
+
+						if (ParameterOffsets[Set].find(Old) != ParameterOffsets[Set].end())
+						{
+							uint32_t Size = ParameterOffsets[Set][Old];
+							Binding.second = Offs;
+							Offs += (Size > 0) ? Size : 1;
+						}
+						else
+						{
+							Offs += 1;
+						}
+						Curr += 1;
+					}
+				}
+
+				for (const auto &SetBinding : ParameterOffsets)
+				{
+					uint32_t Set = SetBinding.first;
+					if (NewBindings.find(Set) == NewBindings.end())
+					{
+						NewBindings[Set] = std::map<u32, u32>();
+					}
+					
+					uint32_t Offs = NewBindings[Set].size();
+					for (const auto &Binding : SetBinding.second)
+					{
+						uint32_t Old = Binding.first;
+						uint32_t Size = Binding.second;
+
+						if (NewBindings[Set].find(Old) == NewBindings[Set].end())
+						{
+							NewBindings[Set][Old] = Offs;
+							Offs += (Size > 0) ? Size : 1;
+						}
+					}
+				}
+
+				for (const auto &resource : HlslResources.sampled_images) 
+				{
+					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
+					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
+				}
+
+				for (const auto &resource : HlslResources.storage_images) 
+				{
+					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
+					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
+				}
+
+				for (const auto &resource : HlslResources.uniform_buffers) 
+				{
+					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
+					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
+				}
+
+				for (const auto &resource : HlslResources.storage_buffers) 
+				{
+					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
+					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
+				}
+
 				spirv_cross::CompilerHLSL::Options    HlslOptions;
 				spirv_cross::HLSLVertexAttributeRemap HlslAttribs;
 
@@ -541,6 +647,8 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 				Compiler.add_vertex_attribute_remap(HlslAttribs);
 
 				HlslCode = Compiler.compile();
+
+				CompiledShaders[Path].NewBindings = NewBindings;
 			}
 			catch(const std::exception& e)
 			{

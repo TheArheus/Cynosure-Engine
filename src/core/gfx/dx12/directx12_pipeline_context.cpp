@@ -178,8 +178,8 @@ SetBufferBarrier(const std::tuple<buffer*, u32>& BarrierData,
 
 	Buffer->CurrentLayout = ResourceLayoutNext;
 	Buffer->PrevShader = DstStageMask;
-	if(Barrier.size())
-		CommandList->ResourceBarrier(Barrier.size(), Barrier.data());
+
+	CommandList->ResourceBarrier(Barrier.size(), Barrier.data());
 }
 
 void directx12_global_pipeline_context::
@@ -213,8 +213,7 @@ SetBufferBarriers(const std::vector<std::tuple<buffer*, u32>>& BarrierData,
 		Buffer->CurrentLayout = ResourceLayoutNext;
 	}
 
-	if(Barriers.size())
-		CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
+	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
 }
 
 void directx12_global_pipeline_context::
@@ -255,8 +254,7 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32>
 		Texture->PrevShader = DstStageMask;
 	}
 
-	if(Barriers.size())
-		CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
+	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
 }
 
 void directx12_global_pipeline_context::
@@ -301,8 +299,7 @@ SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrie
 		}
 	}
 
-	if(Barriers.size())
-		CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
+	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
 }
 
 void directx12_global_pipeline_context::
@@ -376,37 +373,37 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 
 	std::string GlobalName;
 	std::vector<ComPtr<ID3DBlob>> ShadersBlob;
+	std::map<u32, std::map<u32, u32>> NewBindings;
 	for(std::string Shader : ShaderList)
 	{
 		GlobalName = Shader.substr(Shader.find("."));
 		if(Shader.find(".vert.") != std::string::npos)
 		{
-			PipelineDesc.VS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.VS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, HaveDrawID, NewBindings, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if(Shader.find(".doma.") != std::string::npos)
 		{
 			Shader.replace(Shader.find("glsl"), 4, "hlsl");
-			PipelineDesc.DS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.DS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, HaveDrawID, NewBindings, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if(Shader.find(".hull.") != std::string::npos)
 		{
 			Shader.replace(Shader.find("glsl"), 4, "hlsl");
-			PipelineDesc.HS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.HS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, HaveDrawID, NewBindings, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if (Shader.find(".geom.") != std::string::npos)
 		{
 			Shader.replace(Shader.find("glsl"), 4, "hlsl");
-			PipelineDesc.GS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.GS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, HaveDrawID, NewBindings, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 		if(Shader.find(".frag.") != std::string::npos)
 		{
-			PipelineDesc.PS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
+			PipelineDesc.PS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, HaveDrawID, NewBindings, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines);
 		}
 	}
 
-	std::map<u32, u32> ParameterOffsets;
 	std::vector<D3D12_ROOT_PARAMETER> Parameters;
-	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
+	for(u32 LayoutIdx = 1; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
@@ -417,25 +414,34 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 				if(Parameter.DescriptorTable.pDescriptorRanges)
 				{
 					D3D12_DESCRIPTOR_RANGE* pDescriptorRanges = const_cast<D3D12_DESCRIPTOR_RANGE*>(Parameter.DescriptorTable.pDescriptorRanges);
-					pDescriptorRanges->BaseShaderRegister += ParameterOffsets[LayoutIdx];
+					pDescriptorRanges->BaseShaderRegister = NewBindings[LayoutIdx][BindingIdx];
 				}
 				else
 				{
-					Parameter.Descriptor.ShaderRegister += ParameterOffsets[LayoutIdx];
+					Parameter.Descriptor.ShaderRegister = NewBindings[LayoutIdx][BindingIdx];
 				}
 				Parameters.push_back(Parameter);
 			}
-			if(Parameter0.DescriptorTable.pDescriptorRanges)
+		}
+	}
+	for(u32 LayoutIdx = 0; LayoutIdx < 1; LayoutIdx++)
+	{
+		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
+		{
+			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
+			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
-				if(Parameter0.DescriptorTable.pDescriptorRanges->NumDescriptors > 1)
+				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];
+				if(Parameter.DescriptorTable.pDescriptorRanges)
 				{
-					ParameterOffsets[LayoutIdx] += Parameter0.DescriptorTable.pDescriptorRanges->NumDescriptors - 1;
+					D3D12_DESCRIPTOR_RANGE* pDescriptorRanges = const_cast<D3D12_DESCRIPTOR_RANGE*>(Parameter.DescriptorTable.pDescriptorRanges);
+					pDescriptorRanges->BaseShaderRegister = NewBindings[LayoutIdx][BindingIdx];
 				}
-				BindingOffsets[LayoutIdx] += Parameter0.DescriptorTable.pDescriptorRanges->NumDescriptors;
-			}
-			else
-			{
-				BindingOffsets[LayoutIdx] += 1;
+				else
+				{
+					Parameter.Descriptor.ShaderRegister = NewBindings[LayoutIdx][BindingIdx];
+				}
+				Parameters.push_back(Parameter);
 			}
 		}
 	}
@@ -457,15 +463,20 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 		Parameters.push_back(PushConstantDesc);
 	}
 
+	size_t LastSlashPos = GlobalName.find_last_of('/');
+    size_t LastDotPos = GlobalName.find_last_of('.');
+    GlobalName = GlobalName.substr(LastSlashPos + 1, LastDotPos - LastSlashPos - 1);
+
+	// TODO: TEMPORAL HACK. Need a better solution here for different tasks
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] != 0)
 	{
-		ResourceHeap = descriptor_heap(Gfx->Device.Get(), DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		ResourceHeap = descriptor_heap(Gfx->Device.Get(), Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] * 16, 16384u), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 		NAME_DX12_OBJECT_CSTR(ResourceHeap.Handle.Get(), (GlobalName + ".resource_heap").c_str());
 		IsResourceHeapInited = true;
 	}
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] != 0)
 	{
-		SamplersHeap = descriptor_heap(Gfx->Device.Get(), DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER], D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		SamplersHeap = descriptor_heap(Gfx->Device.Get(), Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] * 16, 2048u), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 		NAME_DX12_OBJECT_CSTR(SamplersHeap.Handle.Get(), (GlobalName + ".samplers_heap").c_str());
 		IsSamplersHeapInited = true;
 	}
@@ -565,22 +576,27 @@ Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 Rende
 void directx12_render_context::
 End()  
 {
+	RepeatedResourceExec += ResourceBindingIdx;
+	RepeatedSamplerExec += SamplersBindingIdx;
+
+	ResourceBindingIdx = 0;
+	SamplersBindingIdx = 0;
+	RootResourceBindingIdx = 0;
+	RootSamplersBindingIdx = 0;
+
+	ColorTargets.clear();
+	ResourceHeap.Reset();
+	SamplersHeap.Reset();
 	BuffersToCommon.clear();
 	TexturesToCommon.clear();
+	BindingDescriptions.clear();
 }
 
 void directx12_render_context::
 Clear()
 {
-	SetIndices.clear();
-	ColorTargets.clear();
-	BindingDescriptions.clear();
-	ResourceHeap.Reset();
-	SamplersHeap.Reset();
-	ResourceBindingIdx.clear();
-	SamplersBindingIdx.clear();
-	RootResourceBindingIdx.clear();
-	RootSamplersBindingIdx.clear();
+	RepeatedResourceExec = 0;
+	RepeatedSamplerExec = 0;
 }
 
 void directx12_render_context::
@@ -674,16 +690,7 @@ DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands,
 void directx12_render_context::
 SetConstant(void* Data, size_t Size)  
 {
-	u32 ResourceOffset = 0;
-    for (const auto& Pair : RootResourceBindingIdx)
-	{
-        ResourceOffset += Pair.second;
-    }
-    for (const auto& Pair : RootSamplersBindingIdx)
-	{
-        ResourceOffset += Pair.second;
-    }
-	PipelineContext->CommandList->SetGraphicsRoot32BitConstants(HaveDrawID + ResourceOffset, Size / sizeof(u32), Data, 0);
+	PipelineContext->CommandList->SetGraphicsRoot32BitConstants(HaveDrawID + RootResourceBindingIdx + RootSamplersBindingIdx, Size / sizeof(u32), Data, 0);
 }
 
 // NOTE: If with counter, then it is using 2 bindings instead of 1
@@ -693,39 +700,39 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
 	BuffersToCommon.insert(Buffer);
 
-	auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]);
+	auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx + RepeatedResourceExec);
 	auto ParameterType = ShaderRootLayout[Set][SetIndices[Set]][0].ParameterType;
 	if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
 	{
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceView, ResourceHeap.Type);
 
-		BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], 1});
+		BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 	}
 	else if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
 	{
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessView, ResourceHeap.Type);
 
-		BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], 1});
+		BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 	}
-	RootResourceBindingIdx[Set] += 1;
-	ResourceBindingIdx[Set]++;
+	RootResourceBindingIdx += 1;
+	ResourceBindingIdx += 1;
 	SetIndices[Set] += 1;
 
 	if(UseCounter && Buffer->WithCounter)
 	{
-		DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]);
+		DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx + RepeatedResourceExec);
 		if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
 		{
 			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterShaderResourceView, ResourceHeap.Type);
-			BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], 1});
+			BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
 		else if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
 		{
 			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterUnorderedAccessView, ResourceHeap.Type);
-			BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], 1});
+			BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
-		RootResourceBindingIdx[Set] += 1;
-		ResourceBindingIdx[Set]++;
+		RootResourceBindingIdx += 1;
+		ResourceBindingIdx += 1;
 		SetIndices[Set] += 1;
 	}
 }
@@ -744,19 +751,19 @@ SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][1].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
-	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx[Set] + BindingOffsets[Set]), {}, RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], (u32)Textures.size()});
-	RootSamplersBindingIdx[Set] += 1;
+	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx + RepeatedSamplerExec), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	RootSamplersBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 		TexturesToCommon.insert(Textures[Idx]);
 
-		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx[Set] + BindingOffsets[Set]);
+		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx + RepeatedSamplerExec);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap.Type);
-		SamplersBindingIdx[Set]++;
+		SamplersBindingIdx++;
 	}
-	SamplersBindingIdx[Set] += (BindingSize - Textures.size());
+	SamplersBindingIdx += (BindingSize - Textures.size());
 	SetIndices[Set] += 1;
 }
 
@@ -765,19 +772,19 @@ SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][0].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
-	BindingDescriptions.push_back({dx12_descriptor_type::unordered_access_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]), {}, RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], (u32)Textures.size()});
-	RootResourceBindingIdx[Set] += 1;
+	BindingDescriptions.push_back({dx12_descriptor_type::unordered_access_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx + RepeatedResourceExec), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	RootResourceBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 		TexturesToCommon.insert(Textures[Idx]);
 
-		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]);
+		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx + RepeatedResourceExec);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessViews[ViewIdx], ResourceHeap.Type);
-		ResourceBindingIdx[Set]++;
+		ResourceBindingIdx++;
 	}
-	ResourceBindingIdx[Set] += (BindingSize - Textures.size());
+	ResourceBindingIdx += (BindingSize - Textures.size());
 	SetIndices[Set] += 1;
 }
 
@@ -786,31 +793,31 @@ SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][0].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
-	BindingDescriptions.push_back({dx12_descriptor_type::shader_resource_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]), {}, RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], (u32)Textures.size()});
-	RootResourceBindingIdx[Set] += 1;
+	BindingDescriptions.push_back({dx12_descriptor_type::shader_resource_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx + RepeatedResourceExec), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	RootResourceBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 		TexturesToCommon.insert(Textures[Idx]);
 
-		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]);
+		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx + RepeatedResourceExec);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceViews[ViewIdx], ResourceHeap.Type);
-		ResourceBindingIdx[Set]++;
+		ResourceBindingIdx++;
 	}
-	ResourceBindingIdx[Set] += (BindingSize - Textures.size());
+	ResourceBindingIdx += (BindingSize - Textures.size());
 
-	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx[Set] + BindingOffsets[Set]), {}, RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set], (u32)Textures.size()});
-	RootSamplersBindingIdx[Set] += 1;
+	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx + RepeatedSamplerExec), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	RootSamplersBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
-		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx[Set] + BindingOffsets[Set]);
+		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx + RepeatedSamplerExec);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap.Type);
-		SamplersBindingIdx[Set]++;
+		SamplersBindingIdx++;
 	}
-	SamplersBindingIdx[Set] += (BindingSize - Textures.size());
+	SamplersBindingIdx += (BindingSize - Textures.size());
 	SetIndices[Set] += 1;
 }
 
@@ -826,11 +833,11 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 
 	bool HaveDrawID = false;
 	D3D12_COMPUTE_PIPELINE_STATE_DESC PipelineDesc = {};
-	PipelineDesc.CS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, HaveDrawID, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines, &BlockSizeX, &BlockSizeY, &BlockSizeZ);
+	std::map<u32, std::map<u32, u32>> NewBindings;
+	PipelineDesc.CS = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, HaveDrawID, NewBindings, ShaderRootLayout, HavePushConstant, PushConstantSize, DescriptorHeapSizes, ShaderDefines, &BlockSizeX, &BlockSizeY, &BlockSizeZ);
 
-	std::map<u32, u32> ParameterOffsets;
 	std::vector<D3D12_ROOT_PARAMETER> Parameters;
-	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
+	for(u32 LayoutIdx = 1; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
@@ -841,25 +848,35 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 				if(Parameter.DescriptorTable.pDescriptorRanges)
 				{
 					D3D12_DESCRIPTOR_RANGE* pDescriptorRanges = const_cast<D3D12_DESCRIPTOR_RANGE*>(Parameter.DescriptorTable.pDescriptorRanges);
-					pDescriptorRanges->BaseShaderRegister += ParameterOffsets[LayoutIdx];
+					pDescriptorRanges->BaseShaderRegister = NewBindings[LayoutIdx][BindingIdx];
 				}
 				else
 				{
-					Parameter.Descriptor.ShaderRegister += ParameterOffsets[LayoutIdx];
+					Parameter.Descriptor.ShaderRegister = NewBindings[LayoutIdx][BindingIdx];
 				}
 				Parameters.push_back(Parameter);
 			}
-			if(Parameter0.DescriptorTable.pDescriptorRanges)
+		}
+	}
+
+	for(u32 LayoutIdx = 0; LayoutIdx < 1; LayoutIdx++)
+	{
+		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
+		{
+			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
+			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
-				if(Parameter0.DescriptorTable.pDescriptorRanges->NumDescriptors > 1)
+				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];
+				if(Parameter.DescriptorTable.pDescriptorRanges)
 				{
-					ParameterOffsets[LayoutIdx] += Parameter0.DescriptorTable.pDescriptorRanges->NumDescriptors - 1;
+					D3D12_DESCRIPTOR_RANGE* pDescriptorRanges = const_cast<D3D12_DESCRIPTOR_RANGE*>(Parameter.DescriptorTable.pDescriptorRanges);
+					pDescriptorRanges->BaseShaderRegister = NewBindings[LayoutIdx][BindingIdx];
 				}
-				BindingOffsets[LayoutIdx] += Parameter0.DescriptorTable.pDescriptorRanges->NumDescriptors;
-			}
-			else
-			{
-				BindingOffsets[LayoutIdx] += 1;
+				else
+				{
+					Parameter.Descriptor.ShaderRegister = NewBindings[LayoutIdx][BindingIdx];
+				}
+				Parameters.push_back(Parameter);
 			}
 		}
 	}
@@ -871,16 +888,20 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 		Parameters.push_back(PushConstantDesc);
 	}
 
-	std::string GlobalName = Shader.substr(Shader.find("."));
+	size_t LastSlashPos = Shader.find_last_of('/');
+    size_t LastDotPos = Shader.find_last_of('.');
+	std::string GlobalName = Shader.substr(LastSlashPos + 1, LastDotPos - LastSlashPos - 1);
+
+	// TODO: TEMPORAL HACK. Need a better solution here for different tasks
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] != 0)
 	{
-		ResourceHeap = descriptor_heap(Gfx->Device.Get(), DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		ResourceHeap = descriptor_heap(Gfx->Device.Get(), Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] * 16, 16384u), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 		NAME_DX12_OBJECT_CSTR(ResourceHeap.Handle.Get(), (GlobalName + ".resource_heap").c_str());
 		IsResourceHeapInited = true;
 	}
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] != 0)
 	{
-		SamplersHeap = descriptor_heap(Gfx->Device.Get(), DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER], D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		SamplersHeap = descriptor_heap(Gfx->Device.Get(), Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] * 16, 2048u), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 		NAME_DX12_OBJECT_CSTR(SamplersHeap.Handle.Get(), (GlobalName + ".samplers_heap").c_str());
 		IsSamplersHeapInited = true;
 	}
@@ -943,21 +964,26 @@ Begin(global_pipeline_context* GlobalPipelineContext)
 void directx12_compute_context::
 End()
 {
+	RepeatedResourceExec += ResourceBindingIdx;
+	RepeatedSamplerExec += SamplersBindingIdx;
+
 	BuffersToCommon.clear();
 	TexturesToCommon.clear();
+	BindingDescriptions.clear();
+
+	ResourceHeap.Reset();
+	SamplersHeap.Reset();
+	ResourceBindingIdx = 0;
+	SamplersBindingIdx = 0;
+	RootResourceBindingIdx = 0;
+	RootSamplersBindingIdx = 0;
 }
 
 void directx12_compute_context::
 Clear()
 {
-	SetIndices.clear();
-	BindingDescriptions.clear();
-	ResourceHeap.Reset();
-	SamplersHeap.Reset();
-	ResourceBindingIdx.clear();
-	SamplersBindingIdx.clear();
-	RootResourceBindingIdx.clear();
-	RootSamplersBindingIdx.clear();
+	RepeatedResourceExec = 0;
+	RepeatedSamplerExec = 0;
 }
 
 void directx12_compute_context::
@@ -972,16 +998,7 @@ Execute(u32 X, u32 Y, u32 Z)
 void directx12_compute_context::
 SetConstant(void* Data, size_t Size)  
 {
-	u32 ResourceOffset = 0;
-    for (const auto& Pair : RootResourceBindingIdx)
-	{
-        ResourceOffset += Pair.second;
-    }
-    for (const auto& Pair : RootSamplersBindingIdx)
-	{
-        ResourceOffset += Pair.second;
-    }
-	PipelineContext->CommandList->SetComputeRoot32BitConstants(ResourceOffset, Size / sizeof(u32), Data, 0);
+	PipelineContext->CommandList->SetComputeRoot32BitConstants(RootResourceBindingIdx + RootSamplersBindingIdx, Size / sizeof(u32), Data, 0);
 }
 
 void directx12_compute_context::
@@ -990,39 +1007,39 @@ SetStorageBufferView(buffer* Buffer, bool UseCounter, u32 Set)
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
 	BuffersToCommon.insert(Buffer);
 
-	auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]);
+	auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx + RepeatedResourceExec);
 	auto ParameterType = ShaderRootLayout[Set][SetIndices[Set]][0].ParameterType;
 	if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
 	{
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceView, ResourceHeap.Type);
 
-		BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], 1});
+		BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 	}
 	else if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
 	{
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessView, ResourceHeap.Type);
 
-		BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], 1});
+		BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 	}
-	RootResourceBindingIdx[Set] += 1;
-	ResourceBindingIdx[Set]++;
+	RootResourceBindingIdx += 1;
+	ResourceBindingIdx += 1;
 	SetIndices[Set] += 1;
 
 	if(UseCounter && Buffer->WithCounter)
 	{
-		DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]);
+		DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx + RepeatedResourceExec);
 		if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
 		{
 			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterShaderResourceView, ResourceHeap.Type);
-			BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], 1});
+			BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
 		else if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
 		{
 			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterUnorderedAccessView, ResourceHeap.Type);
-			BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], 1});
+			BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
-		RootResourceBindingIdx[Set] += 1;
-		ResourceBindingIdx[Set]++;
+		RootResourceBindingIdx += 1;
+		ResourceBindingIdx += 1;
 		SetIndices[Set] += 1;
 	}
 }
@@ -1041,19 +1058,19 @@ SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][1].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
-	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx[Set] + BindingOffsets[Set]), {}, RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], (u32)Textures.size()});
-	RootSamplersBindingIdx[Set] += 1;
+	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx + RepeatedSamplerExec), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	RootSamplersBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 		TexturesToCommon.insert(Textures[Idx]);
 
-		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx[Set] + BindingOffsets[Set]);
+		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx + RepeatedSamplerExec);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap.Type);
-		SamplersBindingIdx[Set]++;
+		SamplersBindingIdx++;
 	}
-	SamplersBindingIdx[Set] += (BindingSize - Textures.size());
+	SamplersBindingIdx += (BindingSize - Textures.size());
 	SetIndices[Set] += 1;
 }
 
@@ -1062,19 +1079,19 @@ SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][0].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
-	BindingDescriptions.push_back({dx12_descriptor_type::unordered_access_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]), {}, RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], (u32)Textures.size()});
-	RootResourceBindingIdx[Set] += 1;
+	BindingDescriptions.push_back({dx12_descriptor_type::unordered_access_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx + RepeatedResourceExec), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	RootResourceBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 		TexturesToCommon.insert(Textures[Idx]);
 
-		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]);
+		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx + RepeatedResourceExec);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessViews[ViewIdx], ResourceHeap.Type);
-		ResourceBindingIdx[Set]++;
+		ResourceBindingIdx++;
 	}
-	ResourceBindingIdx[Set] += (BindingSize - Textures.size());
+	ResourceBindingIdx += (BindingSize - Textures.size());
 	SetIndices[Set] += 1;
 }
 
@@ -1083,31 +1100,31 @@ SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_
 {
 	u32 BindingSize = ShaderRootLayout[Set][SetIndices[Set]][0].DescriptorTable.pDescriptorRanges[0].NumDescriptors;
 
-	BindingDescriptions.push_back({dx12_descriptor_type::shader_resource_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]), {}, RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], (u32)Textures.size()});
-	RootResourceBindingIdx[Set] += 1;
+	BindingDescriptions.push_back({dx12_descriptor_type::shader_resource_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx + RepeatedResourceExec), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	RootResourceBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 		TexturesToCommon.insert(Textures[Idx]);
 
-		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx[Set] + BindingOffsets[Set]);
+		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx + RepeatedResourceExec);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceViews[ViewIdx], ResourceHeap.Type);
-		ResourceBindingIdx[Set]++;
+		ResourceBindingIdx++;
 	}
-	ResourceBindingIdx[Set] += (BindingSize - Textures.size());
+	ResourceBindingIdx += (BindingSize - Textures.size());
 
-	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx[Set] + BindingOffsets[Set]), {}, RootResourceBindingIdx[Set] + RootSamplersBindingIdx[Set] + BindingOffsets[Set], (u32)Textures.size()});
-	RootSamplersBindingIdx[Set] += 1;
+	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx + RepeatedSamplerExec), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	RootSamplersBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 
-		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx[Set] + BindingOffsets[Set]);
+		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx + RepeatedSamplerExec);
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap.Type);
-		SamplersBindingIdx[Set]++;
+		SamplersBindingIdx++;
 	}
-	SamplersBindingIdx[Set] += (BindingSize - Textures.size());
+	SamplersBindingIdx += (BindingSize - Textures.size());
 	SetIndices[Set] += 1;
 }

@@ -130,15 +130,18 @@ private:
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> ColorTargets;
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilTarget;
 
-	std::map<u32, u32> BindingOffsets;
+	std::map<u32, std::map<u32, u32>> BindingOffsets;
 	std::map<u32, u32> SetIndices;
 	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 	std::vector<descriptor_binding> BindingDescriptions;
 
-	std::map<u32, u32> ResourceBindingIdx;
-	std::map<u32, u32> SamplersBindingIdx;
-	std::map<u32, u32> RootResourceBindingIdx;
-	std::map<u32, u32> RootSamplersBindingIdx;
+	u32 RepeatedResourceExec = 0;
+	u32 RepeatedSamplerExec  = 0;
+
+	u32 ResourceBindingIdx = 0;
+	u32 SamplersBindingIdx = 0;
+	u32 RootResourceBindingIdx = 0;
+	u32 RootSamplersBindingIdx = 0;
 
 	u32  PushConstantSize	  = 0;
 	bool HaveDrawID           = false;
@@ -188,15 +191,18 @@ private:
 	std::unordered_set<buffer*>  BuffersToCommon;
 	std::unordered_set<texture*> TexturesToCommon;
 
-	std::map<u32, u32> BindingOffsets;
+	std::map<u32, std::map<u32, u32>> BindingOffsets;
 	std::map<u32, u32> SetIndices;
 	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 	std::vector<descriptor_binding> BindingDescriptions;
 
-	std::map<u32, u32> ResourceBindingIdx;
-	std::map<u32, u32> SamplersBindingIdx;
-	std::map<u32, u32> RootResourceBindingIdx;
-	std::map<u32, u32> RootSamplersBindingIdx;
+	u32 RepeatedResourceExec = 0;
+	u32 RepeatedSamplerExec  = 0;
+
+	u32 ResourceBindingIdx = 0;
+	u32 SamplersBindingIdx = 0;
+	u32 RootResourceBindingIdx = 0;
+	u32 RootSamplersBindingIdx = 0;
 
 	u32  PushConstantSize = 0;
 	bool HavePushConstant = false;
