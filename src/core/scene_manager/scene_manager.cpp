@@ -151,19 +151,19 @@ StartScene(window& Window)
 
 		Scenes[CurrentScene]->Registry.AddSystem<light_sources_system>();
 		Scenes[CurrentScene]->Registry.AddSystem<world_update_system>();
-		Scenes[CurrentScene]->Registry.AddSystem<render_system>();
+		Scenes[CurrentScene]->Registry.AddSystem<deferred_raster_system>();
 		Scenes[CurrentScene]->Registry.AddSystem<render_debug_system>();
 		Scenes[CurrentScene]->Registry.AddSystem<ui_debug_system>();
 
 		Scenes[CurrentScene]->Registry.UpdateSystems();
 
-		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->Setup(Window, WorldUpdate, MeshCompCullingCommonData);
+		Scenes[CurrentScene]->Registry.GetSystem<deferred_raster_system>()->Setup(Window, WorldUpdate, MeshCompCullingCommonData);
 		Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Setup(Window, MeshCompCullingCommonData);
 	}
 }
 
 void scene_manager::
-UpdateScene(window& Window, global_pipeline_context* PipelineContext, alloc_vector<light_source>& GlobalLightSources)
+UpdateScene(window& Window, alloc_vector<light_source>& GlobalLightSources)
 {
 	if(Scenes[CurrentScene]->IsInitialized)
 	{
@@ -172,16 +172,12 @@ UpdateScene(window& Window, global_pipeline_context* PipelineContext, alloc_vect
 		Scenes[CurrentScene]->Update();
 
 		Scenes[CurrentScene]->Registry.GetSystem<world_update_system>()->SubscribeToEvents(Window.EventsDispatcher);
-
 		Scenes[CurrentScene]->Registry.GetSystem<light_sources_system>()->Update(WorldUpdate, GlobalLightSources);
-
-		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate, PipelineContext->BackBufferIndex);
-		Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->UpdateResources(Window, GlobalLightSources, WorldUpdate, PipelineContext->BackBufferIndex);
 	}
 }
 
 void scene_manager::
-RenderScene(window& Window, global_pipeline_context* PipelineContext,
+RenderScene(window& Window,
 			alloc_vector<mesh_draw_command>& DynamicMeshInstances, alloc_vector<u32>& DynamicMeshVisibility, 
 			alloc_vector<mesh_draw_command>& DynamicDebugInstances, alloc_vector<u32>& DynamicDebugVisibility,
 			alloc_vector<light_source>& GlobalLightSources)
@@ -189,8 +185,8 @@ RenderScene(window& Window, global_pipeline_context* PipelineContext,
 	if(Scenes[CurrentScene]->IsInitialized)
 	{
 		Scenes[CurrentScene]->Registry.GetSystem<world_update_system>()->Update(Window, WorldUpdate, MeshCompCullingCommonData, Scenes[CurrentScene]->GlobalLightPos);
-		Scenes[CurrentScene]->Registry.GetSystem<render_system>()->Render(Window, PipelineContext, WorldUpdate, MeshCompCullingCommonData, DynamicMeshInstances, DynamicMeshVisibility, GlobalLightSources);
-		Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Render(Window, PipelineContext, WorldUpdate, MeshCompCullingCommonData, DynamicDebugInstances, DynamicDebugVisibility);
+		Scenes[CurrentScene]->Registry.GetSystem<deferred_raster_system>()->Render(Window.Gfx, WorldUpdate, MeshCompCullingCommonData, GlobalLightSources/*, DynamicDebugInstances, DynamicDebugVisibility*/);
+		//Scenes[CurrentScene]->Registry.GetSystem<render_debug_system>()->Render(Window.Gfx, WorldUpdate, MeshCompCullingCommonData, DynamicDebugInstances, DynamicDebugVisibility);
 	}
 }
 

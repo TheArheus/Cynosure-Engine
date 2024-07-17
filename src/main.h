@@ -2,6 +2,8 @@
 #define  VMA_IMPLEMENTATION
 #include <vulkan/vulkan.h>
 
+#define TEXTURE_MIPS_ALL ~0u
+
 #if _WIN32
 	#define NOMINMAX
 	#include <windows.h>
@@ -10,6 +12,7 @@
 #else
 	#include <glfw/glfw3native.h>
 	#include <glfw/glfw3.h>
+	#define CComPtr ComPtr
 #endif
 
 #include <Volk/volk.h>
@@ -43,14 +46,17 @@
 class window;
 #include "core/gfx/common.hpp"
 #include "core/gfx/renderer_utils.hpp"
-#include "core/gfx/vulkan/vulkan_gfx.hpp"
 
+
+#include "core/gfx/backend/vulkan/vulkan_gfx.hpp"
 #if _WIN32
-	#include "core/gfx/dx12/directx12_gfx.hpp"
+	#include "core/gfx/backend/dx12/directx12_gfx.hpp"
 #endif
 
 #include "core/gfx/renderer.h"
 #include "core/platform/window.hpp"
+
+
 
 u32 GetImageMipLevels(u32 Width, u32 Height)
 {
@@ -108,5 +114,16 @@ struct mesh_comp_culling_common_input
 	u32   DebugDrawCount;
 	u32   DebugMeshCount;
 };
+
+#include "core/gfx/backend/vulkan/vulkan_command_queue.cpp"
+#include "core/gfx/backend/vulkan/vulkan_pipeline_context.cpp"
+#include "core/gfx/backend/vulkan/vulkan_backend.cpp"
+
+#if 0
+#if _WIN32
+	#include "core/gfx/backend/dx12/directx12_backend.cpp"
+	#include "core/gfx/backend/dx12/directx12_pipeline_context.cpp"
+#endif
+#endif
 
 #include "core/scene_manager/scene_manager.h"

@@ -120,7 +120,13 @@ vulkan_backend(window* Window)
 	std::vector<VkPhysicalDevice> PhysicalDevices(PhysicalDeviceCount);
 	vkEnumeratePhysicalDevices(Instance, &PhysicalDeviceCount, PhysicalDevices.data());
 
-	PhysicalDevice = PickPhysicalDevice(PhysicalDevices, &FamilyIndex);
+	PhysicalDevice = PickPhysicalDevice(PhysicalDevices);
+	FamilyIndex = GetGraphicsQueueFamilyIndex(PhysicalDevice);
+
+	u32 QueueFamilyPropertiesCount = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &QueueFamilyPropertiesCount, nullptr);
+	std::vector<VkQueueFamilyProperties> QueueFamilyProperties(QueueFamilyPropertiesCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &QueueFamilyPropertiesCount, QueueFamilyProperties.data());
 
 	vkGetPhysicalDeviceMemoryProperties(PhysicalDevice, &MemoryProperties);
 	vkGetPhysicalDeviceProperties(PhysicalDevice, &PhysicalDeviceProperties);
@@ -195,10 +201,25 @@ vulkan_backend(window* Window)
 	DeviceQueueCreateInfo.queueCount = 1;
 	DeviceQueueCreateInfo.pQueuePriorities = QueuePriorities;
 
+	std::vector<float> QueuesPriorities(32, 1.0);
+	std::vector<VkDeviceQueueCreateInfo> DeviceQueuesCreateInfo(QueueFamilyPropertiesCount);
+	for(u32 Idx = 0; Idx < QueueFamilyPropertiesCount; ++Idx)
+	{
+		DeviceQueuesCreateInfo[Idx].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		DeviceQueuesCreateInfo[Idx].queueFamilyIndex = Idx;
+		DeviceQueuesCreateInfo[Idx].queueCount = QueueFamilyProperties[Idx].queueCount;
+		DeviceQueuesCreateInfo[Idx].pQueuePriorities = QueuesPriorities.data();
+	}
+
 	VkDeviceCreateInfo DeviceCreateInfo = {};
 	DeviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+#if 0
 	DeviceCreateInfo.queueCreateInfoCount = 1;
 	DeviceCreateInfo.pQueueCreateInfos = &DeviceQueueCreateInfo;
+#else
+	DeviceCreateInfo.queueCreateInfoCount = DeviceQueuesCreateInfo.size();
+	DeviceCreateInfo.pQueueCreateInfos = DeviceQueuesCreateInfo.data();
+#endif
 	DeviceCreateInfo.enabledLayerCount = (u32)DeviceLayers.size();
 	DeviceCreateInfo.ppEnabledLayerNames = DeviceLayers.data();
 	DeviceCreateInfo.enabledExtensionCount = (u32)DeviceExtensions.size();
@@ -409,7 +430,7 @@ VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
 // TODO: Parse for push constant sizes
 // TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
 VkShaderModule vulkan_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
+LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, image_type>>& TextureTypes, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {
 	auto FoundCompiledShader = CompiledShaders.find(Path);
 	if(FoundCompiledShader != CompiledShaders.end())
@@ -595,6 +616,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 
 				u32 Size = ~0u;
 				u32 StorageClass = Var.StorageClass;
+				image_type TextureType = image_type::Texture2D;
 				VkDescriptorType DescriptorType;
 				if(VariableType.OpCode == SpvOpTypePointer)
 				{
@@ -608,16 +630,85 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 						Size = SizeInfo.Constant;
 
 						DescriptorType = GetVkSpvDescriptorType(ArrayInfo.OpCode, StorageClass);
+
+						if (ArrayInfo.OpCode == SpvOpTypeImage)
+						{
+							switch(ArrayInfo.Dimensionality)
+							{
+								case SpvDim1D: TextureType = image_type::Texture1D; break;
+								case SpvDim2D: TextureType = image_type::Texture2D; break;
+								case SpvDim3D: TextureType = image_type::Texture3D; break;
+								case SpvDimCube: TextureType = image_type::TextureCube; break;
+							}
+						}
+						else if(ArrayInfo.OpCode == SpvOpTypeSampledImage)
+						{
+							const op_info& ImageType = ShaderInfo[ArrayInfo.TypeId[0]];
+
+							switch(ImageType.Dimensionality)
+							{
+								case SpvDim1D: TextureType = image_type::Texture1D; break;
+								case SpvDim2D: TextureType = image_type::Texture2D; break;
+								case SpvDim3D: TextureType = image_type::Texture3D; break;
+								case SpvDimCube: TextureType = image_type::TextureCube; break;
+							}
+						}
 					}
 					else if(PointerType.OpCode == SpvOpTypeRuntimeArray)
 					{
 						const op_info& ArrayInfo = ShaderInfo[PointerType.TypeId[0]];
 
 						DescriptorType = GetVkSpvDescriptorType(ArrayInfo.OpCode, StorageClass);
+
+						if (ArrayInfo.OpCode == SpvOpTypeImage)
+						{
+							switch(ArrayInfo.Dimensionality)
+							{
+								case SpvDim1D: TextureType = image_type::Texture1D; break;
+								case SpvDim2D: TextureType = image_type::Texture2D; break;
+								case SpvDim3D: TextureType = image_type::Texture3D; break;
+								case SpvDimCube: TextureType = image_type::TextureCube; break;
+							}
+						}
+						else if(ArrayInfo.OpCode == SpvOpTypeSampledImage)
+						{
+							const op_info& ImageType = ShaderInfo[ArrayInfo.TypeId[0]];
+
+							switch(ImageType.Dimensionality)
+							{
+								case SpvDim1D: TextureType = image_type::Texture1D; break;
+								case SpvDim2D: TextureType = image_type::Texture2D; break;
+								case SpvDim3D: TextureType = image_type::Texture3D; break;
+								case SpvDimCube: TextureType = image_type::TextureCube; break;
+							}
+						}
 					}
 					else
 					{
 						DescriptorType = GetVkSpvDescriptorType(PointerType.OpCode, StorageClass);
+					}
+
+					if (PointerType.OpCode == SpvOpTypeImage)
+					{
+						switch(PointerType.Dimensionality)
+						{
+							case SpvDim1D: TextureType = image_type::Texture1D; break;
+							case SpvDim2D: TextureType = image_type::Texture2D; break;
+							case SpvDim3D: TextureType = image_type::Texture3D; break;
+							case SpvDimCube: TextureType = image_type::TextureCube; break;
+						}
+					}
+					else if(PointerType.OpCode == SpvOpTypeSampledImage)
+					{
+						const op_info& ImageType = ShaderInfo[PointerType.TypeId[0]];
+
+						switch(ImageType.Dimensionality)
+						{
+							case SpvDim1D: TextureType = image_type::Texture1D; break;
+							case SpvDim2D: TextureType = image_type::Texture2D; break;
+							case SpvDim3D: TextureType = image_type::Texture3D; break;
+							case SpvDimCube: TextureType = image_type::TextureCube; break;
+						}
 					}
 				}
 				else
@@ -625,6 +716,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 					DescriptorType = GetVkSpvDescriptorType(VariableType.OpCode, StorageClass);
 				}
 
+				TextureTypes[Var.Set][Var.Binding] = TextureType;
 				VkDescriptorSetLayoutBinding& DescriptorTypeInfoUpdate = ShaderRootLayout[Var.Set][Var.Binding];
 				DescriptorTypeInfoUpdate.stageFlags |= GetVKShaderStage(ShaderType);
 				DescriptorTypeInfoUpdate.binding = Var.Binding;

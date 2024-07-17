@@ -64,9 +64,9 @@ struct directx12_buffer : public buffer
 		Fence.Flush(Gfx->CommandQueue);
 	}
 
-	void Update(void* Data, global_pipeline_context* GlobalPipeline) override 
+	void Update(void* Data, command_list* GlobalPipeline) override 
 	{
-		directx12_global_pipeline_context* PipelineContext = static_cast<directx12_global_pipeline_context*>(GlobalPipeline);
+		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
 
 		void* CpuPtr;
 		TempHandle->Map(0, nullptr, &CpuPtr);
@@ -77,9 +77,9 @@ struct directx12_buffer : public buffer
 		CurrentLayout = AF_TransferWrite;
 	}
 
-	void UpdateSize(void* Data, u32 UpdateByteSize, global_pipeline_context* GlobalPipeline) override 
+	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override 
 	{
-		directx12_global_pipeline_context* PipelineContext = static_cast<directx12_global_pipeline_context*>(GlobalPipeline);
+		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
 		assert(UpdateByteSize <= Size);
 
 		void* CpuPtr;
@@ -115,9 +115,9 @@ struct directx12_buffer : public buffer
 		TempHandle->Unmap(0, 0);
 	}
 
-	void ReadBackSize(void* Data, u32 UpdateByteSize, global_pipeline_context* GlobalPipeline) override 
+	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override 
 	{
-		directx12_global_pipeline_context* PipelineContext = static_cast<directx12_global_pipeline_context*>(GlobalPipeline);
+		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
 
 		PipelineContext->CommandList->CopyBufferRegion(TempHandle.Get(), 0, Handle.Get(), 0, UpdateByteSize);
 
@@ -328,9 +328,9 @@ struct directx12_texture : public texture
 		Fence.Flush(Gfx->CommandQueue);
 	}
 
-	void Update(void* Data, global_pipeline_context* GlobalPipeline) override 
+	void Update(void* Data, command_list* GlobalPipeline) override 
 	{
-		directx12_global_pipeline_context* PipelineContext = static_cast<directx12_global_pipeline_context*>(GlobalPipeline);
+		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
 
 		D3D12_SUBRESOURCE_FOOTPRINT SubresourceDesc = {};
 		SubresourceDesc.Format   = GetDXFormat(Info.Format);

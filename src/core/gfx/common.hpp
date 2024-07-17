@@ -1,5 +1,6 @@
 #pragma once
 
+
 enum class backend_type
 {
 	vulkan,
@@ -16,6 +17,13 @@ enum class shader_stage
 	tessellation_control,
 	tessellation_eval,
 	all,
+};
+
+enum class pass_type
+{
+	graphics,
+	compute,
+	transfer,
 };
 
 enum class preferred_gpu_type
@@ -331,6 +339,14 @@ enum class barrier_state
 	present,
 	transfer_src,
 	transfer_dst,
+};
+
+enum class resource_type
+{
+	buffer,
+	buffer_with_counter,
+	texture_storage,
+	texture_sampler,
 };
 
 enum resource_flags
@@ -824,6 +840,7 @@ struct op_info
 	u32 Constant;
 
 	u32 Width;
+	u32 Dimensionality;
 
 	bool IsDescriptor;
 	bool IsPushConstant;
@@ -981,8 +998,10 @@ void ParseSpirv(const std::vector<u32>& Binary, std::vector<op_info>& Info, std:
 			{
 				    ResultId = Binary[Offset + 1];
 				u32 TypeId   = Binary[Offset + 2];
+				u32 Dimens   = Binary[Offset + 3];
 				Info[ResultId].OpCode = OpCode;
 				Info[ResultId].TypeId.push_back(TypeId);
+				Info[ResultId].Dimensionality = Dimens;
 			} break;
 			case SpvOpTypePointer:
 			{

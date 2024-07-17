@@ -1,11 +1,22 @@
 #pragma once
 
+struct shader_pass
+{
+	std::string Name;
+	pass_type Type;
+	void* Parameters;
+	bool HaveStaticStorage;
+};
 
+// TODO: Use linear allocator for memory here instead of allocating every frame
 // TODO: Make graph builder from this for render graph
 class global_graphics_context
 {
 	global_graphics_context(const global_graphics_context&) = delete;
 	global_graphics_context& operator=(const global_graphics_context&) = delete;
+
+	using setup_func = std::function<void()>;
+	using execute_func = std::function<void(global_graphics_context&, command_list*, void*)>;
 
 public:
 	global_graphics_context() = default;
@@ -25,13 +36,45 @@ public:
 	}
 
 	texture* PushTexture(std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
-	{
-		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Width, Height, Depth, InputData);
+	{ return Backend->GlobalHeap->PushTexture(Backend, DebugName, Width, Height, Depth, InputData);
 	}
 
 	texture* PushTexture(std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
 		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Data, Width, Height, Depth, InputData);
+	}
+
+	texture_ref UseTexture(texture* Texture)
+	{
+		texture_ref NewRef;
+		NewRef.SubresourceIndex = TEXTURE_MIPS_ALL;
+		NewRef.Handle = Texture;
+		return NewRef;
+	}
+
+	texture_ref UseTextureMip(texture* Texture, u32 Idx)
+	{
+		texture_ref NewRef;
+		NewRef.SubresourceIndex = Idx;
+		NewRef.Handle = Texture;
+		return NewRef;
+	}
+
+	resource_binder* CreateResourceBinder()
+	{
+		switch(BackendType)
+		{
+			case backend_type::vulkan:
+				return new vulkan_resource_binder(Backend);
+#if 0
+#if _WIN32
+			case backend_type::directx12:
+				return new directx12_resource_binder(Backend);
+#endif
+#endif
+			default:
+				return nullptr;
+		}
 	}
 
 	memory_heap* CreateMemoryHeap()
@@ -40,40 +83,87 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_memory_heap(Backend);
+#if 0
 #if _WIN32
 			case backend_type::directx12:
 				return new directx12_memory_heap(Backend);
 #endif
-			default:
-				return nullptr;
-		}
-	}
-
-	global_pipeline_context* CreateGlobalPipelineContext()
-	{
-		switch(BackendType)
-		{
-			case backend_type::vulkan:
-				return new vulkan_global_pipeline_context(Backend);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_global_pipeline_context(Backend);
 #endif
 			default:
 				return nullptr;
 		}
 	}
 
-	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::initializer_list<const std::string> ShaderList, const std::vector<texture*>& ColorTargets, 
+	command_list* CreateGlobalPipelineContext()
+	{
+		switch(BackendType)
+		{
+			case backend_type::vulkan:
+				return new vulkan_command_list(Backend);
+#if 0
+#if _WIN32
+			case backend_type::directx12:
+				return new directx12_command_list(Backend);
+#endif
+#endif
+			default:
+				return nullptr;
+		}
+	}
+
+	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList, const std::vector<texture*>& ColorTargets, 
+										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
+	{
+		std::vector<image_format> ColorTargetFormats;
+		for(u32 FormatIdx = 0; FormatIdx < ColorTargets.size(); ++FormatIdx)
+		{
+			ColorTargetFormats.push_back(ColorTargets[FormatIdx]->Info.Format);
+		}
+		switch(BackendType)
+		{
+			case backend_type::vulkan:
+				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargetFormats, InputData, ShaderDefines);
+#if 0
+#if _WIN32
+			case backend_type::directx12:
+				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargetFormats, InputData, ShaderDefines);
+#endif
+#endif
+			default:
+				return nullptr;
+		}
+	}
+
+	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList, const std::vector<image_format>& ColorTargets, 
 										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
 	{
 		switch(BackendType)
 		{
 			case backend_type::vulkan:
 				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
+#if 0
 #if _WIN32
 			case backend_type::directx12:
 				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
+#endif
+#endif
+			default:
+				return nullptr;
+		}
+	}
+
+	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList,
+										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
+	{
+		switch(BackendType)
+		{
+			case backend_type::vulkan:
+				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, {}, InputData, ShaderDefines);
+#if 0
+#if _WIN32
+			case backend_type::directx12:
+				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, {}, InputData, ShaderDefines);
+#endif
 #endif
 			default:
 				return nullptr;
@@ -86,19 +176,51 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_compute_context(Backend, Shader, ShaderDefines);
+#if 0
 #if _WIN32
 			case backend_type::directx12:
 				return new directx12_compute_context(Backend, Shader, ShaderDefines);
+#endif
 #endif
 			default:
 				return nullptr;
 		}
 	}
 
+	template<typename context_type>
+	void SetGraphicsContext(command_list* Context);
+
+	template<template<u32> typename context_type, u32 FaceIdx>
+	void SetGraphicsContext(command_list* Context);
+
+	template<typename context_type>
+	void SetComputeContext(command_list* Context);
+
+	template<typename context_type, typename param_type>
+	shader_pass* AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec);
+
+	shader_pass* AddTransferPass(std::string Name, execute_func Exec);
+
+	void Compile();
+	void Execute();
+
 	renderer_backend* Backend;
 	backend_type BackendType;
 
-	std::vector<texture*> SwapchainImages;
+	std::unordered_map<std::type_index, std::unique_ptr<general_context>> ContextMap;
+	std::unordered_map<std::type_index, std::unique_ptr<shader_view_context>> GeneralShaderViewMap;
+	
+	std::unordered_map<shader_pass*, execute_func> Dispatches;
+	std::unordered_map<shader_pass*, std::type_index> PassToContext;
+
+	std::vector<std::unique_ptr<shader_pass>> Passes;
+
+	general_context* CurrentContext = nullptr;
+
+	command_list* ExecutionContext;
+
+	//////////////////////////////////////////////////////
+	u32 BackBufferIndex = 0;
 
 	texture* GfxColorTarget[2];
 	texture* GfxDepthTarget;
@@ -120,27 +242,4 @@ public:
 
 	buffer* PoissonDiskBuffer;
 	buffer* RandomSamplesBuffer;
-
-	std::vector<render_context*>  CubeMapShadowContexts;
-	compute_context* DepthReduceContext;
-
-	render_context* GfxContext;
-	render_context* VoxelizationContext;
-	render_context* CascadeShadowContext;
-	render_context* ShadowContext;
-	render_context* DebugCameraViewContext;
-	render_context* DebugContext;
-
-	compute_context* BloomDownScaleContext;
-	compute_context* BloomUpScaleContext;
-	compute_context* BloomCombineContext;
-
-	compute_context* ColorPassContext;
-	compute_context* AmbientOcclusionContext;
-	compute_context* ShadowComputeContext;
-	compute_context* FrustCullingContext;
-	compute_context* OcclCullingContext;
-	compute_context* BlurContextV;
-	compute_context* BlurContextH;
-	compute_context* DebugComputeContext;
 };

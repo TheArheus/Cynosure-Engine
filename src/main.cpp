@@ -41,10 +41,9 @@
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
 	window Window(1280, 720, "3D Renderer");
-	//Window.InitVulkanGraphics();
-	Window.InitDirectx12Graphics();
+	Window.InitVulkanGraphics();
+	//Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
-	global_pipeline_context* PipelineContext = Window.Gfx.CreateGlobalPipelineContext();
 
 	u32 GlobalMemorySize = MiB(128);
 	void* MemoryBlock = malloc(GlobalMemorySize);
@@ -73,25 +72,21 @@
 
 		alloc_vector<light_source> GlobalLightSources(LightSourcesAlloc);
 
-		Window.NewFrame();
+		//Window.NewFrame();
 		Window.EventsDispatcher.Reset();
 
 		SceneManager.UpdateScenes();
 		if(!SceneManager.IsCurrentSceneInitialized()) continue;
 
-		if(!Window.IsGfxPaused)
-		{
-			PipelineContext->AcquireNextImage();
-		}
-
 		SceneManager.StartScene(Window);
-		SceneManager.UpdateScene(Window, PipelineContext, GlobalLightSources);
+		SceneManager.UpdateScene(Window, GlobalLightSources);
 
 		auto Result = Window.ProcessMessages();
 		if(Result) return *Result;
 
 		if(!Window.IsGfxPaused)
 		{
+#if 0
 			PipelineContext->Begin();
 
 			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
@@ -124,6 +119,12 @@
 
 			PipelineContext->EmplaceColorTarget(Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
 			PipelineContext->Present();
+#else
+			SceneManager.RenderScene(Window, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
+
+			Window.Gfx.Compile();
+			Window.Gfx.Execute();
+#endif
 		}
 
 		Window.EmitEvents();

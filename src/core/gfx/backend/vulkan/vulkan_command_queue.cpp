@@ -33,21 +33,21 @@ DestroyObject()
 	}
 }
 
-VkCommandBuffer* vulkan_command_queue::
+VkCommandBuffer vulkan_command_queue::
 AllocateCommandList()
 {
-	VkCommandBuffer* Result = new VkCommandBuffer;
+	VkCommandBuffer Result;
 
 	VkCommandBufferAllocateInfo CommandBufferAllocateInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
 	CommandBufferAllocateInfo.commandBufferCount = 1;
 	CommandBufferAllocateInfo.commandPool = CommandAlloc;
 	CommandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	vkAllocateCommandBuffers(Device, &CommandBufferAllocateInfo, Result);
+	vkAllocateCommandBuffers(Device, &CommandBufferAllocateInfo, &Result);
 	CommandLists.push_back(Result);
 
 	VkCommandBufferBeginInfo CommandBufferBeginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 	CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	vkBeginCommandBuffer(*Result, &CommandBufferBeginInfo);
+	vkBeginCommandBuffer(Result, &CommandBufferBeginInfo);
 
 	return Result;
 }
@@ -55,7 +55,7 @@ AllocateCommandList()
 void vulkan_command_queue::
 Reset()
 {
-	vkResetCommandPool(Device, CommandAlloc, 0);
+	vkResetCommandPool(Device, CommandAlloc, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 }
 
 void vulkan_command_queue::
@@ -72,17 +72,14 @@ Reset(VkCommandBuffer* CommandList)
 void vulkan_command_queue::
 Execute()
 {
-	for(VkCommandBuffer* CommandList : CommandLists)
+	for(VkCommandBuffer CommandList : CommandLists)
 	{
-		VK_CHECK(vkEndCommandBuffer(*CommandList));
+		VK_CHECK(vkEndCommandBuffer(CommandList));
 	}
 
-	std::vector<VkCommandBuffer> SubmitCommandLists;
-	std::transform(CommandLists.begin(), CommandLists.end(), SubmitCommandLists.begin(), [](VkCommandBuffer* CommandList){return *CommandList;});
-
 	VkSubmitInfo SubmitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
-	SubmitInfo.commandBufferCount = SubmitCommandLists.size();
-	SubmitInfo.pCommandBuffers = SubmitCommandLists.data();
+	SubmitInfo.commandBufferCount = CommandLists.size();
+	SubmitInfo.pCommandBuffers = CommandLists.data();
 	VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
 	vkQueueWaitIdle(Handle);
 }
@@ -90,19 +87,16 @@ Execute()
 void vulkan_command_queue::
 Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
 {
-	for(VkCommandBuffer* CommandList : CommandLists)
+	for(VkCommandBuffer CommandList : CommandLists)
 	{
-		vkEndCommandBuffer(*CommandList);
+		vkEndCommandBuffer(CommandList);
 	}
-
-	std::vector<VkCommandBuffer> SubmitCommandLists;
-	std::transform(CommandLists.begin(), CommandLists.end(), SubmitCommandLists.begin(), [](VkCommandBuffer* CommandList){return *CommandList;});
 
 	VkPipelineStageFlags SubmitStageFlag = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	VkSubmitInfo SubmitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
 	SubmitInfo.pWaitDstStageMask = &SubmitStageFlag;
-	SubmitInfo.commandBufferCount = SubmitCommandLists.size();
-	SubmitInfo.pCommandBuffers = SubmitCommandLists.data();
+	SubmitInfo.commandBufferCount = CommandLists.size();
+	SubmitInfo.pCommandBuffers = CommandLists.data();
 	SubmitInfo.waitSemaphoreCount = 1;
 	SubmitInfo.pWaitSemaphores = AcquireSemaphore;
 	SubmitInfo.signalSemaphoreCount = 1;
@@ -145,14 +139,12 @@ void vulkan_command_queue::
 ExecuteAndRemove(VkCommandBuffer* CommandList)
 {
 	Execute(CommandList);
-	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), CommandList), CommandLists.end());
-	delete CommandList;
+	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
 }
 
 void vulkan_command_queue::
 ExecuteAndRemove(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
 {
 	Execute(CommandList, ReleaseSemaphore, AcquireSemaphore);
-	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), CommandList), CommandLists.end());
-	delete CommandList;
+	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
 }

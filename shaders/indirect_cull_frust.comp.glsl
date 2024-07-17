@@ -7,30 +7,6 @@
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 
-struct global_world_data
-{
-	mat4  View;
-	mat4  DebugView;
-	mat4  Proj;
-	mat4  LightView[DEPTH_CASCADES_COUNT];
-	mat4  LightProj[DEPTH_CASCADES_COUNT];
-	vec4  CameraPos;
-	vec4  CameraDir;
-	vec4  GlobalLightPos;
-	vec4  SceneScale;
-	vec4  SceneCenter;
-	float GlobalLightSize;
-	uint  PointLightSourceCount;
-	uint  SpotLightSourceCount;
-	float CascadeSplits[DEPTH_CASCADES_COUNT + 1];
-	float ScreenWidth;
-	float ScreenHeight;
-	float NearZ;
-	float FarZ;
-	bool  DebugColors;
-	bool  LightSourceShadowsEnabled;
-};
-
 struct sphere
 {
 	vec4  Center;
@@ -96,14 +72,13 @@ struct indirect_draw_indexed_command
     uint FirstInstance;
 };
 
-layout(binding = 0) buffer b0 { global_world_data WorldUpdate; };
-layout(binding = 1) buffer readonly b1 { mesh_comp_culling_common_input MeshCullingCommonInput; };
-layout(binding = 2) buffer b2 { offset MeshOffsets[]; };
-layout(binding = 3) buffer readonly b3 { mesh_draw_command MeshDrawCommandData[]; };
-layout(binding = 4) buffer readonly b4 { bool MeshDrawVisibilityData[]; };
-layout(binding = 5) buffer b5 { indirect_draw_indexed_command IndirectDrawIndexedCommands[]; };
-layout(binding = 6) buffer c0 { uint IndirectDrawIndexedCommandsCounter; };
-layout(binding = 7) buffer b6 { mesh_draw_command MeshDrawCommands[]; };
+layout(binding = 0) buffer readonly b1 { mesh_comp_culling_common_input MeshCullingCommonInput; };
+layout(binding = 1) buffer readonly b2 { offset MeshOffsets[]; };
+layout(binding = 2) buffer readonly b3 { mesh_draw_command MeshDrawCommandData[]; };
+layout(binding = 3) buffer readonly b4 { bool MeshDrawVisibilityData[]; };
+layout(binding = 4) buffer b5 { indirect_draw_indexed_command IndirectDrawIndexedCommands[]; };
+layout(binding = 5) buffer c0 { uint IndirectDrawIndexedCommandsCounter; };
+layout(binding = 6) buffer b6 { mesh_draw_command MeshDrawCommands[]; };
 
 layout(push_constant) uniform pushConstant { uint DrawCount; uint MeshCount; };
 

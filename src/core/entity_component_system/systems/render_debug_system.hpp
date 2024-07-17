@@ -100,12 +100,8 @@ struct render_debug_system : public entity_system
 		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer("MeshCommonCullingInputBuffer", sizeof(mesh_comp_culling_common_input), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 	}
 
-	void UpdateResources(window& Window, alloc_vector<light_source>& GlobalLightSources, global_world_data& WorldUpdate, u32 BackBufferIndex)
-	{
-	}
-
-	void Render(window& Window, global_pipeline_context* PipelineContext, 
-				global_world_data& WorldData, mesh_comp_culling_common_input& MeshCommonCullingInput,
+	void Render(global_graphics_context& Gfx, command_list* PipelineContext, 
+				global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCommonCullingInput,
 				alloc_vector<mesh_draw_command>& DynamicMeshInstances, alloc_vector<u32>& DynamicMeshVisibility)
 	{
 		if (!Geometries.MeshCount) return;
@@ -136,65 +132,60 @@ struct render_debug_system : public entity_system
 #endif
 
 		{
-			PipelineContext->SetBufferBarriers({
-												{WorldUpdateBuffer, AF_TransferWrite},
-												{MeshCommonCullingInputBuffer, AF_TransferWrite},
-											  }, PSF_TopOfPipe, PSF_Transfer);
+#if 0
+			WorldUpdateBuffer->UpdateSize(Gfx.Backend, &WorldUpdate, sizeof(global_world_data));
+			MeshCommonCullingInputBuffer->UpdateSize(Gfx.Backend, &MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input));
 
-			WorldUpdateBuffer->UpdateSize(&WorldData, sizeof(global_world_data), PipelineContext);
-			MeshCommonCullingInputBuffer->UpdateSize(&MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), PipelineContext);
+#else
+			Gfx.AddTransferPass("Data upload",
+			[this, &WorldUpdate, &MeshCommonCullingInput](global_graphics_context& Gfx, command_list* Cmd, void* Parameters)
+			{
+				WorldUpdateBuffer->UpdateSize(&WorldUpdate, sizeof(global_world_data), Cmd);
+				MeshCommonCullingInputBuffer->UpdateSize(&MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), Cmd);
+			});
+#endif
 		}
-
 		{
+			shader_parameter<generate_all> Parameters;
+			Parameters.Input.MeshCommonCullingInputBuffer = MeshCommonCullingInputBuffer;
+			Parameters.Input.GeometryOffsets = GeometryDebugOffsets;
+			Parameters.Input.MeshDrawCommandDataBuffer = DebugMeshDrawCommandDataBuffer;
+			Parameters.Input.MeshDrawVisibilityDataBuffer = DebugMeshDrawVisibilityDataBuffer;
+			Parameters.Output.IndirectDrawIndexedCommands = DebugIndirectDrawIndexedCommands;
+			Parameters.Output.MeshDrawCommandBuffer = MeshDrawDebugCommandBuffer;
+
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DebugDrawCount, MeshCommonCullingInput.DebugMeshCount};
-
-			PipelineContext->SetBufferBarrier({DebugIndirectDrawIndexedCommands, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
-			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_UniformRead}, PSF_Transfer, PSF_Compute);
-			PipelineContext->SetBufferBarrier({DebugMeshDrawVisibilityDataBuffer, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
-			PipelineContext->SetBufferBarrier({DebugMeshDrawCommandDataBuffer, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
-			PipelineContext->SetBufferBarrier({MeshDrawDebugCommandBuffer, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
-			PipelineContext->SetBufferBarrier({GeometryDebugOffsets, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
-
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(GeometryDebugOffsets);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugMeshDrawCommandDataBuffer);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugMeshDrawVisibilityDataBuffer);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(DebugIndirectDrawIndexedCommands);
-			Window.Gfx.DebugComputeContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
-
-			Window.Gfx.DebugComputeContext->Begin(PipelineContext);
-			Window.Gfx.DebugComputeContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
-			Window.Gfx.DebugComputeContext->Execute(StaticMeshInstances.size());
-			Window.Gfx.DebugComputeContext->End();
-			Window.Gfx.DebugComputeContext->Clear();
+			Gfx.AddPass<generate_all>("Command generation for debug meshes", Parameters, pass_type::compute,
+			[this, Input](global_graphics_context& Gfx, command_list* Cmd, void* Parameters)
+			{
+				Gfx.SetComputeContext<generate_all>(Cmd);
+				Cmd->BindShaderParameters(Parameters);
+				Cmd->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
+				Cmd->Dispatch(StaticMeshInstances.size());
+			});
 		}
-
 		{
-			u32 DstStageMask = PSF_ColorAttachment | PSF_EarlyFragment | PSF_LateFragment;
+			shader_parameter<debug_raster> Parameters;
+			Parameters.Input.WorldUpdateBuffer = WorldUpdateBuffer;
+			Parameters.Input.VertexBuffer = DebugVertexBuffer;
+			Parameters.Input.MeshDrawCommandBuffer = MeshDrawDebugCommandBuffer;
+			Parameters.Input.MeshMaterialsBuffer = MeshDebugMaterialsBuffer;
+			Parameters.Input.GeometryOffsets = GeometryDebugOffsets;
 
-			PipelineContext->SetImageBarriers({{Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex], AF_ColorAttachmentWrite, barrier_state::color_attachment, ~0u},
-											  {Window.Gfx.GfxDepthTarget, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, ~0u}}, 
-											 PSF_Compute, DstStageMask);
+			Gfx.AddPass<debug_raster>("Debug raster", Parameters, pass_type::graphics, 
+			[this, GfxColorTarget = Gfx.GfxColorTarget, GfxDepthTarget = Gfx.GfxDepthTarget](global_graphics_context& Gfx, command_list* Cmd, void* Parameters)
+			{
+				Gfx.SetGraphicsContext<debug_raster>(Cmd);
 
-			PipelineContext->SetBufferBarrier({WorldUpdateBuffer, AF_UniformRead}, PSF_Transfer, PSF_VertexShader|PSF_FragmentShader);
-			PipelineContext->SetBufferBarrier({DebugVertexBuffer, AF_ShaderRead}, PSF_TopOfPipe, PSF_VertexShader);
-			PipelineContext->SetBufferBarrier({GeometryDebugOffsets, AF_ShaderRead}, PSF_Compute, PSF_VertexShader);
-			PipelineContext->SetBufferBarrier({MeshDrawDebugCommandBuffer, AF_ShaderRead}, PSF_Compute, PSF_VertexShader);
-			PipelineContext->SetBufferBarrier({DebugIndirectDrawIndexedCommands, AF_IndirectCommandRead}, PSF_Compute, PSF_DrawIndirect);
-			PipelineContext->SetBufferBarrier({MeshDebugMaterialsBuffer, AF_ShaderRead}, PSF_TopOfPipe, PSF_VertexShader|PSF_FragmentShader);
+				Cmd->BindShaderParameters(Parameters);
 
-			Window.Gfx.DebugContext->SetStorageBufferView(WorldUpdateBuffer);
-			Window.Gfx.DebugContext->SetStorageBufferView(DebugVertexBuffer);
-			Window.Gfx.DebugContext->SetStorageBufferView(MeshDrawDebugCommandBuffer);
-			Window.Gfx.DebugContext->SetStorageBufferView(MeshDebugMaterialsBuffer);
-			Window.Gfx.DebugContext->SetStorageBufferView(GeometryDebugOffsets);
+				Cmd->SetViewport(0, 0, GfxColorTarget[Gfx.BackBufferIndex]->Width, GfxColorTarget[Gfx.BackBufferIndex]->Height);
+				Cmd->SetColorTarget({GfxColorTarget[Gfx.BackBufferIndex]});
+				Cmd->SetDepthTarget(GfxDepthTarget);
 
-			Window.Gfx.DebugContext->Begin(PipelineContext, Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
-			Window.Gfx.DebugContext->SetColorTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, {Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]}, {0, 0, 0, 1});
-			Window.Gfx.DebugContext->SetDepthTarget(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Window.Gfx.GfxDepthTarget, {1, 0});
-			Window.Gfx.DebugContext->DrawIndirect(Geometries.MeshCount, DebugIndexBuffer, DebugIndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command));
-			Window.Gfx.DebugContext->End();
-			Window.Gfx.DebugContext->Clear();
+				Cmd->SetIndexBuffer(DebugIndexBuffer);
+				Cmd->DrawIndirect(DebugIndirectDrawIndexedCommands, Geometries.MeshCount, sizeof(indirect_draw_indexed_command));
+			});
 		}
 	}
 };

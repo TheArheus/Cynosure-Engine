@@ -1,5 +1,334 @@
 #pragma once
 
+// NOTE: https://godbolt.org/z/brdzsc8qT
+template <typename T>
+concept aggregate = std::is_aggregate_v<T>;
+
+template <typename T, typename... Args>
+concept aggregate_initializable = aggregate<T> 
+    && requires { T{std::declval<Args>()...}; };
+
+namespace detail
+{
+    struct any
+    { 
+        template <typename T> constexpr operator T&() const noexcept;
+        template <typename T> constexpr operator T&&() const noexcept;
+    };
+}
+
+namespace detail
+{
+    template <std::size_t I>
+    using indexed_any = any;
+
+    template <aggregate T, typename Indices>
+    struct aggregate_initializable_from_indices;
+
+    template <aggregate T, std::size_t... Indices>
+    struct aggregate_initializable_from_indices<T, std::index_sequence<Indices...>>
+        : std::bool_constant<aggregate_initializable<T, indexed_any<Indices>...>> {};
+}
+
+template <typename T, std::size_t N>
+concept aggregate_initializable_with_n_args = aggregate<T> &&
+    detail::aggregate_initializable_from_indices<T, std::make_index_sequence<N>>::value;
+
+template <template<std::size_t> typename Predicate, std::size_t Beg, std::size_t End>
+struct binary_search;
+
+template <template<std::size_t> typename Predicate, std::size_t Beg, std::size_t End>
+using binary_search_base = 
+    std::conditional_t<(End - Beg <= 1), std::integral_constant<std::size_t, Beg>,
+        std::conditional_t<Predicate<(Beg + End) / 2>::value,
+            binary_search<Predicate, (Beg + End) / 2, End>,
+            binary_search<Predicate, Beg, (Beg + End) / 2>>>;
+
+template <template<std::size_t> typename Predicate, std::size_t Beg, std::size_t End>
+struct binary_search : binary_search_base<Predicate, Beg, End> {};
+
+template <template<std::size_t> typename Predicate, std::size_t Beg, std::size_t End>
+constexpr std::size_t binary_search_v = binary_search<Predicate, Beg, End>::value;
+
+template <template<std::size_t> typename Predicate, std::size_t N>
+struct forward_search : std::conditional_t<Predicate<N>::value,
+    std::integral_constant<std::size_t, N>,
+    forward_search<Predicate, N+1>> {};
+
+template <template<std::size_t> typename Predicate, std::size_t N>
+struct backward_search : std::conditional_t<Predicate<N>::value,
+    std::integral_constant<std::size_t, N>,
+    backward_search<Predicate, N-1>> {};
+
+template <template<std::size_t> typename Predicate>
+struct backward_search<Predicate, (std::size_t)-1> {};
+
+namespace detail
+{
+    template <typename T> requires std::is_aggregate_v<T>
+    struct aggregate_inquiry
+    {
+        template <std::size_t N>
+        struct initializable : std::bool_constant<aggregate_initializable_with_n_args<T, N>> {};
+    };
+
+    template <aggregate T>
+    struct minimum_initialization : forward_search<
+        detail::aggregate_inquiry<T>::template initializable, 0> {};
+
+    template <aggregate T>
+    constexpr auto minimum_initialization_v = minimum_initialization<T>::value;
+}
+
+template <aggregate T>
+struct num_aggregate_fields : binary_search<
+    detail::aggregate_inquiry<T>::template initializable,
+    detail::minimum_initialization_v<T>, 8 * sizeof(T) + 1> {};
+
+template <aggregate T>
+constexpr std::size_t num_aggregate_fields_v = num_aggregate_fields<T>::value;
+
+namespace detail
+{
+    template <aggregate T, typename Indices, typename FieldIndices>
+    struct aggregate_with_indices_initializable_with;
+
+    template <aggregate T, std::size_t... Indices, std::size_t... FieldIndices>
+    struct aggregate_with_indices_initializable_with<T, 
+        std::index_sequence<Indices...>, std::index_sequence<FieldIndices...>>
+        : std::bool_constant<requires
+        { 
+            T{std::declval<indexed_any<Indices>>()...,
+                {std::declval<indexed_any<FieldIndices>>()...}};
+        }> {};
+}
+
+template <typename T, std::size_t N, std::size_t M>
+concept aggregate_field_n_initializable_with_m_args = aggregate<T> &&
+    detail::aggregate_with_indices_initializable_with<T,
+        std::make_index_sequence<N>,
+        std::make_index_sequence<M>>::value;
+
+namespace detail
+{
+    template <aggregate T, std::size_t N>
+    struct aggregate_field_inquiry1
+    {
+        template <std::size_t M>
+        struct initializable : std::bool_constant<
+            aggregate_field_n_initializable_with_m_args<T, N, M>> {};
+    };
+}
+
+template <aggregate T, std::size_t N>
+struct num_fields_on_aggregate_field1 : binary_search<
+    detail::aggregate_field_inquiry1<T, N>::template initializable,
+    0, 8 * sizeof(T) + 1> {};
+
+template <aggregate T, std::size_t N>
+constexpr std::size_t num_fields_on_aggregate_field1_v
+    = num_fields_on_aggregate_field1<T, N>::value;
+
+namespace detail
+{
+    template <aggregate T, typename Indices, typename AfterIndices>
+    struct aggregate_with_indices_initializable_after;
+
+    template <aggregate T, std::size_t... Indices, std::size_t... AfterIndices>
+    struct aggregate_with_indices_initializable_after<T, 
+        std::index_sequence<Indices...>, std::index_sequence<AfterIndices...>>
+        : std::bool_constant<requires
+        { 
+            T{std::declval<indexed_any<Indices>>()..., {std::declval<any>()},
+                std::declval<indexed_any<AfterIndices>>()...};
+        }> {};
+}
+
+template <typename T, std::size_t N, std::size_t K>
+concept aggregate_initializable_after_n_with_k_args = aggregate<T> &&
+    detail::aggregate_with_indices_initializable_after<T,
+        std::make_index_sequence<N>,
+        std::make_index_sequence<K>>::value;
+
+namespace detail
+{
+    template <aggregate T, std::size_t N>
+    struct aggregate_field_inquiry2
+    {
+        template <std::size_t K>
+        struct initializable : std::bool_constant<
+            aggregate_initializable_after_n_with_k_args<T, N, K>> {};
+        
+        template <std::size_t K>
+        struct not_initializable_m1 : std::negation<initializable<K-1>> {};
+    };
+
+    template <aggregate T, std::size_t N>
+    struct le_max_init_after_n : backward_search<
+        aggregate_field_inquiry2<T, N>::template initializable,
+        minimum_initialization_v<T>> {};
+
+    template <aggregate T, std::size_t N>
+    constexpr std::size_t le_max_init_after_n_v
+        = le_max_init_after_n<T, N>::value;
+
+    template <aggregate T, std::size_t N>
+    struct min_init_after_n : binary_search<
+        aggregate_field_inquiry2<T, N>::template not_initializable_m1,
+        1, 1 + le_max_init_after_n_v<T, N>> {};
+
+    template <aggregate T, std::size_t N>
+    constexpr std::size_t min_init_after_n_v = min_init_after_n<T, N>::value;
+
+    template <typename T, std::size_t N>
+    concept aggregate_field_n_init = aggregate<T> &&
+        requires { le_max_init_after_n<T, N>::value; };
+
+    template <aggregate T, std::size_t N, bool Initializable>
+    struct num_fields
+        : std::integral_constant<std::size_t, 1> {};
+
+    template <aggregate T, std::size_t N>
+    struct num_fields<T, N, true>
+        : std::integral_constant<std::size_t, std::max(
+            detail::minimum_initialization_v<T> - N
+            - detail::min_init_after_n_v<T, N>,
+            std::size_t(1))> {};
+}
+
+template <aggregate T, std::size_t N>
+struct num_fields_on_aggregate_field2 :
+    detail::num_fields<T, N,
+        detail::aggregate_field_n_init<T, N>> {};
+
+template <aggregate T, std::size_t N>
+constexpr std::size_t num_fields_on_aggregate_field2_v
+    = num_fields_on_aggregate_field2<T, N>::value;
+
+template <aggregate T, std::size_t N>
+struct num_fields_on_aggregate_field : std::conditional_t<
+    (N >= detail::minimum_initialization_v<T>),
+    num_fields_on_aggregate_field1<T, N>,
+    num_fields_on_aggregate_field2<T, N>> {};
+
+template <aggregate T, std::size_t N>
+constexpr std::size_t num_fields_on_aggregate_field_v
+    = num_fields_on_aggregate_field<T, N>::value;
+
+namespace detail
+{
+    template <std::size_t Val, std::size_t TotalFields>
+    constexpr auto detect_special_type =
+        Val > TotalFields ? 1 : Val;
+
+    template <aggregate T, std::size_t CurField,
+        std::size_t TotalFields, std::size_t CountUniqueFields>
+    struct unique_field_counter : unique_field_counter<T,
+        CurField + detect_special_type<
+            num_fields_on_aggregate_field_v<T, CurField>, TotalFields>,
+        TotalFields, CountUniqueFields + 1> {};
+
+    template <aggregate T, std::size_t Fields, std::size_t UniqueFields>
+    struct unique_field_counter<T, Fields, Fields, UniqueFields>
+        : std::integral_constant<std::size_t, UniqueFields> {};
+}
+
+template <aggregate T>
+struct num_aggregate_unique_fields
+    : detail::unique_field_counter<T, 0, num_aggregate_fields_v<T>, 0> {};
+
+template <aggregate T>
+constexpr std::size_t num_aggregate_unique_fields_v
+    = num_aggregate_unique_fields<T>::value;
+
+//////////////////////////////////////////////////////////////////////////////////////
+
+#pragma pack(push)
+#pragma pack(1)
+
+template<typename, typename = std::void_t<>>
+struct has_output_type : std::false_type {};
+
+template<typename T>
+struct has_output_type<T, std::void_t<typename T::output_type>> : std::true_type {};
+
+template<typename, typename = std::void_t<>>
+struct has_static_storage_type : std::false_type {};
+
+template<typename T>
+struct has_static_storage_type<T, std::void_t<typename T::static_storage_type>> : std::true_type {};
+
+template<typename T, bool HasOutput, bool HasStaticStorage>
+struct shader_pass_parameter_type {};
+
+// TODO: Somehow I need to know subresource index(for mips or etc.), so that when I bind a texture, I would know the actual mip to use(for example, when I will do depth reduce of the depth texture to generate mip chain)
+// TODO: Maybe I should use some kind of a reference to an actual resource
+template<typename T>
+struct shader_pass_parameter_type<T, false, false>
+{
+    u32 InputCount = num_aggregate_fields_v<typename T::input_type>;
+	size_t InputSize = sizeof(typename T::input_type);
+
+	bool HaveOutput = false;
+	bool HaveStaticStorage = false;
+
+	typename T::input_type Input;
+};
+
+template<typename T>
+struct shader_pass_parameter_type<T, true, false>
+{
+    u32 InputCount = num_aggregate_fields_v<typename T::input_type>;
+	size_t InputSize = sizeof(typename T::input_type);
+
+	bool HaveOutput = true;
+    u32 OutputCount = num_aggregate_fields_v<typename T::output_type>;
+	size_t OutputSize = sizeof(typename T::output_type);
+
+	bool HaveStaticStorage = false;
+
+	typename T::input_type Input;
+	typename T::output_type Output;
+};
+
+template<typename T>
+struct shader_pass_parameter_type<T, false, true>
+{
+    u32 InputCount = num_aggregate_fields_v<typename T::input_type>;
+	size_t InputSize = sizeof(typename T::input_type);
+
+	bool HaveOutput = false;
+
+	bool HaveStaticStorage = true;
+    u32 StaticStorageCount = num_aggregate_fields_v<typename T::static_storage_type>;
+
+	typename T::input_type Input;
+	typename T::static_storage_type StaticStorage;
+};
+
+template<typename T>
+struct shader_pass_parameter_type<T, true, true>
+{
+    u32 InputCount = num_aggregate_fields_v<typename T::input_type>;
+	size_t InputSize = sizeof(typename T::input_type);
+
+	bool HaveOutput = true;
+    u32 OutputCount = num_aggregate_fields_v<typename T::output_type>;
+	size_t OutputSize = sizeof(typename T::output_type);
+
+	bool HaveStaticStorage = true;
+    u32 StaticStorageCount = num_aggregate_fields_v<typename T::static_storage_type>;
+	
+	typename T::input_type Input;
+	typename T::output_type Output;
+	typename T::static_storage_type StaticStorage;
+};
+
+template<typename context_type>
+using shader_parameter = shader_pass_parameter_type<context_type, has_output_type<context_type>::value, has_static_storage_type<context_type>::value>;
+
+#pragma pack(pop)
+
 namespace utils
 {
 	namespace render_context
@@ -78,11 +407,35 @@ struct renderer_backend
 	memory_heap* GlobalHeap;
 };
 
-struct global_pipeline_context
+struct descriptor_param
 {
-	global_pipeline_context() = default;
+	resource_type Type;
+	u32 Count;
+	image_type ImageType;
+};
 
-	virtual ~global_pipeline_context() = default;
+class general_context
+{
+public:
+	general_context() = default;
+	virtual ~general_context() = default;
+
+	general_context(const general_context&) = delete;
+	general_context operator=(const general_context&) = delete;
+
+	virtual void Clear() = 0;
+
+	pass_type Type;
+	std::map<u32, std::vector<descriptor_param>> ParameterLayout;
+};
+
+class render_context;
+class compute_context;
+struct command_list
+{
+	command_list() = default;
+
+	virtual ~command_list() = default;
 	
 	virtual void DestroyObject() = 0;
 
@@ -98,60 +451,150 @@ struct global_pipeline_context
 
 	virtual void EndOneTime() = 0;
 
+	virtual void SetGraphicsPipelineState(render_context* Context) = 0;
+	virtual void SetComputePipelineState(compute_context* Context) = 0;
+
+	virtual void SetConstant(void* Data, size_t Size) = 0;
+
+	virtual void SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight) = 0;
+	virtual void SetIndexBuffer(buffer* Buffer) = 0;
+
 	virtual void EmplaceColorTarget(texture* RenderTexture) = 0;
 
 	virtual void Present() = 0;
 
+	virtual void SetColorTarget(const std::vector<texture*>& Targets, vec4 Clear = {0, 0, 0, 1}) = 0;
+	virtual void SetDepthTarget(texture* Target, vec2 Clear = {1, 0}) = 0;
+	virtual void SetStencilTarget(texture* Target, vec2 Clear = {1, 0}) = 0;
+
+	virtual void BindShaderParameters(void* Data) = 0;
+
+	virtual void DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount) = 0;
+	virtual void DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize) = 0;
+	virtual void Dispatch(u32 X = 1, u32 Y = 1, u32 Z = 1) = 0;
+
 	virtual void FillBuffer(buffer* Buffer, u32 Value) = 0;
 	virtual void FillTexture(texture* Texture, vec4 Value) = 0;
-	virtual void GenerateMips(texture* Texture) = 0;
 
 	virtual void CopyImage(texture* Dst, texture* Src) = 0;
 
 	virtual void SetMemoryBarrier(u32 SrcAccess, u32 DstAccess, 
 								  u32 SrcStageMask, u32 DstStageMask) = 0;
 
-	virtual void SetBufferBarrier(const std::tuple<buffer*, u32>& BarrierData, 
-								  u32 SrcStageMask, u32 DstStageMask) = 0;
-
-	virtual void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32>>& BarrierData, 
-								   u32 SrcStageMask, u32 DstStageMask) = 0;
-
-	virtual void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32>>& BarrierData, 
-								  u32 SrcStageMask, u32 DstStageMask) = 0;
-
-	virtual void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrier_state, u32>>& BarrierData, 
-								  u32 SrcStageMask, u32 DstStageMask) = 0;
+	virtual void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData) = 0;
+	virtual void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>>& BarrierData) = 0;
+	virtual void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrier_state, u32, u32>>& BarrierData) = 0;
 
 	virtual void DebugGuiBegin(texture* RenderTarget) = 0;
 	virtual void DebugGuiEnd()   = 0;
 
 	u32 BackBufferIndex = 0;
+
+	general_context* CurrentContext;
 };
 
-class general_context
+class command_queue
 {
 public:
-	general_context() = default;
-	virtual ~general_context() = default;
-
-	general_context(const general_context&) = delete;
-	general_context operator=(const general_context&) = delete;
-
-	virtual void SetConstant(void* Data, size_t Size) = 0;
+	command_queue() = default;
+	~command_queue() = default;
 
 	virtual void DestroyObject() = 0;
-	virtual void StaticUpdate() = 0;
 
-	// NOTE: If with counter, then it is using 2 bindings instead of 1
-	virtual void SetStorageBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
-	virtual void SetUniformBufferView(buffer* Buffer, bool UseCounter = true, u32 Set = 0) = 0;
+	virtual command_list* AllocateCommandList() = 0;
+
+#if 0
+	virtual void Reset() = 0;
+	virtual void Reset(VkCommandBuffer* CommandList) = 0;
+
+	virtual void Execute() = 0;
+	virtual void Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore) = 0;
+	virtual void Execute(VkCommandBuffer* CommandList) = 0;
+	virtual void Execute(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore) = 0;
+
+	virtual void ExecuteAndRemove(VkCommandBuffer* CommandList) = 0;
+	virtual void ExecuteAndRemove(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore) = 0;
+#endif
+};
+
+struct resource_binder
+{
+	resource_binder() = default;
+
+	virtual ~resource_binder() = default;
+
+	resource_binder(const resource_binder&) = delete;
+	resource_binder operator=(const resource_binder&) = delete;
+
+	virtual void AppendStaticStorage(general_context* Context, void* Data) = 0;
+	virtual void BindStaticStorage(renderer_backend* GeneralBackend) = 0;
+
+	virtual void SetStorageBufferView(buffer* Buffer, u32 Set = 0) = 0;
+	virtual void SetUniformBufferView(buffer* Buffer, u32 Set = 0) = 0;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	virtual void SetSampledImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetStorageImage(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetImageSampler(const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetSampledImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetStorageImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetImageSampler(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 };
+
+
+struct texture_ref
+{
+	u64 SubresourceIndex = TEXTURE_MIPS_ALL;
+	texture* Handle = nullptr;
+};
+
+struct texture_array_ref
+{
+	std::vector<texture*> Handle;
+};
+
+struct buffer_ref
+{
+	buffer* Handle = nullptr;
+};
+
+struct shader_view_context
+{
+	shader_view_context() = default;
+	virtual ~shader_view_context() = default;
+
+	std::vector<shader_define> Defines;
+
+	virtual utils::render_context::input_data SetupPipelineState() { return {}; }
+};
+
+struct shader_graphics_view_context : public shader_view_context
+{
+	shader_graphics_view_context() = default;
+	virtual ~shader_graphics_view_context() = default;
+
+	load_op  LoadOp;
+	store_op StoreOp;
+
+	std::vector<std::string> Shaders;
+
+	virtual std::vector<image_format> SetupAttachmentDescription() { return {}; }
+};
+
+struct shader_compute_view_context : public shader_view_context
+{
+	shader_compute_view_context() = default;
+	virtual ~shader_compute_view_context() = default;
+
+	std::string Shader;
+};
+
+struct transfer : public shader_view_context
+{
+};
+
+struct full_screen : public shader_graphics_view_context
+{
+};
+
+#include "general_view_functions.hpp"
 
 class render_context : public general_context
 {
@@ -161,21 +604,6 @@ public:
 
 	render_context(const render_context&) = delete;
 	render_context& operator=(const render_context&) = delete;
-
-	virtual void DestroyObject() = 0;
-
-	virtual void Begin(global_pipeline_context* GlobalPipelineContext, u32 RenderWidth, u32 RenderHeight) = 0;
-	virtual void End()   = 0;
-	virtual void Clear() = 0;
-
-	virtual void SetColorTarget(u32 RenderWidth, u32 RenderHeight, const std::vector<texture*>& ColorAttachments, vec4 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
-	virtual void SetDepthTarget(u32 RenderWidth, u32 RenderHeight, texture* DepthAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
-	virtual void SetStencilTarget(u32 RenderWidth, u32 RenderHeight, texture* StencilAttachment, vec2 Clear, u32 Face = 0, bool EnableMultiview = false) = 0;
-
-	virtual void Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount) = 0;
-
-	virtual void DrawIndexed(buffer* IndexBuffer, u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance = 0, u32 InstanceCount = 1) = 0;
-	virtual void DrawIndirect(u32 ObjectDrawCount, buffer* IndexBuffer, buffer* IndirectCommands, u32 CommandStructureSize) = 0;
 
 	utils::render_context::input_data Info;
 };
@@ -189,14 +617,6 @@ public:
 	compute_context(const compute_context&) = delete;
 	compute_context& operator=(const compute_context&) = delete;
 
-	virtual void DestroyObject() = 0;
-
-	virtual void Begin(global_pipeline_context* GlobalPipelineContext) = 0;
-	virtual void End()   = 0;
-	virtual void Clear() = 0;
-
-	virtual void Execute(u32 X = 1, u32 Y = 1, u32 Z = 1) = 0;
-
 	u32 BlockSizeX;
 	u32 BlockSizeY;
 	u32 BlockSizeZ;
@@ -209,11 +629,11 @@ struct buffer
 
 	virtual void Update(renderer_backend* Backend, void* Data) = 0;
 	virtual void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) = 0;
-	virtual void Update(void* Data, global_pipeline_context* PipelineContext) = 0;
-	virtual void UpdateSize(void* Data, u32 UpdateByteSize, global_pipeline_context* PipelineContext) = 0;
+	virtual void Update(void* Data, command_list* PipelineContext) = 0;
+	virtual void UpdateSize(void* Data, u32 UpdateByteSize, command_list* PipelineContext) = 0;
 
 	virtual void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) = 0;
-	virtual void ReadBackSize(void* Data, u32 UpdateByteSize, global_pipeline_context* PipelineContext) = 0;
+	virtual void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* PipelineContext) = 0;
 
 	virtual void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 Flags) = 0;
 	virtual void DestroyResource() = 0;
@@ -224,7 +644,7 @@ struct buffer
 	u32  CounterOffset = 0;
 	bool WithCounter   = false;
 
-	u32 PrevShader = 0;
+	u32 PrevShader = PSF_TopOfPipe;
 	u32 CurrentLayout = 0;
 };
 
@@ -234,7 +654,7 @@ struct texture
 	virtual ~texture() = default;
 
 	virtual void Update(renderer_backend* Backend, void* Data) = 0;
-	virtual void Update(void* Data, global_pipeline_context* PipelineContext) = 0;
+	virtual void Update(void* Data, command_list* PipelineContext) = 0;
 	virtual void ReadBack(renderer_backend* Backend, void* Data) = 0;
 
 	virtual void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) = 0;
@@ -250,7 +670,7 @@ struct texture
 
 	utils::texture::input_data Info;
 
-	u32 PrevShader = 0;
+	u32 PrevShader = PSF_TopOfPipe;
 	std::vector<u32> CurrentLayout;
 	std::vector<barrier_state> CurrentState;
 };

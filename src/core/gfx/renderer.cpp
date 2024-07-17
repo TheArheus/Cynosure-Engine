@@ -1,19 +1,11 @@
-
-#include "vulkan/vulkan_command_queue.cpp"
-#include "vulkan/vulkan_pipeline_context.cpp"
-#include "vulkan/vulkan_backend.cpp"
-
-#if _WIN32
-	#include "dx12/directx12_backend.cpp"
-	#include "dx12/directx12_pipeline_context.cpp"
-#endif
-
 // TODO: CLEAR THE RESOURCES!!!
 
 global_graphics_context::
 global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendType)
 	: Backend(NewBackend), BackendType(NewBackendType)
 {
+	ExecutionContext = CreateGlobalPipelineContext();
+
 	utils::texture::input_data TextureInputData = {};
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.MipLevels = 1;
@@ -38,7 +30,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Format    = image_format::R11G11B10_SFLOAT;
 	TextureInputData.MipLevels = 1;
 	HdrColorTarget = PushTexture("HdrColorTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
-	TextureInputData.MipLevels = 3;
+	TextureInputData.MipLevels = 6;
 	TextureInputData.AddressMode = sampler_address_mode::clamp_to_border;
 	BrightTarget   = PushTexture("BrightTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TempBrTarget   = PushTexture("TempBrTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
@@ -189,52 +181,6 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	GBuffer[4] = PushTexture("GBuffer_Specular", nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Specular + Light Emmission Ammount
 	AmbientOcclusionData = PushTexture("AmbientOcclusionData", Backend->Width, Backend->Height, 1, TextureInputData);
 	BlurTemp			 = PushTexture("BlurTemp", Backend->Width, Backend->Height, 1, TextureInputData);
-
-	// TODO: Better context creation API
-	utils::render_context::input_data RendererInputData = {};
-	RendererInputData.UseColor	  = true;
-	RendererInputData.UseDepth	  = true;
-	RendererInputData.CullMode    = cull_mode::back;
-	RendererInputData.UseOutline  = true;
-	GfxContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.vert.glsl", "../shaders/mesh.frag.glsl"}, GBuffer, {cull_mode::back, true, true, false, false, 0}, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}});
-	DebugContext = CreateRenderContext(load_op::load, store_op::store, {"../shaders/mesh.dbg.vert.glsl", "../shaders/mesh.dbg.frag.glsl"}, {GfxColorTarget[0]}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	DebugComputeContext = CreateComputeContext("../shaders/mesh.dbg.comp.glsl");
-
-	RendererInputData = {};
-	RendererInputData.UseConservativeRaster = true;
-	VoxelizationContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/voxel.vert.glsl", "../shaders/voxel.geom.glsl", "../shaders/voxel.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}});
-
-	RendererInputData = {};
-	RendererInputData.UseDepth = true;
-	RendererInputData.CullMode = cull_mode::front;
-	CascadeShadowContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.sdw.vert.glsl", "../shaders/mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	ShadowContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.sdw.vert.glsl", "../shaders/mesh.sdw.frag.glsl"}, {}, RendererInputData, {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-
-	RendererInputData.UseMultiview = true;
-	for(u32 CubeMapFaceIdx = 0; CubeMapFaceIdx < 6; CubeMapFaceIdx++)
-	{
-		RendererInputData.ViewMask = 1 << CubeMapFaceIdx;
-		CubeMapShadowContexts.push_back(CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.pnt.sdw.vert.glsl", "../shaders/mesh.pnt.sdw.frag.glsl"}, {}, RendererInputData));
-	}
-
-	RendererInputData.UseDepth	   = true;
-	RendererInputData.UseMultiview = false;
-	RendererInputData.ViewMask	   = 0;
-	DebugCameraViewContext = CreateRenderContext(load_op::clear, store_op::store, {"../shaders/mesh.sdw.vert.glsl", "../shaders/mesh.sdw.frag.glsl"}, {}, RendererInputData);
-
-	ColorPassContext = CreateComputeContext("../shaders/color_pass.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	AmbientOcclusionContext = CreateComputeContext("../shaders/screen_space_ambient_occlusion.comp.glsl", {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	ShadowComputeContext = CreateComputeContext("../shaders/mesh.dbg.comp.glsl");
-	FrustCullingContext  = CreateComputeContext("../shaders/indirect_cull_frust.comp.glsl", {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}});
-	OcclCullingContext   = CreateComputeContext("../shaders/indirect_cull_occl.comp.glsl");
-	BlurContextV = CreateComputeContext("../shaders/blur.comp.glsl");
-	BlurContextH = CreateComputeContext("../shaders/blur.comp.glsl");
-
-	DepthReduceContext = CreateComputeContext("../shaders/texel_reduce.comp.glsl");
-
-	BloomCombineContext = CreateComputeContext("../shaders/bloom_combine.comp.glsl");
-	BloomDownScaleContext = CreateComputeContext("../shaders/bloom_down.comp.glsl");
-	BloomUpScaleContext = CreateComputeContext("../shaders/bloom_up.comp.glsl");
 }
 
 global_graphics_context::
@@ -251,26 +197,7 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 	BlurTemp(std::move(Oth.BlurTemp)),
 	DepthPyramid(std::move(Oth.DepthPyramid)),
 	RandomAnglesTexture(std::move(Oth.RandomAnglesTexture)),
-	NoiseTexture(std::move(Oth.NoiseTexture)),
-	CubeMapShadowContexts(std::move(Oth.CubeMapShadowContexts)),
-	GfxContext(std::move(Oth.GfxContext)),
-	VoxelizationContext(std::move(Oth.VoxelizationContext)),
-	CascadeShadowContext(std::move(Oth.CascadeShadowContext)),
-	ShadowContext(std::move(Oth.ShadowContext)),
-	DebugCameraViewContext(std::move(Oth.DebugCameraViewContext)),
-	DebugContext(std::move(Oth.DebugContext)),
-	ColorPassContext(std::move(Oth.ColorPassContext)),
-	AmbientOcclusionContext(std::move(Oth.AmbientOcclusionContext)),
-	ShadowComputeContext(std::move(Oth.ShadowComputeContext)),
-	FrustCullingContext(std::move(Oth.FrustCullingContext)),
-	OcclCullingContext(std::move(Oth.OcclCullingContext)),
-	DepthReduceContext(std::move(Oth.DepthReduceContext)),
-	BlurContextV(std::move(Oth.BlurContextV)),
-	BlurContextH(std::move(Oth.BlurContextH)),
-	BloomDownScaleContext(std::move(Oth.BloomDownScaleContext)),
-	BloomUpScaleContext(std::move(Oth.BloomUpScaleContext)),
-	BloomCombineContext(std::move(Oth.BloomCombineContext)),
-	DebugComputeContext(std::move(Oth.DebugComputeContext))
+	NoiseTexture(std::move(Oth.NoiseTexture))
 {
 	GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
 	GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
@@ -278,6 +205,11 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 	HdrColorTarget = std::move(Oth.HdrColorTarget);
 	BrightTarget = std::move(Oth.BrightTarget);
 	TempBrTarget = std::move(Oth.TempBrTarget);
+
+	ExecutionContext = std::move(Oth.ExecutionContext);
+	ContextMap = std::move(Oth.ContextMap);
+	GeneralShaderViewMap = std::move(Oth.GeneralShaderViewMap);
+	Dispatches = std::move(Oth.Dispatches);
 }
 
 global_graphics_context& global_graphics_context::
@@ -304,26 +236,196 @@ operator=(global_graphics_context&& Oth) noexcept
 		DepthPyramid = std::move(Oth.DepthPyramid);
 		RandomAnglesTexture = std::move(Oth.RandomAnglesTexture);
 		NoiseTexture = std::move(Oth.NoiseTexture);
-		CubeMapShadowContexts = std::move(Oth.CubeMapShadowContexts);
-		GfxContext = std::move(Oth.GfxContext);
-		VoxelizationContext = std::move(Oth.VoxelizationContext);
-		CascadeShadowContext = std::move(Oth.CascadeShadowContext);
-		ShadowContext = std::move(Oth.ShadowContext);
-		DebugCameraViewContext = std::move(Oth.DebugCameraViewContext);
-		DebugContext = std::move(Oth.DebugContext);
-		ColorPassContext = std::move(Oth.ColorPassContext);
-		AmbientOcclusionContext = std::move(Oth.AmbientOcclusionContext);
-		ShadowComputeContext = std::move(Oth.ShadowComputeContext);
-		FrustCullingContext = std::move(Oth.FrustCullingContext);
-		OcclCullingContext = std::move(Oth.OcclCullingContext);
-		DepthReduceContext = std::move(Oth.DepthReduceContext);
-		BlurContextV = std::move(Oth.BlurContextV);
-		BlurContextH = std::move(Oth.BlurContextH);
-		BloomDownScaleContext = std::move(Oth.BloomDownScaleContext);
-		BloomUpScaleContext = std::move(Oth.BloomUpScaleContext);
-		BloomCombineContext = std::move(Oth.BloomCombineContext);
-		DebugComputeContext = std::move(Oth.DebugComputeContext);
+
+		ExecutionContext = std::move(Oth.ExecutionContext);
+		ContextMap = std::move(Oth.ContextMap);
+		GeneralShaderViewMap = std::move(Oth.GeneralShaderViewMap);
+		Dispatches = std::move(Oth.Dispatches);
 	}
 
 	return *this;
+}
+
+template<typename context_type>
+void global_graphics_context::
+SetGraphicsContext(command_list* Context)
+{
+	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));
+
+	shader_graphics_view_context* NewContextView = nullptr;
+	if(FindIt != ContextMap.end())
+	{
+		CurrentContext = FindIt->second.get();
+	}
+	else
+	{
+		NewContextView = new context_type();
+		CurrentContext = CreateRenderContext(NewContextView->LoadOp, NewContextView->StoreOp, NewContextView->Shaders, NewContextView->SetupAttachmentDescription(), NewContextView->SetupPipelineState(), NewContextView->Defines);
+		ContextMap[std::type_index(typeid(context_type))] = std::unique_ptr<general_context>(CurrentContext);
+		GeneralShaderViewMap[std::type_index(typeid(context_type))] = std::unique_ptr<shader_view_context>(NewContextView);
+	}
+
+	Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
+}
+
+template<template<u32> typename context_type, u32 FaceIdx>
+void global_graphics_context::
+SetGraphicsContext(command_list* Context)
+{
+	auto FindIt = ContextMap.find(std::type_index(typeid(context_type<FaceIdx>)));
+
+	shader_graphics_view_context* NewContextView = nullptr;
+	if(FindIt != ContextMap.end())
+	{
+		CurrentContext = FindIt->second.get();
+	}
+	else
+	{
+		NewContextView = new context_type<FaceIdx>();
+		CurrentContext = CreateRenderContext(NewContextView->LoadOp, NewContextView->StoreOp, NewContextView->Shaders, NewContextView->SetupAttachmentDescription(), NewContextView->SetupPipelineState(), NewContextView->Defines);
+		ContextMap[std::type_index(typeid(context_type<FaceIdx>))] = std::unique_ptr<general_context>(CurrentContext);
+		GeneralShaderViewMap[std::type_index(typeid(context_type<FaceIdx>))] = std::unique_ptr<shader_view_context>(NewContextView);
+	}
+
+	Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
+}
+
+template<typename context_type>
+void global_graphics_context::
+SetComputeContext(command_list* Context)
+{
+	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));
+
+	shader_compute_view_context* NewContextView = nullptr;
+	if(FindIt != ContextMap.end())
+	{
+		CurrentContext = FindIt->second.get();
+	}
+	else
+	{
+		NewContextView = new context_type();
+		CurrentContext = CreateComputeContext(NewContextView->Shader, NewContextView->Defines);
+		ContextMap[std::type_index(typeid(context_type))] = std::unique_ptr<general_context>(CurrentContext);
+		GeneralShaderViewMap[std::type_index(typeid(context_type))] = std::unique_ptr<shader_view_context>(NewContextView);
+	}
+
+	Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
+}
+
+template<typename context_type, typename param_type>
+shader_pass* global_graphics_context::
+AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec)
+{
+	std::unique_ptr<shader_pass> NewPass = std::make_unique<shader_pass>();
+	NewPass->Name = Name;
+	NewPass->Type = Type;
+	NewPass->HaveStaticStorage = has_static_storage_type<context_type>::value;
+	NewPass->Parameters = new param_type;
+	*((param_type*)NewPass->Parameters) = Parameters;
+
+	shader_pass* PassPtr = NewPass.get();
+	Passes.push_back(std::move(NewPass));
+	Dispatches[PassPtr] = Exec;
+	PassToContext.emplace(PassPtr, std::type_index(typeid(context_type)));
+
+	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));
+
+	if(FindIt == ContextMap.end())
+	{
+		GeneralShaderViewMap[std::type_index(typeid(context_type))] = std::make_unique<context_type>();
+	}
+
+	return PassPtr;
+}
+
+shader_pass* global_graphics_context::
+AddTransferPass(std::string Name, execute_func Exec)
+{
+	std::unique_ptr<shader_pass> NewPass = std::make_unique<shader_pass>();
+	NewPass->Name = Name;
+	NewPass->Type = pass_type::transfer;
+	NewPass->Parameters = nullptr;
+
+	shader_pass* PassPtr = NewPass.get();
+	Passes.push_back(std::move(NewPass));
+	Dispatches[PassPtr] = Exec;
+	PassToContext.emplace(PassPtr, std::type_index(typeid(transfer)));
+
+	auto FindIt = ContextMap.find(std::type_index(typeid(transfer)));
+
+	if(FindIt == ContextMap.end())
+	{
+		GeneralShaderViewMap[std::type_index(typeid(transfer))] = std::make_unique<transfer>();
+	}
+
+	return PassPtr;
+}
+
+// TODO: Prepass and postpass barriers (postpass barrier is for when the resource is not fully in the same state, for example, after mip generation etc)
+// TODO: Command parallelization maybe
+void global_graphics_context::
+Compile()
+{
+	std::unique_ptr<resource_binder> Binder(CreateResourceBinder());
+	for(const auto& Pass : Passes)
+	{
+		if(Pass->Type == pass_type::transfer) continue;
+
+		std::type_index ContextType = PassToContext.at(Pass.get());
+		shader_view_context* ContextView = GeneralShaderViewMap[ContextType].get();
+
+		auto FindIt = ContextMap.find(ContextType);
+
+		general_context* UseContext = nullptr;
+		if(FindIt != ContextMap.end())
+		{
+			UseContext = FindIt->second.get();
+		}
+		else
+		{
+			if(Pass->Type == pass_type::graphics)
+			{
+				shader_graphics_view_context* NewContextView = static_cast<shader_graphics_view_context*>(ContextView);
+				UseContext = CreateRenderContext(NewContextView->LoadOp, NewContextView->StoreOp, NewContextView->Shaders, NewContextView->SetupAttachmentDescription(), NewContextView->SetupPipelineState(), NewContextView->Defines);
+			}
+			else if(Pass->Type == pass_type::compute)
+			{
+				shader_compute_view_context* NewContextView = static_cast<shader_compute_view_context*>(ContextView);
+				UseContext = CreateComputeContext(NewContextView->Shader, NewContextView->Defines);
+			}
+			ContextMap[ContextType] = std::unique_ptr<general_context>(UseContext);
+		}
+
+		if(Pass->HaveStaticStorage)
+		{
+			Binder->AppendStaticStorage(UseContext, Pass->Parameters);
+		}
+	}
+	Binder->BindStaticStorage(Backend);
+}
+
+// TODO: Consider of pushing pass work in different thread if some of them are not dependent and can use different queue type
+void global_graphics_context::
+Execute()
+{
+	ExecutionContext->AcquireNextImage();
+	ExecutionContext->Begin();
+	for(const auto& Pass : Passes)
+	{
+		Dispatches[Pass.get()](*this, ExecutionContext, Pass->Parameters);
+	}
+	ExecutionContext->EmplaceColorTarget(GfxColorTarget[BackBufferIndex]);
+	ExecutionContext->Present();
+
+	for(const auto& Pass : Passes)
+	{
+		if(Pass->Type == pass_type::transfer) continue;
+		ContextMap[PassToContext.at(Pass.get())]->Clear();
+		delete Pass->Parameters;
+	}
+	std::vector<std::unique_ptr<shader_pass>>().swap(Passes);
+	Dispatches.clear();
+	PassToContext.clear();
+
+	BackBufferIndex = (BackBufferIndex + 1) % 2;
 }

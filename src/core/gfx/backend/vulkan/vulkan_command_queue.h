@@ -1,8 +1,9 @@
 #pragma once
 
+// TODO: better command lists allocation
 class vulkan_command_queue
 {
-	std::vector<VkCommandBuffer*> CommandLists;
+	std::vector<VkCommandBuffer> CommandLists;
 
 public:
 	VkQueue Handle;
@@ -21,7 +22,7 @@ public:
 
 	void DestroyObject();
 
-	VkCommandBuffer* AllocateCommandList();
+	VkCommandBuffer AllocateCommandList();
 
 	void Reset();
 	void Reset(VkCommandBuffer* CommandList);

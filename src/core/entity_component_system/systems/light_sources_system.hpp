@@ -39,4 +39,8 @@ struct light_sources_system : public entity_system
 
 		assert(GlobalLightSources.size() < LIGHT_SOURCES_MAX_COUNT);
 	}
+
+	void UpdateResources(window& Window, alloc_vector<light_source>& GlobalLightSources, global_world_data& WorldUpdate, u32 BackBufferIndex)
+	{
+	}
 };

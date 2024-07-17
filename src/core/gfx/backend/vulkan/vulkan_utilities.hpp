@@ -56,7 +56,7 @@ u32 GetGraphicsQueueFamilyIndex(VkPhysicalDevice Device)
 }
 
 VkPhysicalDevice
-PickPhysicalDevice(const std::vector<VkPhysicalDevice>& PhysicalDevices, u32* FamilyIndex)
+PickPhysicalDevice(const std::vector<VkPhysicalDevice>& PhysicalDevices)
 {
 	VkPhysicalDevice Discrete = 0;
 	VkPhysicalDevice Fallback = 0;
@@ -65,12 +65,6 @@ PickPhysicalDevice(const std::vector<VkPhysicalDevice>& PhysicalDevices, u32* Fa
 	{
 		VkPhysicalDeviceProperties Props;
 		vkGetPhysicalDeviceProperties(Device, &Props);
-		*FamilyIndex = GetGraphicsQueueFamilyIndex(Device);
-
-		if(*FamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-		{
-			continue;
-		}
 
 		if(!Discrete && Props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
 		{
@@ -875,108 +869,134 @@ VkImageLayout GetVKLayout(barrier_state State)
     }
 }
 
+bool IsVKAspectSupported(VkPipelineStageFlags StageMask, VkAccessFlags AccessFlag)
+{
+	switch (AccessFlag) 
+	{
+		case VK_ACCESS_INDIRECT_COMMAND_READ_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+		case VK_ACCESS_INDEX_READ_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_UNIFORM_READ_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_INPUT_ATTACHMENT_READ_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_SHADER_READ_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_SHADER_WRITE_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_COLOR_ATTACHMENT_READ_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+		case VK_ACCESS_TRANSFER_READ_BIT:
+			return StageMask & VK_PIPELINE_STAGE_TRANSFER_BIT;
+		case VK_ACCESS_TRANSFER_WRITE_BIT:
+			return StageMask & VK_PIPELINE_STAGE_TRANSFER_BIT;
+		case VK_ACCESS_HOST_READ_BIT:
+			return StageMask & VK_PIPELINE_STAGE_HOST_BIT;
+		case VK_ACCESS_HOST_WRITE_BIT:
+			return StageMask & VK_PIPELINE_STAGE_HOST_BIT;
+		case VK_ACCESS_MEMORY_READ_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+		case VK_ACCESS_MEMORY_WRITE_BIT:
+			return StageMask & (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+		default:
+			return false;
+	}
+}
+
 VkAccessFlags GetVKAccessMask(u32 Layouts, u32 Stage)
 {
     VkAccessFlags Result = 0;
 
-    if (Layouts & AF_IndirectCommandRead && 
-        (Stage & (PSF_DrawIndirect | PSF_AllCommands))) 
+    if (Layouts & AF_IndirectCommandRead && IsVKAspectSupported(Stage, VK_ACCESS_INDIRECT_COMMAND_READ_BIT)) 
 	{
         Result |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
     }
 
-    if (Layouts & AF_IndexRead && 
-        (Stage & (PSF_VertexInput | PSF_AllGraphics))) 
+    if (Layouts & AF_IndexRead && IsVKAspectSupported(Stage, VK_ACCESS_INDEX_READ_BIT)) 
 	{
         Result |= VK_ACCESS_INDEX_READ_BIT;
     }
 
-    if (Layouts & AF_VertexAttributeRead && 
-        (Stage & (PSF_VertexInput | PSF_AllGraphics))) 
+    if (Layouts & AF_VertexAttributeRead && IsVKAspectSupported(Stage, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) 
 	{
         Result |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
     }
 
-    if (Layouts & AF_UniformRead && 
-        (Stage & (PSF_VertexShader | PSF_FragmentShader | PSF_Compute | PSF_AllGraphics))) 
+    if (Layouts & AF_UniformRead && IsVKAspectSupported(Stage, VK_ACCESS_UNIFORM_READ_BIT)) 
 	{
         Result |= VK_ACCESS_UNIFORM_READ_BIT;
     }
 
-    if (Layouts & AF_InputAttachmentRead && 
-        (Stage & (PSF_FragmentShader | PSF_AllGraphics))) 
+    if (Layouts & AF_InputAttachmentRead && IsVKAspectSupported(Stage, VK_ACCESS_INPUT_ATTACHMENT_READ_BIT)) 
 	{
         Result |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
     }
 
-    if (Layouts & AF_ShaderRead && 
-        (Stage & (PSF_VertexShader | PSF_FragmentShader | PSF_Compute | PSF_AllGraphics))) 
+    if (Layouts & AF_ShaderRead && IsVKAspectSupported(Stage, VK_ACCESS_SHADER_READ_BIT)) 
 	{
         Result |= VK_ACCESS_SHADER_READ_BIT;
     }
 
-    if (Layouts & AF_ShaderWrite && 
-        (Stage & (PSF_VertexShader | PSF_FragmentShader | PSF_Compute | PSF_AllGraphics))) 
+    if (Layouts & AF_ShaderWrite && IsVKAspectSupported(Stage, VK_ACCESS_SHADER_WRITE_BIT)) 
 	{
         Result |= VK_ACCESS_SHADER_WRITE_BIT;
     }
 
-    if (Layouts & AF_ColorAttachmentRead && 
-        (Stage & (PSF_ColorAttachment | PSF_LateFragment | PSF_AllGraphics))) 
+    if (Layouts & AF_ColorAttachmentRead && IsVKAspectSupported(Stage, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT)) 
 	{
         Result |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
     }
 
-    if (Layouts & AF_ColorAttachmentWrite && 
-        (Stage & (PSF_ColorAttachment | PSF_LateFragment | PSF_AllGraphics))) 
+    if (Layouts & AF_ColorAttachmentWrite && IsVKAspectSupported(Stage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)) 
 	{
         Result |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     }
 
-    if (Layouts & AF_DepthStencilAttachmentRead && 
-        (Stage & (PSF_EarlyFragment | PSF_LateFragment | PSF_AllGraphics))) 
+    if (Layouts & AF_DepthStencilAttachmentRead && IsVKAspectSupported(Stage, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT)) 
 	{
         Result |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
     }
 
-    if (Layouts & AF_DepthStencilAttachmentWrite && 
-        (Stage & (PSF_EarlyFragment | PSF_LateFragment | PSF_AllGraphics))) 
+    if (Layouts & AF_DepthStencilAttachmentWrite && IsVKAspectSupported(Stage, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) 
 	{
         Result |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     }
 
-    if (Layouts & AF_TransferRead && 
-        (Stage & (PSF_Transfer))) 
+    if (Layouts & AF_TransferRead && IsVKAspectSupported(Stage, VK_ACCESS_TRANSFER_READ_BIT)) 
 	{
         Result |= VK_ACCESS_TRANSFER_READ_BIT;
     }
 
-    if (Layouts & AF_TransferWrite && 
-        (Stage & (PSF_Transfer))) 
+    if (Layouts & AF_TransferWrite && IsVKAspectSupported(Stage, VK_ACCESS_TRANSFER_WRITE_BIT)) 
 	{
         Result |= VK_ACCESS_TRANSFER_WRITE_BIT;
     }
 
-    if (Layouts & AF_HostRead && 
-        (Stage & (PSF_Host))) 
+    if (Layouts & AF_HostRead && IsVKAspectSupported(Stage, VK_ACCESS_HOST_READ_BIT)) 
 	{
         Result |= VK_ACCESS_HOST_READ_BIT;
     }
 
-    if (Layouts & AF_HostWrite && 
-        (Stage & (PSF_Host))) 
+    if (Layouts & AF_HostWrite && IsVKAspectSupported(Stage, VK_ACCESS_HOST_WRITE_BIT)) 
 	{
         Result |= VK_ACCESS_HOST_WRITE_BIT;
     }
 
-    if (Layouts & AF_MemoryRead && 
-        (Stage & (PSF_TopOfPipe | PSF_DrawIndirect | PSF_VertexInput | PSF_VertexShader | PSF_FragmentShader | PSF_EarlyFragment | PSF_LateFragment | PSF_ColorAttachment | PSF_Compute | PSF_Transfer | PSF_BottomOfPipe | PSF_Host | PSF_AllGraphics | PSF_AllCommands))) 
+    if (Layouts & AF_MemoryRead && IsVKAspectSupported(Stage, VK_ACCESS_MEMORY_READ_BIT)) 
 	{
         Result |= VK_ACCESS_MEMORY_READ_BIT;
     }
 
-    if (Layouts & AF_MemoryWrite && 
-        (Stage & (PSF_TopOfPipe | PSF_DrawIndirect | PSF_VertexInput | PSF_VertexShader | PSF_FragmentShader | PSF_EarlyFragment | PSF_LateFragment | PSF_ColorAttachment | PSF_Compute | PSF_Transfer | PSF_BottomOfPipe | PSF_Host | PSF_AllGraphics | PSF_AllCommands))) 
+    if (Layouts & AF_MemoryWrite && IsVKAspectSupported(Stage, VK_ACCESS_MEMORY_WRITE_BIT)) 
 	{
         Result |= VK_ACCESS_MEMORY_WRITE_BIT;
     }

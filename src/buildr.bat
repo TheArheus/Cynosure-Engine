@@ -8,7 +8,7 @@ setlocal EnableDelayedExpansion
 set VulkanInc="%VULKAN_SDK%\Include"
 set VulkanLib="%VULKAN_SDK%\Lib"
 
-set CommonCompFlags=/std:c++latest /Zc:__cplusplus -fp:fast -nologo -MD -EHsc -Od -Oi -WX- -W4 -GR -Gm- -GS -FC -Zi -D_MBCS -wd4005 -wd4100 -wd4127 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267 -wd4324 -wd4505 -wd4715
+set CommonCompFlags=/std:c++latest /Zc:__cplusplus -fp:fast -nologo -MD -EHsc -O2 -Oi -WX- -W4 -GR -Gm- -GS -FC -Zi -D_MBCS -wd4005 -wd4100 -wd4127 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267 -wd4324 -wd4505 -wd4715
 set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console /ignore:4099
 
 set PlatformCppFiles="..\src\win32_main.cpp"
@@ -32,8 +32,7 @@ for %%f in ("..\..\src\game_scenes\*.cpp") do (
 	call :ProcessTokens !BaseName!
     
     set ExportName=!ExportName!Create
-	echo !ExportName!
-	cl %CommonCompFlags% /I"..\..\src" /I"..\..\src\core\vendor" "!FileName!" ..\libs\assimp-vc143-mt.lib /LD /Fe"!BaseName!" %DepthCascades% -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:%ExportName% /LIBPATH:"..\..\libs" -PDB:ce_!BaseName!_%random%.pdb
+	cl %CommonCompFlags% /I"..\..\src" /I"..\..\src\core\vendor" "!FileName!" ..\libs\assimp-vc143-mt.lib /LD /Fe"!BaseName!" %DepthCascades% -DENGINE_EXPORT_CODE /link %CommonLinkFlags% /EXPORT:!ExportName! /LIBPATH:"..\..\libs" -PDB:ce_!BaseName!_%random%.pdb
 )
 popd
 

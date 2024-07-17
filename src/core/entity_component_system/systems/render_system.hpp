@@ -239,13 +239,12 @@ struct render_system : public entity_system
 			}
 
 			// TODO: Think about abstracting this usage???
-			Window.Gfx.ColorPassContext->SetImageSampler(LightShadows, image_type::Texture2D, barrier_state::shader_read, 0, 1);
-			Window.Gfx.ColorPassContext->SetImageSampler(PointLightShadows, image_type::TextureCube, barrier_state::shader_read, 0, 2);
+			//Window.Gfx.ColorPassContext->SetImageSampler(LightShadows, image_type::Texture2D, barrier_state::shader_read, 0, 1);
+			//Window.Gfx.ColorPassContext->SetImageSampler(PointLightShadows, image_type::TextureCube, barrier_state::shader_read, 0, 2);
 		}
+#if 0
 		Window.Gfx.ColorPassContext->StaticUpdate();
 
-
-		// TODO: Update only when needed (The ammount of objects was changed)
 		Window.Gfx.GfxContext->SetImageSampler(DiffuseTextures, image_type::Texture2D, barrier_state::shader_read, 0, 1);
 		Window.Gfx.GfxContext->SetImageSampler(NormalTextures, image_type::Texture2D, barrier_state::shader_read, 0, 2);
 		Window.Gfx.GfxContext->SetImageSampler(SpecularTextures, image_type::Texture2D, barrier_state::shader_read, 0, 3);
@@ -257,13 +256,14 @@ struct render_system : public entity_system
 		Window.Gfx.VoxelizationContext->SetImageSampler(SpecularTextures, image_type::Texture2D, barrier_state::shader_read, 0, 3);
 		Window.Gfx.VoxelizationContext->SetImageSampler(HeightTextures, image_type::Texture2D, barrier_state::shader_read, 0, 4);
 		Window.Gfx.VoxelizationContext->StaticUpdate();
-
+#endif
 	}
 
-	void Render(window& Window, global_pipeline_context* PipelineContext, 
+	void Render(window& Window, command_list* PipelineContext, 
 				global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCommonCullingInput,
 				alloc_vector<mesh_draw_command>& DynamicMeshInstances, alloc_vector<u32>& DynamicMeshVisibility, alloc_vector<light_source>& GlobalLightSources)
 	{
+#if 0
 #if 0
 		for(entity& Entity : Entities)
 		{
@@ -291,14 +291,13 @@ struct render_system : public entity_system
 		{
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
 
-			PipelineContext->SetBufferBarrier({IndirectDrawIndexedCommands, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
-			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_UniformRead}, PSF_Transfer, PSF_Compute);
+			PipelineContext->SetBufferBarrier({MeshCommonCullingInputBuffer, AF_ShaderRead}, PSF_Transfer, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshDrawVisibilityDataBuffer, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshDrawCommandDataBuffer, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
+			PipelineContext->SetBufferBarrier({GeometryOffsets, AF_ShaderRead}, PSF_TopOfPipe, PSF_Compute);
+			PipelineContext->SetBufferBarrier({IndirectDrawIndexedCommands, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 			PipelineContext->SetBufferBarrier({MeshDrawCommandBuffer, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
-			PipelineContext->SetBufferBarrier({GeometryOffsets, AF_ShaderWrite}, PSF_TopOfPipe, PSF_Compute);
 
-			Window.Gfx.FrustCullingContext->SetStorageBufferView(WorldUpdateBuffer);
 			Window.Gfx.FrustCullingContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 			Window.Gfx.FrustCullingContext->SetStorageBufferView(GeometryOffsets);
 			Window.Gfx.FrustCullingContext->SetStorageBufferView(MeshDrawCommandDataBuffer);
@@ -385,7 +384,7 @@ struct render_system : public entity_system
 						mat4 ShadowMapView  = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + CubeMapFaceDir, CubeMapUpVect);
 						mat4 Shadow = ShadowMapView * ShadowMapProj;
 						point_shadow_input PointShadowInput = {};
-						PointShadowInput.LightPos = GlobalLightSources[PointLightSourceIdx + SpotLightSourceIdx].Pos;
+						PointShadowInput.LightPos = LightSource.Pos;
 						PointShadowInput.LightMat = Shadow;
 						PointShadowInput.FarZ = WorldUpdate.FarZ;
 
@@ -586,10 +585,10 @@ struct render_system : public entity_system
 			Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.VoxelGridTarget}, image_type::Texture3D, barrier_state::shader_read);
 			Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.RandomAnglesTexture}, image_type::Texture2D, barrier_state::shader_read);
 			Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GBuffer, image_type::Texture2D, barrier_state::shader_read);
-			Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.HdrColorTarget}, image_type::Texture2D, barrier_state::general);
-			Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::general);
 			Window.Gfx.ColorPassContext->SetImageSampler({Window.Gfx.AmbientOcclusionData}, image_type::Texture2D, barrier_state::shader_read);
 			Window.Gfx.ColorPassContext->SetImageSampler(Window.Gfx.GlobalShadow, image_type::Texture2D, barrier_state::shader_read);
+			Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.HdrColorTarget}, image_type::Texture2D, barrier_state::general);
+			Window.Gfx.ColorPassContext->SetStorageImage({Window.Gfx.BrightTarget}, image_type::Texture2D, barrier_state::general);
 
 			Window.Gfx.ColorPassContext->Begin(PipelineContext);
 			Window.Gfx.ColorPassContext->Execute(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height);
@@ -716,8 +715,8 @@ struct render_system : public entity_system
 			Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshCommonCullingInputBuffer);
 			Window.Gfx.OcclCullingContext->SetStorageBufferView(GeometryOffsets);
 			Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshDrawCommandDataBuffer);
-			Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshDrawVisibilityDataBuffer);
 			Window.Gfx.OcclCullingContext->SetImageSampler({Window.Gfx.DepthPyramid}, image_type::Texture2D, barrier_state::shader_read);
+			Window.Gfx.OcclCullingContext->SetStorageBufferView(MeshDrawVisibilityDataBuffer);
 
 			Window.Gfx.OcclCullingContext->Begin(PipelineContext);
 			Window.Gfx.OcclCullingContext->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
@@ -725,5 +724,6 @@ struct render_system : public entity_system
 			Window.Gfx.OcclCullingContext->End();
 			Window.Gfx.OcclCullingContext->Clear();
 		}
+#endif
 	}
 };

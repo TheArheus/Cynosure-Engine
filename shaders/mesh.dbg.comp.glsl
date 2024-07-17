@@ -70,7 +70,7 @@ struct mesh_comp_culling_common_input
 };
 
 layout(binding = 0) buffer readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };
-layout(binding = 1) buffer b1 { offset MeshOffsets[]; };
+layout(binding = 1) buffer readonly b1 { offset MeshOffsets[]; };
 layout(binding = 2) buffer readonly b2 { mesh_draw_command MeshDrawCommandData[]; };
 layout(binding = 3) buffer readonly b3 { bool MeshDrawVisibilityData[]; };
 layout(binding = 4) buffer b4 { indirect_draw_indexed_command IndirectDrawIndexedCommands[]; };
@@ -99,7 +99,7 @@ void main()
 	IndirectDrawIndexedCommands[CommandIdx].IndexCount = MeshOffsets[CommandIdx].IndexCount;
 	IndirectDrawIndexedCommands[CommandIdx].FirstIndex = MeshOffsets[CommandIdx].IndexOffset;
 
-	if(!MeshDrawVisibilityData[DrawIndex]) return;
+	//if(!MeshDrawVisibilityData[DrawIndex]) return;
 
 	uint InstanceIdx = atomicAdd(IndirectDrawIndexedCommands[CommandIdx].InstanceCount, 1);
 

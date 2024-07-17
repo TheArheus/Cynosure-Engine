@@ -23,7 +23,7 @@ struct vulkan_buffer : public buffer
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		CommandQueue->Reset();
-		VkCommandBuffer* CommandList = (VkCommandBuffer*)CommandQueue->AllocateCommandList();
+		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -31,7 +31,7 @@ struct vulkan_buffer : public buffer
 		vkUnmapMemory(Device, TempMemory);
 
 		VkBufferCopy Region = {0, 0, VkDeviceSize(Size)};
-		vkCmdCopyBuffer(*CommandList, Temp, Handle, 1, &Region);
+		vkCmdCopyBuffer(CommandList, Temp, Handle, 1, &Region);
 
 		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		CopyBarrier.buffer = Handle;
@@ -42,9 +42,9 @@ struct vulkan_buffer : public buffer
 		CopyBarrier.offset = 0;
 		CopyBarrier.size = Size;
 
-		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
+		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
 
-		CommandQueue->ExecuteAndRemove(CommandList);
+		CommandQueue->ExecuteAndRemove(&CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
@@ -57,7 +57,7 @@ struct vulkan_buffer : public buffer
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		CommandQueue->Reset();
-		VkCommandBuffer* CommandList = (VkCommandBuffer*)CommandQueue->AllocateCommandList();
+		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, UpdateByteSize, 0, &CpuPtr);
@@ -65,7 +65,7 @@ struct vulkan_buffer : public buffer
 		vkUnmapMemory(Device, TempMemory);
 
 		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-		vkCmdCopyBuffer(*CommandList, Temp, Handle, 1, &Region);
+		vkCmdCopyBuffer(CommandList, Temp, Handle, 1, &Region);
 
 		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		CopyBarrier.buffer = Handle;
@@ -76,16 +76,16 @@ struct vulkan_buffer : public buffer
 		CopyBarrier.offset = 0;
 		CopyBarrier.size = UpdateByteSize;
 
-		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
+		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
 
-		CommandQueue->ExecuteAndRemove(CommandList);
+		CommandQueue->ExecuteAndRemove(&CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
 
-	void Update(void* Data, global_pipeline_context* GlobalPipeline) override
+	void Update(void* Data, command_list* GlobalPipeline) override
 	{
-		vulkan_global_pipeline_context* PipelineContext = static_cast<vulkan_global_pipeline_context*>(GlobalPipeline);
+		vulkan_command_list* PipelineContext = static_cast<vulkan_command_list*>(GlobalPipeline);
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -93,15 +93,15 @@ struct vulkan_buffer : public buffer
 		vkUnmapMemory(Device, TempMemory);
 
 		VkBufferCopy Region = {0, 0, VkDeviceSize(Size)};
-		vkCmdCopyBuffer(*PipelineContext->CommandList, Temp, Handle, 1, &Region);
+		vkCmdCopyBuffer(PipelineContext->CommandList, Temp, Handle, 1, &Region);
 	}
 
-	void UpdateSize(void* Data, u32 UpdateByteSize, global_pipeline_context* GlobalPipeline) override
+	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override
 	{
 		if(UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
 
-		vulkan_global_pipeline_context* PipelineContext = static_cast<vulkan_global_pipeline_context*>(GlobalPipeline);
+		vulkan_command_list* PipelineContext = static_cast<vulkan_command_list*>(GlobalPipeline);
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, UpdateByteSize, 0, &CpuPtr);
@@ -109,7 +109,7 @@ struct vulkan_buffer : public buffer
 		vkUnmapMemory(Device, TempMemory);
 
 		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-		vkCmdCopyBuffer(*PipelineContext->CommandList, Temp, Handle, 1, &Region);
+		vkCmdCopyBuffer(PipelineContext->CommandList, Temp, Handle, 1, &Region);
 	}
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
@@ -120,10 +120,10 @@ struct vulkan_buffer : public buffer
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		CommandQueue->Reset();
-		VkCommandBuffer* CommandList = (VkCommandBuffer*)CommandQueue->AllocateCommandList();
+		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
 
 		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-		vkCmdCopyBuffer(*CommandList, Handle, Temp, 1, &Region);
+		vkCmdCopyBuffer(CommandList, Handle, Temp, 1, &Region);
 
 		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		CopyBarrier.buffer = Temp;
@@ -134,9 +134,9 @@ struct vulkan_buffer : public buffer
 		CopyBarrier.offset = 0;
 		CopyBarrier.size = UpdateByteSize;
 
-		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
+		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
 
-		CommandQueue->ExecuteAndRemove(CommandList);
+		CommandQueue->ExecuteAndRemove(&CommandList);
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -146,15 +146,15 @@ struct vulkan_buffer : public buffer
 		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
 
-	void ReadBackSize(void* Data, u32 UpdateByteSize, global_pipeline_context* GlobalPipeline) override
+	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override
 	{
 		if (UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
 
-		vulkan_global_pipeline_context* PipelineContext = static_cast<vulkan_global_pipeline_context*>(GlobalPipeline);
+		vulkan_command_list* PipelineContext = static_cast<vulkan_command_list*>(GlobalPipeline);
 
 		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-		vkCmdCopyBuffer(*PipelineContext->CommandList, Handle, Temp, 1, &Region);
+		vkCmdCopyBuffer(PipelineContext->CommandList, Handle, Temp, 1, &Region);
 
 		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		CopyBarrier.buffer = Temp;
@@ -165,7 +165,7 @@ struct vulkan_buffer : public buffer
 		CopyBarrier.offset = 0;
 		CopyBarrier.size = UpdateByteSize;
 
-		vkCmdPipelineBarrier(*PipelineContext->CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
+		vkCmdPipelineBarrier(PipelineContext->CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -210,6 +210,7 @@ struct vulkan_buffer : public buffer
 		VK_CHECK(vmaCreateBuffer(VulkanHeap->Handle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
 		Memory = AllocationInfo.deviceMemory;
 
+		Name = DebugName;
 		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 		DebugNameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
 		DebugNameInfo.objectHandle = (u64)Handle;
@@ -233,7 +234,7 @@ struct vulkan_buffer : public buffer
 		vkBindBufferMemory(Device, Temp, TempMemory, 0);
 
 		CommandQueue->Reset();
-		VkCommandBuffer* CommandList = (VkCommandBuffer*)CommandQueue->AllocateCommandList();
+		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, NewSize, 0, &CpuPtr);
@@ -241,7 +242,7 @@ struct vulkan_buffer : public buffer
 		vkUnmapMemory(Device, TempMemory);
 
 		VkBufferCopy Region = {0, 0, VkDeviceSize(Size)};
-		vkCmdCopyBuffer(*CommandList, Temp, Handle, 1, &Region);
+		vkCmdCopyBuffer(CommandList, Temp, Handle, 1, &Region);
 
 		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		CopyBarrier.buffer = Handle;
@@ -252,9 +253,9 @@ struct vulkan_buffer : public buffer
 		CopyBarrier.offset = 0;
 		CopyBarrier.size = Size;
 
-		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
+		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
 
-		CommandQueue->ExecuteAndRemove(CommandList);
+		CommandQueue->ExecuteAndRemove(&CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
@@ -324,7 +325,7 @@ struct vulkan_texture : public texture
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		CommandQueue->Reset();
-		VkCommandBuffer* CommandList = (VkCommandBuffer*)CommandQueue->AllocateCommandList();
+		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -332,7 +333,7 @@ struct vulkan_texture : public texture
 		vkUnmapMemory(Device, TempMemory);
 
 		VkImageMemoryBarrier CopyBarrier = CreateImageBarrier(Handle, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &CopyBarrier);
+		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &CopyBarrier);
 
 		VkBufferImageCopy Region = {};
 		Region.imageSubresource.aspectMask = Aspect;
@@ -340,19 +341,19 @@ struct vulkan_texture : public texture
 		Region.imageSubresource.baseArrayLayer = 0;
 		Region.imageSubresource.layerCount = Info.Layers;
 		Region.imageExtent = {u32(Width), u32(Height), u32(Depth)};
-		vkCmdCopyBufferToImage(*CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
+		vkCmdCopyBufferToImage(CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
 
 		//CopyBarrier = CreateImageBarrier(Handle, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		//vkCmdPipelineBarrier(*CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &CopyBarrier);
+		//vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &CopyBarrier);
 
-		CommandQueue->ExecuteAndRemove(CommandList);
+		CommandQueue->ExecuteAndRemove(&CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
 
-	void Update(void* Data, global_pipeline_context* GlobalPipeline) override
+	void Update(void* Data, command_list* GlobalPipeline) override
 	{
-		vulkan_global_pipeline_context* PipelineContext = static_cast<vulkan_global_pipeline_context*>(GlobalPipeline);
+		vulkan_command_list* PipelineContext = static_cast<vulkan_command_list*>(GlobalPipeline);
 
 		void* CpuPtr;
 		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
@@ -369,7 +370,7 @@ struct vulkan_texture : public texture
 		Region.imageSubresource.layerCount = Info.Layers;
 		Region.imageOffset = {0, 0, 0};
 		Region.imageExtent = {u32(Width), u32(Height), u32(Depth)};
-		vkCmdCopyBufferToImage(*PipelineContext->CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
+		vkCmdCopyBufferToImage(PipelineContext->CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override
@@ -454,6 +455,7 @@ struct vulkan_texture : public texture
 		Memory = AllocationInfo.deviceMemory;
 		Size = AllocationInfo.size;
 
+		Name = DebugName;
 		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 		DebugNameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
 		DebugNameInfo.objectHandle = (u64)Handle;
@@ -540,11 +542,12 @@ struct vulkan_texture : public texture
 	VkImage Handle;
 	VkDeviceMemory Memory;
 	VkSampler SamplerHandle;
-	VmaAllocation Allocation;
 	std::vector<VkImageView> Views;
 
 	VkImageLayout Layout;
 	VkImageAspectFlags Aspect;
+
+	VmaAllocation Allocation;
 
 private:
 	VkDevice Device;

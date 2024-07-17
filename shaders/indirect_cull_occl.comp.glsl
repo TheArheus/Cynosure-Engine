@@ -73,8 +73,8 @@ struct indirect_draw_indexed_command
 layout(binding = 0) buffer readonly b0 { mesh_comp_culling_common_input MeshCullingCommonInput; };
 layout(binding = 1) buffer readonly b1 { offset MeshOffsets[]; };
 layout(binding = 2) buffer readonly b2 { mesh_draw_command MeshDrawCommandData[]; };
-layout(binding = 3) buffer b3 { bool MeshDrawVisibilityData[]; };
-layout(binding = 4) uniform sampler2D DepthPyramid;
+layout(binding = 3) uniform sampler2D DepthPyramid;
+layout(binding = 4) buffer b3 { bool MeshDrawVisibilityData[]; };
 
 layout(push_constant) uniform pushConstant { uint DrawCount; uint MeshCount; };
 

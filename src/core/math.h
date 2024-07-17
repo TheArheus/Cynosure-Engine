@@ -12,7 +12,8 @@ template<typename T>
 constexpr T Pi = T(3.1415926535897932384626433832795028841971693993751058209749445923078164062);
 #else
 template<typename T>
-struct pi_fallback {
+struct pi_fallback 
+{
     static constexpr T Pi = T(3.1415926535897932384626433832795028841971693993751058209749445923078164062);
 };
 template<typename T>
