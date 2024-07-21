@@ -562,7 +562,7 @@ struct directx12_texture : public texture
 					UavDesc.ViewDimension         = D3D12_UAV_DIMENSION_TEXTURE3D;
 					UavDesc.Texture3D.MipSlice    = MipIdx;
 					UavDesc.Texture3D.FirstWSlice = 0;
-					UavDesc.Texture3D.WSize       = ~0u; //Depth;
+					UavDesc.Texture3D.WSize       = ~0u;
 				}
 
 				auto UnorderedAccessView = Gfx->ResourcesHeap.GetNextCpuHandle();
@@ -628,7 +628,7 @@ struct directx12_texture : public texture
 					RtvDesc.ViewDimension		  = D3D12_RTV_DIMENSION_TEXTURE3D;
 					RtvDesc.Texture3D.MipSlice    = MipIdx;
 					RtvDesc.Texture3D.FirstWSlice = 0;
-					RtvDesc.Texture3D.WSize       = ~0u; //Depth;
+					RtvDesc.Texture3D.WSize       = ~0u;
 				}
 
 				Gfx->Device->CreateRenderTargetView(Handle.Get(), &RtvDesc, RenderTargetView);

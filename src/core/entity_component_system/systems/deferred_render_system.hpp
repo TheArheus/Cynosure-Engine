@@ -514,10 +514,7 @@ struct deferred_raster_system : public entity_system
 			for(s32 MipIdx = Gfx.BrightTarget->Info.MipLevels - 2; MipIdx >= 0; --MipIdx)
 			{
 				shader_parameter<bloom_upsample> Parameters;
-				if(MipIdx < (Gfx.BrightTarget->Info.MipLevels - 2))
-					Parameters.Input.A   = Gfx.UseTextureMip(Gfx.TempBrTarget, MipIdx + 1);
-				else
-					Parameters.Input.A   = Gfx.UseTextureMip(Gfx.BrightTarget, MipIdx + 1);
+				Parameters.Input.A       = Gfx.UseTextureMip(Gfx.TempBrTarget, MipIdx + 1);
 				Parameters.Input.B       = Gfx.UseTextureMip(Gfx.BrightTarget, MipIdx);
 				Parameters.Output.Output = Gfx.UseTextureMip(Gfx.TempBrTarget, MipIdx);
 
