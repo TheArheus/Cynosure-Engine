@@ -72,7 +72,6 @@ struct vulkan_command_list : public command_list
 
 	void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData) override;
 	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>>& BarrierData) override;
-	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrier_state, u32, u32>>& BarrierData) override;
 
 	void DebugGuiBegin(texture* RenderTarget) override;
 	void DebugGuiEnd() override;
@@ -89,16 +88,10 @@ struct vulkan_command_list : public command_list
 
 	vulkan_backend* Gfx;
 
-	std::unordered_set<buffer*>  BuffersToCommon;
-	std::unordered_set<texture*> TexturesToCommon;
-
 	std::vector<VkImageView>  AttachmentViews;
 	std::vector<VkClearValue> RenderTargetClears;
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>   RenderingAttachmentInfos;
 	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>> RenderingAttachmentInfoArrays;
-
-	std::vector<std::tuple<buffer*, u32, u32>> AttachmentBufferBarriers;
-	std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>> AttachmentImageBarriers;
 };
 
 struct vulkan_resource_binder;

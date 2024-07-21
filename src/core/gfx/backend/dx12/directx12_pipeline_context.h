@@ -49,9 +49,9 @@ struct directx12_command_list : public command_list
 
 	void Present() override;
 
-	void SetColorTarget(const std::vector<texture*>& Targets, vec4 Clear = {0, 0, 0, 1}) override {};
-	void SetDepthTarget(texture* Target, vec2 Clear = {1, 0}) override {};
-	void SetStencilTarget(texture* Target, vec2 Clear = {1, 0}) override {};
+	void SetColorTarget(const std::vector<texture*>& Targets, vec4 Clear = {0, 0, 0, 1}) override;
+	void SetDepthTarget(texture* Target, vec2 Clear = {1, 0}) override;
+	void SetStencilTarget(texture* Target, vec2 Clear = {1, 0}) override;
 
 	void BindShaderParameters(void* Data) override;
 
@@ -68,7 +68,6 @@ struct directx12_command_list : public command_list
 
 	void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData) override;
 	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>>& BarrierData) override;
-	void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrier_state, u32, u32>>& BarrierData) override;
 
 	void DebugGuiBegin(texture* RenderTarget) override;
 	void DebugGuiEnd() override;
@@ -79,14 +78,16 @@ struct directx12_command_list : public command_list
 	ID3D12Device6* Device;
 	ID3D12GraphicsCommandList* CommandList;
 
-	std::unordered_set<buffer*>  BuffersToCommon;
-	std::unordered_set<texture*> TexturesToCommon;
+	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> ColorTargets;
+	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilTarget;
 };
 
+class directx12_resource_binder;
 class directx12_render_context : public render_context
 {
 	ID3D12Device6* Device;
 	friend directx12_command_list;
+	friend directx12_resource_binder;
 
 public:
 	directx12_render_context() = default;
@@ -99,30 +100,21 @@ public:
 
 	~directx12_render_context() override = default;
 
+	void Clear() override
+	{
+		ResourceBindingIdx = 0;
+		SamplersBindingIdx = 0;
+	}
+
 private:
 	ComPtr<ID3D12PipelineState> Pipeline;
 	ComPtr<ID3D12RootSignature> RootSignatureHandle;
 	ComPtr<ID3D12CommandSignature> IndirectSignatureHandle;
 	D3D12_PRIMITIVE_TOPOLOGY PipelineTopology;
 
-	std::unordered_set<buffer*>  BuffersToCommon;
-	std::unordered_set<texture*> TexturesToCommon;
-
-	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> ColorTargets;
-	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilTarget;
-
-	std::map<u32, std::map<u32, u32>> BindingOffsets;
-	std::map<u32, u32> SetIndices;
-	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
-	std::vector<descriptor_binding> BindingDescriptions;
-
-	u32 RepeatedResourceExec = 0;
-	u32 RepeatedSamplerExec  = 0;
-
+	u32 PushConstantOffset = 0;
 	u32 ResourceBindingIdx = 0;
 	u32 SamplersBindingIdx = 0;
-	u32 RootResourceBindingIdx = 0;
-	u32 RootSamplersBindingIdx = 0;
 
 	u32  PushConstantSize	  = 0;
 	bool HaveDrawID           = false;
@@ -133,15 +125,17 @@ private:
 	load_op  LoadOp;
 	store_op StoreOp;
 
-	directx12_command_list* PipelineContext = nullptr;
 	descriptor_heap ResourceHeap;
 	descriptor_heap SamplersHeap;
+
+	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 };
 
 class directx12_compute_context : public compute_context
 {
 	ID3D12Device6* Device;
 	friend directx12_command_list;
+	friend directx12_resource_binder;
 
 public:
 	directx12_compute_context(renderer_backend* Backend, const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
@@ -151,50 +145,57 @@ public:
 
 	~directx12_compute_context() override = default;
 
+	void Clear() override
+	{
+		ResourceBindingIdx = 0;
+		SamplersBindingIdx = 0;
+	}
+
 private:
 	ComPtr<ID3D12PipelineState> Pipeline;
 	ComPtr<ID3D12RootSignature> RootSignatureHandle;
 
-	std::unordered_set<buffer*>  BuffersToCommon;
-	std::unordered_set<texture*> TexturesToCommon;
-
-	std::map<u32, std::map<u32, u32>> BindingOffsets;
-	std::map<u32, u32> SetIndices;
-	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
-	std::vector<descriptor_binding> BindingDescriptions;
-
-	u32 RepeatedResourceExec = 0;
-	u32 RepeatedSamplerExec  = 0;
-
+	u32 PushConstantOffset = 0;
 	u32 ResourceBindingIdx = 0;
 	u32 SamplersBindingIdx = 0;
-	u32 RootResourceBindingIdx = 0;
-	u32 RootSamplersBindingIdx = 0;
 
 	u32  PushConstantSize = 0;
 	bool HavePushConstant = false;
 	bool IsResourceHeapInited = false;
 	bool IsSamplersHeapInited = false;
 
-	directx12_command_list* PipelineContext = nullptr;
 	descriptor_heap ResourceHeap;
 	descriptor_heap SamplersHeap;
+
+	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 };
 
 class directx12_resource_binder : public resource_binder
 {
 public:
-	directx12_resource_binder(renderer_backend* GeneralBackend);
+	directx12_resource_binder(renderer_backend* GeneralBackend) {};
 
 	directx12_resource_binder(renderer_backend* GeneralBackend, general_context* ContextToUse)
 	{
 		if(ContextToUse->Type == pass_type::graphics)
 		{
 			directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(ContextToUse);
+			ResourceBindingIdx = ContextToBind->ResourceBindingIdx;
+			SamplersBindingIdx = ContextToBind->SamplersBindingIdx;
+			ShaderRootLayout = ContextToBind->ShaderRootLayout;
+			ResourceHeap = ContextToBind->ResourceHeap;
+			SamplersHeap = ContextToBind->SamplersHeap;
+			Device = ContextToBind->Device;
 		}
 		else if(ContextToUse->Type == pass_type::compute)
 		{
 			directx12_compute_context* ContextToBind = static_cast<directx12_compute_context*>(ContextToUse);
+			ResourceBindingIdx = ContextToBind->ResourceBindingIdx;
+			SamplersBindingIdx = ContextToBind->SamplersBindingIdx;
+			ShaderRootLayout = ContextToBind->ShaderRootLayout;
+			ResourceHeap = ContextToBind->ResourceHeap;
+			SamplersHeap = ContextToBind->SamplersHeap;
+			Device = ContextToBind->Device;
 		}
 	}
 
@@ -204,14 +205,25 @@ public:
 	void DestroyObject() {};
 
 	void AppendStaticStorage(general_context* Context, void* Data) override;
-	void BindStaticStorage(renderer_backend* GeneralBackend) override;
+	void BindStaticStorage(renderer_backend* GeneralBackend) override {};
 
-	// NOTE: If with counter, then it is using 2 bindings instead of 1
 	void SetStorageBufferView(buffer* Buffer, u32 Set = 0) override;
 	void SetUniformBufferView(buffer* Buffer, u32 Set = 0) override;
 
-	// TODO: Remove image layouts and move them inside texture structure
 	void SetSampledImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 	void SetStorageImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 	void SetImageSampler(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+
+	ID3D12Device6* Device;
+	std::map<u32, u32> SetIndices;
+	std::vector<descriptor_binding> BindingDescriptions;
+	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
+
+	u32 ResourceBindingIdx = 0;
+	u32 SamplersBindingIdx = 0;
+	u32 RootResourceBindingIdx = 0;
+	u32 RootSamplersBindingIdx = 0;
+
+	descriptor_heap ResourceHeap;
+	descriptor_heap SamplersHeap;
 };

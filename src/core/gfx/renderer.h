@@ -36,12 +36,19 @@ public:
 	}
 
 	texture* PushTexture(std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
-	{ return Backend->GlobalHeap->PushTexture(Backend, DebugName, Width, Height, Depth, InputData);
+	{
+		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Width, Height, Depth, InputData);
 	}
 
 	texture* PushTexture(std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
 		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Data, Width, Height, Depth, InputData);
+	}
+
+	// TODO: For this functions implement better resource handling
+	std::vector<texture*> UseTextureArray(std::vector<texture*> ArrayOfTextures)
+	{
+		return ArrayOfTextures;
 	}
 
 	texture_ref UseTexture(texture* Texture)
@@ -60,17 +67,22 @@ public:
 		return NewRef;
 	}
 
+	buffer_ref UseBuffer(buffer* Buffer)
+	{
+		buffer_ref NewRef;
+		NewRef.Handle = Buffer;
+		return NewRef;
+	}
+
 	resource_binder* CreateResourceBinder()
 	{
 		switch(BackendType)
 		{
 			case backend_type::vulkan:
 				return new vulkan_resource_binder(Backend);
-#if 0
 #if _WIN32
 			case backend_type::directx12:
 				return new directx12_resource_binder(Backend);
-#endif
 #endif
 			default:
 				return nullptr;
@@ -100,11 +112,9 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_command_list(Backend);
-#if 0
 #if _WIN32
 			case backend_type::directx12:
 				return new directx12_command_list(Backend);
-#endif
 #endif
 			default:
 				return nullptr;
@@ -123,11 +133,9 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargetFormats, InputData, ShaderDefines);
-#if 0
 #if _WIN32
 			case backend_type::directx12:
 				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargetFormats, InputData, ShaderDefines);
-#endif
 #endif
 			default:
 				return nullptr;
@@ -141,11 +149,9 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
-#if 0
 #if _WIN32
 			case backend_type::directx12:
 				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
-#endif
 #endif
 			default:
 				return nullptr;
@@ -159,11 +165,9 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, {}, InputData, ShaderDefines);
-#if 0
 #if _WIN32
 			case backend_type::directx12:
 				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, {}, InputData, ShaderDefines);
-#endif
 #endif
 			default:
 				return nullptr;
@@ -176,11 +180,9 @@ public:
 		{
 			case backend_type::vulkan:
 				return new vulkan_compute_context(Backend, Shader, ShaderDefines);
-#if 0
 #if _WIN32
 			case backend_type::directx12:
 				return new directx12_compute_context(Backend, Shader, ShaderDefines);
-#endif
 #endif
 			default:
 				return nullptr;

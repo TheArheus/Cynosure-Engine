@@ -184,7 +184,7 @@ dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool N
 }
 
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, u32>>& NewBindings, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
+LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, descriptor_param>>& ParameterLayout, std::map<u32, std::map<u32, u32>>& NewBindings, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {
 	auto FoundCompiledShader = CompiledShaders.find(Path);
 	if(FoundCompiledShader != CompiledShaders.end())
@@ -364,6 +364,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 		CompiledShaders[Path].LocalSizeY = LocalSizeY ? *LocalSizeY : 0;
 		CompiledShaders[Path].LocalSizeZ = LocalSizeZ ? *LocalSizeZ : 0;
 
+		std::map<u32, std::map<u32, u32>> ShaderToUse;
 		for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
 		{
 			const op_info& Var = ShaderInfo[VariableIdx];
@@ -613,6 +614,36 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
 					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
+
+					auto TypeInfo = Compiler.get_type(resource.type_id);
+
+					image_type TextureType = image_type::Texture2D;
+					switch(TypeInfo.image.dim)
+					{
+						case spv::Dim1D: TextureType = image_type::Texture1D; break;
+						case spv::Dim2D: TextureType = image_type::Texture2D; break;
+						case spv::Dim3D: TextureType = image_type::Texture3D; break;
+						case spv::DimCube: TextureType = image_type::TextureCube; break;
+					}
+
+					resource_type ImageType = resource_type::buffer;
+					if (TypeInfo.basetype == spirv_cross::SPIRType::Image)
+					{
+						ImageType = resource_type::texture_storage;
+					}
+					else if (TypeInfo.basetype == spirv_cross::SPIRType::Sampler)
+					{
+						ImageType = resource_type::texture_sampler;
+					}
+					else if (TypeInfo.basetype == spirv_cross::SPIRType::SampledImage)
+					{
+						ImageType = resource_type::texture_sampler;
+					}
+
+					ParameterLayout[Set][Binding].Type = ImageType;
+					ParameterLayout[Set][Binding].Count = TypeInfo.array.empty() ? 1 : TypeInfo.array[0];
+					ParameterLayout[Set][Binding].ImageType = TextureType;
+					ParameterLayout[Set][Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 
 				for (const auto &resource : HlslResources.storage_images) 
@@ -620,13 +651,36 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
 					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
-				}
 
-				for (const auto &resource : HlslResources.uniform_buffers) 
-				{
-					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
-					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
-					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
+					auto TypeInfo = Compiler.get_type(resource.type_id);
+
+					image_type TextureType = image_type::Texture2D;
+					switch(TypeInfo.image.dim)
+					{
+						case spv::Dim1D: TextureType = image_type::Texture1D; break;
+						case spv::Dim2D: TextureType = image_type::Texture2D; break;
+						case spv::Dim3D: TextureType = image_type::Texture3D; break;
+						case spv::DimCube: TextureType = image_type::TextureCube; break;
+					}
+
+					resource_type ImageType = resource_type::buffer;
+					if (TypeInfo.basetype == spirv_cross::SPIRType::Image)
+					{
+						ImageType = resource_type::texture_storage;
+					}
+					else if (TypeInfo.basetype == spirv_cross::SPIRType::Sampler)
+					{
+						ImageType = resource_type::texture_sampler;
+					}
+					else if (TypeInfo.basetype == spirv_cross::SPIRType::SampledImage)
+					{
+						ImageType = resource_type::texture_sampler;
+					}
+
+					ParameterLayout[Set][Binding].Type = ImageType;
+					ParameterLayout[Set][Binding].Count = TypeInfo.array.empty() ? 1 : TypeInfo.array[0];
+					ParameterLayout[Set][Binding].ImageType = TextureType;
+					ParameterLayout[Set][Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 
 				for (const auto &resource : HlslResources.storage_buffers) 
@@ -634,16 +688,22 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
 					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
+					ParameterLayout[Set][Binding].Type = resource_type::buffer;
+					ParameterLayout[Set][Binding].Count = 1;
+					ParameterLayout[Set][Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 
+				spirv_cross::CompilerGLSL::Options    CommonOptions;
 				spirv_cross::CompilerHLSL::Options    HlslOptions;
 				spirv_cross::HLSLVertexAttributeRemap HlslAttribs;
 
-				HlslOptions.shader_model = 62; // SM6_2
+				HlslOptions.shader_model = 62;
 				HlslOptions.use_entry_point_name = true;
 				HlslOptions.enable_16bit_types   = true;
+				//CommonOptions.vertex.flip_vert_y = true;
 
 				Compiler.set_hlsl_options(HlslOptions);
+				Compiler.set_common_options(CommonOptions);
 				Compiler.add_vertex_attribute_remap(HlslAttribs);
 
 				HlslCode = Compiler.compile();
@@ -691,6 +751,12 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 		std::vector<LPCWSTR> Arguments;
 		Arguments.push_back(DXC_ARG_OPTIMIZATION_LEVEL3);
+#if defined(CE_DEBUG)
+		Arguments.push_back(L"-Zi");
+		Arguments.push_back(L"-Qembed_debug");
+		Arguments.push_back(L"-Qstrip_debug");
+		Arguments.push_back(L"-Qstrip_reflect");
+#endif
 
 		ComPtr<IDxcBlobUtf8> Errors;
 		ComPtr<IDxcBlobUtf8> DebugData;

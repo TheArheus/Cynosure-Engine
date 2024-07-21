@@ -519,7 +519,7 @@ SetStencilTarget(texture* Target, vec2 Clear)
 {
 	assert(CurrentContext->Type == pass_type::graphics);
 
-	AttachmentImageBarriers.push_back({Target, AF_ColorAttachmentWrite, barrier_state::color_attachment, TEXTURE_MIPS_ALL, PSF_EarlyFragment});
+	AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, TEXTURE_MIPS_ALL, PSF_EarlyFragment});
 	TexturesToCommon.insert(Target);
 
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
@@ -547,8 +547,8 @@ BindShaderParameters(void* Data)
 	vulkan_resource_binder Binder(Gfx, CurrentContext);
 
 	u32 WaitStage = 0;
-	VkPipelineLayout Layout;
-	VkPipelineBindPoint BindPoint;
+	VkPipelineLayout Layout = {};
+	VkPipelineBindPoint BindPoint = {};
 	if(CurrentContext->Type == pass_type::graphics)
 	{
 		vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(CurrentContext);
@@ -776,6 +776,9 @@ DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructure
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
 	vulkan_buffer* IndirectCommandsAttachment = static_cast<vulkan_buffer*>(IndirectCommands);
 
+	BuffersToCommon.insert(IndirectCommands);
+	AttachmentBufferBarriers.push_back({IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
+
 	SetBufferBarriers(AttachmentBufferBarriers);
 	SetImageBarriers(AttachmentImageBarriers);
 
@@ -978,22 +981,25 @@ SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData)
 
 	for(const std::tuple<buffer*, u32, u32>& Data : BarrierData)
 	{
-		u32 ResourceLayoutNext = std::get<1>(Data);
-		DstStageMask |= std::get<2>(Data);
-
 		vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(std::get<0>(Data));
+
+		u32 ResourceLayoutNext = std::get<1>(Data);
+		u32 BufferPrevShader = Buffer->PrevShader;
+		u32 BufferNextShader = std::get<2>(Data);
+		Buffer->PrevShader = BufferNextShader;
+		Buffer->CurrentLayout = ResourceLayoutNext;
+
+		DstStageMask |= BufferPrevShader;
+		SrcStageMask |= BufferNextShader;
+
 		VkBufferMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		Barrier.buffer = Buffer->Handle;
-		Barrier.srcAccessMask = GetVKAccessMask(Buffer->CurrentLayout, DstStageMask);
-		Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, DstStageMask);
+		Barrier.srcAccessMask = GetVKAccessMask(Buffer->CurrentLayout, BufferPrevShader);
+		Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, BufferNextShader);
 		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.offset = 0;
 		Barrier.size = Buffer->Size;
-
-		SrcStageMask |= Buffer->PrevShader;
-		Buffer->PrevShader = DstStageMask;
-		Buffer->CurrentLayout = ResourceLayoutNext;
 
 		Barriers.push_back(Barrier);
 	}
@@ -1014,17 +1020,22 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 
 		u32 ResourceLayoutNext = std::get<1>(Data);
 		barrier_state ResourceStateNext = std::get<2>(Data);
-		DstStageMask |= std::get<4>(Data);
+		u32 TexturePrevShader = Texture->PrevShader;
+		u32 TextureNextShader = std::get<4>(Data);
+		Texture->PrevShader = TextureNextShader;
 
-		u32 MipIdx = std::get<3>(Data);
+		DstStageMask |= TextureNextShader;
+		SrcStageMask |= TexturePrevShader;
+
+		u32 MipToUse = std::get<3>(Data);
 		VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-		Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, DstStageMask);
+		Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, TextureNextShader);
 		Barrier.newLayout = GetVKLayout(ResourceStateNext);
 		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.image = Texture->Handle;
 		Barrier.subresourceRange.aspectMask = Texture->Aspect;
-		if(MipIdx == TEXTURE_MIPS_ALL)
+		if(MipToUse == TEXTURE_MIPS_ALL)
 		{
 			bool AreAllSubresourcesInSameState = true;
 			for(u32 MipIdx = 1; MipIdx < Texture->Info.MipLevels; ++MipIdx)
@@ -1035,7 +1046,7 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 
 			if(AreAllSubresourcesInSameState)
 			{
-				Barrier.srcAccessMask = GetVKAccessMask(Texture->CurrentLayout[0], DstStageMask);
+				Barrier.srcAccessMask = GetVKAccessMask(Texture->CurrentLayout[0], TexturePrevShader);
 				Barrier.oldLayout = GetVKLayout(Texture->CurrentState[0]);
 
 				Barrier.subresourceRange.baseMipLevel   = 0;
@@ -1046,9 +1057,9 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 			}
 			else
 			{
-				for(u32 MipIdx = 1; MipIdx < Texture->Info.MipLevels; ++MipIdx)
+				for(u32 MipIdx = 0; MipIdx < Texture->Info.MipLevels; ++MipIdx)
 				{
-					Barrier.srcAccessMask = GetVKAccessMask(Texture->CurrentLayout[MipIdx], DstStageMask);
+					Barrier.srcAccessMask = GetVKAccessMask(Texture->CurrentLayout[MipIdx], TexturePrevShader);
 					Barrier.oldLayout = GetVKLayout(Texture->CurrentState[MipIdx]);
 
 					Barrier.subresourceRange.baseMipLevel   = 0;
@@ -1064,87 +1075,16 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 		}
 		else
 		{
-			Barrier.srcAccessMask = GetVKAccessMask(Texture->CurrentLayout[MipIdx], DstStageMask);
-			Barrier.oldLayout = GetVKLayout(Texture->CurrentState[MipIdx]);
+			Barrier.srcAccessMask = GetVKAccessMask(Texture->CurrentLayout[MipToUse], TexturePrevShader);
+			Barrier.oldLayout = GetVKLayout(Texture->CurrentState[MipToUse]);
 
-			Barrier.subresourceRange.baseMipLevel   = MipIdx;
+			Barrier.subresourceRange.baseMipLevel   = MipToUse;
 			Barrier.subresourceRange.baseArrayLayer = 0;
 			Barrier.subresourceRange.levelCount = 1;
 			Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
-			Texture->CurrentLayout[MipIdx] = ResourceLayoutNext;
-			Texture->CurrentState[MipIdx] = ResourceStateNext;
-			Barriers.push_back(Barrier);
-		}
-
-		SrcStageMask |= Texture->PrevShader;
-		Texture->PrevShader = DstStageMask;
-	}
-
-	if(Barriers.size())
-	{
-		vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 
-							 VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 
-							 (u32)Barriers.size(), Barriers.data());
-	}
-}
-
-void vulkan_command_list::
-SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrier_state, u32, u32>>& BarrierData)
-{
-	std::vector<VkImageMemoryBarrier> Barriers;
-	u32 SrcStageMask = 0;
-	u32 DstStageMask = 0;
-
-	for(const std::tuple<std::vector<texture*>, u32, barrier_state, u32, u32>& Data : BarrierData)
-	{
-		const std::vector<texture*>& Textures = std::get<0>(Data);
-		if(!Textures.size()) continue;
-		u32 MipIdx = std::get<3>(Data);
-		for(texture* TextureData : Textures)
-		{
-			vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureData);
-
-			u32 ResourceLayoutNext = std::get<1>(Data);
-			barrier_state ResourceStateNext = std::get<2>(Data);
-			DstStageMask |= std::get<4>(Data);
-
-			VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-			Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, DstStageMask);
-			Barrier.newLayout = GetVKLayout(ResourceStateNext);
-			Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			Barrier.image = Texture->Handle;
-			Barrier.subresourceRange.aspectMask = Texture->Aspect;
-			if(MipIdx == TEXTURE_MIPS_ALL)
-			{
-				Barrier.srcAccessMask = GetVKAccessMask(Texture->CurrentLayout[0], DstStageMask);
-				Barrier.oldLayout = GetVKLayout(Texture->CurrentState[0]);
-
-				Barrier.subresourceRange.baseMipLevel   = 0;
-				Barrier.subresourceRange.baseArrayLayer = 0;
-				Barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-				Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-
-				std::fill(Texture->CurrentLayout.begin(), Texture->CurrentLayout.end(), ResourceLayoutNext);
-				std::fill(Texture->CurrentState.begin(), Texture->CurrentState.end(), ResourceStateNext);
-			}
-			else
-			{
-				Barrier.srcAccessMask = GetVKAccessMask(Texture->CurrentLayout[MipIdx], DstStageMask);
-				Barrier.oldLayout = GetVKLayout(Texture->CurrentState[MipIdx]);
-
-				Barrier.subresourceRange.baseMipLevel   = MipIdx;
-				Barrier.subresourceRange.baseArrayLayer = 0;
-				Barrier.subresourceRange.levelCount = 1;
-				Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-
-				Texture->CurrentLayout[MipIdx] = ResourceLayoutNext;
-				Texture->CurrentState[MipIdx] = ResourceStateNext;
-			}
-
-			SrcStageMask |= Texture->PrevShader;
-			Texture->PrevShader = DstStageMask;
+			Texture->CurrentLayout[MipToUse] = ResourceLayoutNext;
+			Texture->CurrentState[MipToUse] = ResourceStateNext;
 			Barriers.push_back(Barrier);
 		}
 	}

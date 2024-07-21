@@ -2,15 +2,15 @@
 
 struct directx12_buffer : public buffer
 {
-	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, bool NewWithCounter, u32 Usage)
+	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, bool NewWithCounter, u32 NewUsage)
 	{
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, Usage);
+		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, NewUsage);
 		Update(Backend, Data);
 	}
 
-	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 Usage)
+	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 NewUsage)
 	{
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, Usage);
+		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, NewUsage);
 	}
 
 	~directx12_buffer() override = default;
@@ -129,7 +129,7 @@ struct directx12_buffer : public buffer
 		TempHandle->Unmap(0, 0);
 	}
 
-	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 Usage) override 
+	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 NewUsage) override 
 	{
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
@@ -137,6 +137,7 @@ struct directx12_buffer : public buffer
 
 		Name = DebugName;
 		Size = NewSize * Count + WithCounter * sizeof(u32);
+		Usage = NewUsage;
 		CounterOffset = NewSize * Count;
 
 		D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE;
@@ -239,7 +240,7 @@ struct directx12_texture : public texture
 
         D3D12_SAMPLER_DESC SamplerDesc = {};
         SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(InputData.AddressMode);
-        SamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NONE;
+        SamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(Info.MinFilter), GetDXFilter(Info.MagFilter), GetDXMipmapMode(Info.MipmapMode), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(Info.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
         SamplerDesc.MaxLOD = InputData.MipLevels;
 
@@ -561,7 +562,7 @@ struct directx12_texture : public texture
 					UavDesc.ViewDimension         = D3D12_UAV_DIMENSION_TEXTURE3D;
 					UavDesc.Texture3D.MipSlice    = MipIdx;
 					UavDesc.Texture3D.FirstWSlice = 0;
-					UavDesc.Texture3D.WSize       = Info.Layers;
+					UavDesc.Texture3D.WSize       = ~0u; //Depth;
 				}
 
 				auto UnorderedAccessView = Gfx->ResourcesHeap.GetNextCpuHandle();
@@ -627,7 +628,7 @@ struct directx12_texture : public texture
 					RtvDesc.ViewDimension		  = D3D12_RTV_DIMENSION_TEXTURE3D;
 					RtvDesc.Texture3D.MipSlice    = MipIdx;
 					RtvDesc.Texture3D.FirstWSlice = 0;
-					RtvDesc.Texture3D.WSize       = Info.Layers;
+					RtvDesc.Texture3D.WSize       = ~0u; //Depth;
 				}
 
 				Gfx->Device->CreateRenderTargetView(Handle.Get(), &RtvDesc, RenderTargetView);

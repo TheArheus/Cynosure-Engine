@@ -119,11 +119,9 @@ struct mesh_comp_culling_common_input
 #include "core/gfx/backend/vulkan/vulkan_pipeline_context.cpp"
 #include "core/gfx/backend/vulkan/vulkan_backend.cpp"
 
-#if 0
 #if _WIN32
 	#include "core/gfx/backend/dx12/directx12_backend.cpp"
 	#include "core/gfx/backend/dx12/directx12_pipeline_context.cpp"
-#endif
 #endif
 
 #include "core/scene_manager/scene_manager.h"

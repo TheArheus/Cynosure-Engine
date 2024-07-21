@@ -249,13 +249,11 @@ void window::InitVulkanGraphics()
 	Gfx = global_graphics_context(NewBackend, backend_type::vulkan);
 }
 
-#if 0
 void window::InitDirectx12Graphics()
 {
 	renderer_backend* NewBackend = new directx12_backend(this);
 	Gfx = global_graphics_context(NewBackend, backend_type::directx12);
 }
-#endif
 
 void* window::
 GetProcAddr(library_block& Library, const char* SourceName, const char* FuncName)

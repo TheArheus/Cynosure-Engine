@@ -298,12 +298,39 @@ enum pipeline_stage_flags
 	PSF_LateFragment    = BYTE(6 ),
 	PSF_ColorAttachment = BYTE(7 ),
 	PSF_Compute         = BYTE(8 ),
-	PSF_Transfer        = BYTE(9 ),
-	PSF_BottomOfPipe    = BYTE(10),
-	PSF_Host            = BYTE(11),
-	PSF_AllGraphics     = BYTE(12),
-	PSF_AllCommands     = BYTE(13),
+	PSF_Hull            = BYTE(9 ),
+	PSF_Domain          = BYTE(10),
+	PSF_Geometry        = BYTE(11),
+	PSF_Transfer        = BYTE(12),
+	PSF_BottomOfPipe    = BYTE(13),
+	PSF_Host            = BYTE(14),
+	PSF_AllGraphics     = BYTE(15),
+	PSF_AllCommands     = BYTE(16),
 };
+
+
+u32 GetShaderFlag(shader_stage Stage)
+{
+	switch (Stage)
+	{
+	case shader_stage::vertex:
+		return PSF_VertexShader;
+	case shader_stage::fragment:
+		return PSF_FragmentShader;
+	case shader_stage::compute:
+		return PSF_Compute;
+	case shader_stage::geometry:
+		return PSF_Geometry;
+	case shader_stage::tessellation_control:
+		return PSF_Hull;
+	case shader_stage::tessellation_eval:
+		return PSF_Domain;
+	case shader_stage::all:
+		return PSF_AllGraphics;
+	default:
+		return PSF_AllGraphics;
+	}
+}
 
 enum access_flags
 {
@@ -344,7 +371,6 @@ enum class barrier_state
 enum class resource_type
 {
 	buffer,
-	buffer_with_counter,
 	texture_storage,
 	texture_sampler,
 };

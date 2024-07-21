@@ -180,8 +180,6 @@ struct vulkan_buffer : public buffer
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 		WithCounter = NewWithCounter;
 
-		CurrentLayout = 0;
-
 		Device = Gfx->Device;
 		Size = NewSize * Count + WithCounter * sizeof(u32);
 		CounterOffset = NewSize * Count;
@@ -542,10 +540,8 @@ struct vulkan_texture : public texture
 	VkImage Handle;
 	VkDeviceMemory Memory;
 	VkSampler SamplerHandle;
-	std::vector<VkImageView> Views;
-
-	VkImageLayout Layout;
 	VkImageAspectFlags Aspect;
+	std::vector<VkImageView> Views;
 
 	VmaAllocation Allocation;
 

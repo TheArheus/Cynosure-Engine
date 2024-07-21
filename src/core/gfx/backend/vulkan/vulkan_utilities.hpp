@@ -1026,6 +1026,12 @@ VkPipelineStageFlags GetVKPipelineStage(u32 Stages)
 		Result |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	if(Stages & PSF_Compute)
 		Result |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+	if(Stages & PSF_Hull)
+		Result |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
+	if(Stages & PSF_Domain)
+		Result |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
+	if(Stages & PSF_Geometry)
+		Result |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
 	if(Stages & PSF_Transfer)
 		Result |= VK_PIPELINE_STAGE_TRANSFER_BIT;
 	if(Stages & PSF_BottomOfPipe)

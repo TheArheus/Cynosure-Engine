@@ -344,10 +344,10 @@ struct deferred_raster_system : public entity_system
 			Parameters.Input.MeshMaterialsBuffer = MeshMaterialsBuffer;
 			Parameters.Input.GeometryOffsets = GeometryOffsets;
 
-			Parameters.StaticStorage.DiffuseTextures = DiffuseTextures;
-			Parameters.StaticStorage.NormalTextures = NormalTextures;
-			Parameters.StaticStorage.SpecularTextures = SpecularTextures;
-			Parameters.StaticStorage.HeightTextures = HeightTextures;
+			Parameters.StaticStorage.DiffuseTextures = Gfx.UseTextureArray(DiffuseTextures);
+			Parameters.StaticStorage.NormalTextures = Gfx.UseTextureArray(NormalTextures);
+			Parameters.StaticStorage.SpecularTextures = Gfx.UseTextureArray(SpecularTextures);
+			Parameters.StaticStorage.HeightTextures = Gfx.UseTextureArray(HeightTextures);
 
 			Gfx.AddPass<gbuffer_raster>("GBuffer generation", Parameters, pass_type::graphics, 
 			[this, GBuffer = Gfx.GBuffer, GfxDepthTarget = Gfx.GfxDepthTarget](global_graphics_context& Gfx, command_list* Cmd, void* Parameters)
@@ -376,10 +376,10 @@ struct deferred_raster_system : public entity_system
 
 			Parameters.Output.VoxelGrid = Gfx.UseTexture(Gfx.VoxelGridTarget);
 
-			Parameters.StaticStorage.DiffuseTextures = DiffuseTextures;
-			Parameters.StaticStorage.NormalTextures = NormalTextures;
-			Parameters.StaticStorage.SpecularTextures = SpecularTextures;
-			Parameters.StaticStorage.HeightTextures = HeightTextures;
+			Parameters.StaticStorage.DiffuseTextures = Gfx.UseTextureArray(DiffuseTextures);
+			Parameters.StaticStorage.NormalTextures = Gfx.UseTextureArray(NormalTextures);
+			Parameters.StaticStorage.SpecularTextures = Gfx.UseTextureArray(SpecularTextures);
+			Parameters.StaticStorage.HeightTextures = Gfx.UseTextureArray(HeightTextures);
 
 			Gfx.AddPass<voxelization>("Voxelization", Parameters, pass_type::graphics, 
 			[this, VoxelGridTarget = Gfx.VoxelGridTarget](global_graphics_context& Gfx, command_list* Cmd, void* Parameters)
@@ -420,7 +420,7 @@ struct deferred_raster_system : public entity_system
 			Parameters.Input.RandomSamplesBuffer = Gfx.RandomSamplesBuffer;
 			Parameters.Input.NoiseTexture = Gfx.UseTexture(Gfx.NoiseTexture);
 			Parameters.Input.DepthTarget = Gfx.UseTexture(Gfx.GfxDepthTarget);
-			Parameters.Input.GBuffer = Gfx.GBuffer;
+			Parameters.Input.GBuffer = Gfx.UseTextureArray(Gfx.GBuffer);
 
 			Parameters.Output.Output = Gfx.UseTexture(Gfx.AmbientOcclusionData);
 
@@ -472,15 +472,15 @@ struct deferred_raster_system : public entity_system
 			Parameters.Input.GfxDepthTarget = Gfx.UseTexture(Gfx.GfxDepthTarget);
 			Parameters.Input.VoxelGridTarget = Gfx.UseTexture(Gfx.VoxelGridTarget);
 			Parameters.Input.RandomAnglesTexture = Gfx.UseTexture(Gfx.RandomAnglesTexture);
-			Parameters.Input.GBuffer = Gfx.GBuffer;
+			Parameters.Input.GBuffer = Gfx.UseTextureArray(Gfx.GBuffer);
 			Parameters.Input.AmbientOcclusionData = Gfx.UseTexture(Gfx.AmbientOcclusionData);
-			Parameters.Input.GlobalShadow = Gfx.GlobalShadow;
+			Parameters.Input.GlobalShadow = Gfx.UseTextureArray(Gfx.GlobalShadow);
 
 			Parameters.Output.HdrOutput = Gfx.UseTexture(Gfx.HdrColorTarget);
 			Parameters.Output.BrightOutput = Gfx.UseTexture(Gfx.BrightTarget);
 
-			Parameters.StaticStorage.LightShadows = LightShadows;
-			Parameters.StaticStorage.PointLightShadows = PointLightShadows;
+			Parameters.StaticStorage.LightShadows = Gfx.UseTextureArray(LightShadows);
+			Parameters.StaticStorage.PointLightShadows = Gfx.UseTextureArray(PointLightShadows);
 
 			Gfx.AddPass<color_pass>("Deferred Color Pass", Parameters, pass_type::compute,
 			[this, Width = Gfx.Backend->Width, Height = Gfx.Backend->Height](global_graphics_context& Gfx, command_list* Cmd, void* Parameters)

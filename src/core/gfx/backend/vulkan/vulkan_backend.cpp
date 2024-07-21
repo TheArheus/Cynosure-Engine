@@ -571,6 +571,10 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		}
 
 		glslang::SpvOptions CompileOptions;
+#ifdef CE_DEBUG
+		CompileOptions.generateDebugInfo = true;
+		CompileOptions.stripDebugInfo = false;
+#endif
 		glslang::TIntermediate *Intermediate = Program.getIntermediate(ShaderModule.getStage());
 		glslang::GlslangToSpv(*Intermediate, SpirvCode, &CompileOptions);
 

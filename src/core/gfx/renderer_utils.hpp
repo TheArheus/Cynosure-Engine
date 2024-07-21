@@ -410,8 +410,9 @@ struct renderer_backend
 struct descriptor_param
 {
 	resource_type Type;
-	u32 Count;
+	u32 Count = 0;
 	image_type ImageType;
+	u32 ShaderToUse = 0;
 };
 
 class general_context
@@ -425,6 +426,7 @@ public:
 
 	virtual void Clear() = 0;
 
+	std::string Name;
 	pass_type Type;
 	std::map<u32, std::vector<descriptor_param>> ParameterLayout;
 };
@@ -483,7 +485,6 @@ struct command_list
 
 	virtual void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData) = 0;
 	virtual void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>>& BarrierData) = 0;
-	virtual void SetImageBarriers(const std::vector<std::tuple<std::vector<texture*>, u32, barrier_state, u32, u32>>& BarrierData) = 0;
 
 	virtual void DebugGuiBegin(texture* RenderTarget) = 0;
 	virtual void DebugGuiEnd()   = 0;
@@ -491,6 +492,12 @@ struct command_list
 	u32 BackBufferIndex = 0;
 
 	general_context* CurrentContext;
+
+	std::unordered_set<buffer*>  BuffersToCommon;
+	std::unordered_set<texture*> TexturesToCommon;
+
+	std::vector<std::tuple<buffer*, u32, u32>> AttachmentBufferBarriers;
+	std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>> AttachmentImageBarriers;
 };
 
 class command_queue
@@ -542,12 +549,7 @@ struct resource_binder
 struct texture_ref
 {
 	u64 SubresourceIndex = TEXTURE_MIPS_ALL;
-	texture* Handle = nullptr;
-};
-
-struct texture_array_ref
-{
-	std::vector<texture*> Handle;
+	texture* Handle;
 };
 
 struct buffer_ref
@@ -646,6 +648,7 @@ struct buffer
 
 	u32 PrevShader = PSF_TopOfPipe;
 	u32 CurrentLayout = 0;
+	u32 Usage = 0;
 };
 
 struct texture
