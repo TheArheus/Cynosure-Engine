@@ -63,18 +63,9 @@ AppendStaticStorage(general_context* ContextToUse, void* Data)
 			}
 			else if(Parameter.Type == resource_type::texture_sampler)
 			{
-				if(Parameter.Count > 1)
-				{
-					std::vector<texture*> TextureToBind = *(std::vector<texture*>*)It;
-					SetImageSampler(Parameter.Count, TextureToBind, Parameter.ImageType, barrier_state::shader_read, 0, LayoutIdx);
-					It = (void*)((u8*)It + sizeof(std::vector<texture*>));
-				}
-				else
-				{
-					texture_ref TextureToBind = *(texture_ref*)It;
-					SetImageSampler(Parameter.Count, {TextureToBind.Handle}, Parameter.ImageType, barrier_state::shader_read, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex, LayoutIdx);
-					It = (void*)((u8*)It + sizeof(texture_ref));
-				}
+				texture_ref TextureToBind = *(texture_ref*)It;
+				SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::shader_read, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex, LayoutIdx);
+				It = (void*)((u8*)It + sizeof(texture_ref));
 			}
 			else if(Parameter.Type == resource_type::texture_storage)
 			{
@@ -633,29 +624,17 @@ BindShaderParameters(void* Data)
 		}
 		else if(Parameter.Type == resource_type::texture_sampler)
 		{
-			if(Parameter.Count > 1)
+			texture_ref TextureToBind = *(texture_ref*)It;
+			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
+			Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::shader_read, MipToUse);
+
+			for(texture* CurrentTexture : TextureToBind.Handle)
 			{
-				std::vector<texture*> TextureToBind = *(std::vector<texture*>*)It;
-
-				Binder.SetImageSampler(Parameter.Count, TextureToBind, Parameter.ImageType, barrier_state::shader_read);
-
-				for(texture* CurrentTexture : TextureToBind)
-				{
-					TexturesToCommon.insert(CurrentTexture);
-					AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
-				}
-				It = (void*)((u8*)It + sizeof(std::vector<texture*>));
+				TexturesToCommon.insert(CurrentTexture);
+				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
 			}
-			else
-			{
-				texture_ref TextureToBind = *(texture_ref*)It;
-				Binder.SetImageSampler(Parameter.Count, {TextureToBind.Handle}, Parameter.ImageType, barrier_state::shader_read, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex);
 
-				TexturesToCommon.insert(TextureToBind.Handle);
-				AttachmentImageBarriers.push_back({TextureToBind.Handle, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
-
-				It = (void*)((u8*)It + sizeof(texture_ref));
-			}
+			It = (void*)((u8*)It + sizeof(texture_ref));
 		}
 		else if(Parameter.Type == resource_type::texture_storage)
 		{
@@ -685,10 +664,13 @@ BindShaderParameters(void* Data)
 		{
 			texture_ref TextureToBind = *(texture_ref*)It;
 
-			Binder.SetStorageImage(Parameter.Count, {TextureToBind.Handle}, Parameter.ImageType, barrier_state::general, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex);
+			Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::general, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex);
 
-			TexturesToCommon.insert(TextureToBind.Handle);
-			AttachmentImageBarriers.push_back({TextureToBind.Handle, AF_ShaderWrite, barrier_state::general, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+			for(texture* CurrentTexture : TextureToBind.Handle)
+			{
+				TexturesToCommon.insert(CurrentTexture);
+				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderWrite, barrier_state::general, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+			}
 
 			It = (void*)((u8*)It + sizeof(texture_ref));
 		}
@@ -709,14 +691,15 @@ BindShaderParameters(void* Data)
 			}
 			else if(Parameter.Type == resource_type::texture_sampler)
 			{
-				if(Parameter.Count > 1)
+				texture_ref TextureToBind = *(texture_ref*)It;
+
+				for(texture* CurrentTexture : TextureToBind.Handle)
 				{
-					std::vector<texture*> TextureToBind = *(std::vector<texture*>*)It;
-					for(texture* CurrentTexture : TextureToBind)
-					{
-						TexturesToCommon.insert(CurrentTexture);
-						AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
-					}
+					TexturesToCommon.insert(CurrentTexture);
+					AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+				}
+				if(s32(Parameter.Count - TextureToBind.Handle.size()) > 0)
+				{
 					if(Parameter.ImageType == image_type::Texture1D)
 						AttachmentImageBarriers.push_back({Binder.NullTexture1D, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
 					else if(Parameter.ImageType == image_type::Texture2D)
@@ -725,15 +708,8 @@ BindShaderParameters(void* Data)
 						AttachmentImageBarriers.push_back({Binder.NullTexture3D, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
 					else if(Parameter.ImageType == image_type::TextureCube)
 						AttachmentImageBarriers.push_back({Binder.NullTextureCube, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
-					It = (void*)((u8*)It + sizeof(std::vector<texture*>));
 				}
-				else
-				{
-					texture_ref TextureToBind = *(texture_ref*)It;
-					TexturesToCommon.insert(TextureToBind.Handle);
-					AttachmentImageBarriers.push_back({TextureToBind.Handle, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
-					It = (void*)((u8*)It + sizeof(texture_ref));
-				}
+				It = (void*)((u8*)It + sizeof(texture_ref));
 			}
 			else if(Parameter.Type == resource_type::texture_storage)
 			{
@@ -1088,7 +1064,7 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 					Barrier.srcAccessMask = GetVKAccessMask(TexturePrevShader & PSF_TopOfPipe ? 0 : Texture->CurrentLayout[MipIdx], TexturePrevShader);
 					Barrier.oldLayout = GetVKLayout(TexturePrevShader & PSF_TopOfPipe ? barrier_state::undefined : Texture->CurrentState[MipIdx]);
 
-					Barrier.subresourceRange.baseMipLevel   = 0;
+					Barrier.subresourceRange.baseMipLevel   = MipIdx;
 					Barrier.subresourceRange.baseArrayLayer = 0;
 					Barrier.subresourceRange.levelCount = 1;
 					Barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
@@ -1144,9 +1120,9 @@ DebugGuiBegin(texture* RenderTarget)
 	RenderingInfoGui.colorAttachmentCount = 1;
 	RenderingInfoGui.pColorAttachments = &ColorInfo;
 
-	std::fill(Clr->CurrentLayout.begin(), Clr->CurrentLayout.end(), AF_ColorAttachmentWrite);
-	std::fill(Clr->CurrentState.begin(), Clr->CurrentState.end(), barrier_state::color_attachment);
-	Clr->PrevShader = PSF_ColorAttachment;
+	//std::fill(Clr->CurrentLayout.begin(), Clr->CurrentLayout.end(), AF_ColorAttachmentWrite);
+	//std::fill(Clr->CurrentState.begin(), Clr->CurrentState.end(), barrier_state::color_attachment);
+	//Clr->PrevShader = PSF_ColorAttachment;
 
 	if(Gfx->Features13.dynamicRendering)
 		vkCmdBeginRenderingKHR(CommandList, &RenderingInfoGui);

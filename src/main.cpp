@@ -21,13 +21,8 @@
 // TODO: Ambient Occlusion fix or a better one
 // TODO: Volumetric clouds
 //
-// TODO: Add more flexibility to activate/disable features
-//			Maybe I would need to add render graphs or just automatic barriers for it(now there is only semi-automatic barriers)
 // TODO: Handle dynamic entities that updates every frame
 //			One entity - one instance for a group of the object(would be easy to handle each instance and add to them the component if needed)
-//
-// TODO: Application abstraction
-// TODO: Mesh animation component
 //
 // TODO: Only one scene at a time
 // TODO: Implement sound system with openal???
@@ -41,8 +36,8 @@
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
 	window Window(1280, 720, "3D Renderer");
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 	scene_manager SceneManager(Window);
 
 	u32 GlobalMemorySize = MiB(128);
@@ -72,7 +67,7 @@
 
 		alloc_vector<light_source> GlobalLightSources(LightSourcesAlloc);
 
-		//Window.NewFrame();
+		Window.NewFrame();
 		Window.EventsDispatcher.Reset();
 
 		SceneManager.UpdateScenes();
@@ -86,45 +81,10 @@
 
 		if(!Window.IsGfxPaused)
 		{
-#if 0
-			PipelineContext->Begin();
-
-			SceneManager.RenderScene(Window, PipelineContext, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
-
-			PipelineContext->DebugGuiBegin(Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
-			ImGui::NewFrame();
-
-			SceneManager.RenderUI();
-
-			if(SceneManager.Count() > 1)
-			{
-				ImGui::SetNextWindowPos(ImVec2(0, 300));
-				ImGui::SetNextWindowSize(ImVec2(150, 100));
-				ImGui::Begin("Active Scenes", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-
-				for(u32 SceneIdx = 0; SceneIdx < SceneManager.Count(); ++SceneIdx)
-				{
-					if(ImGui::Button(SceneManager.Infos[SceneIdx].Name.c_str()))
-					{
-						SceneManager.CurrentScene = SceneIdx;
-					}
-				}
-
-				ImGui::End();
-			}
-
-			ImGui::EndFrame();
-			ImGui::Render();
-			PipelineContext->DebugGuiEnd();
-
-			PipelineContext->EmplaceColorTarget(Window.Gfx.GfxColorTarget[PipelineContext->BackBufferIndex]);
-			PipelineContext->Present();
-#else
 			SceneManager.RenderScene(Window, GlobalMeshInstances, GlobalMeshVisibility, DebugMeshInstances, DebugMeshVisibility, GlobalLightSources);
 
 			Window.Gfx.Compile();
-			Window.Gfx.Execute();
-#endif
+			Window.Gfx.Execute(SceneManager);
 		}
 
 		Window.EmitEvents();

@@ -106,53 +106,23 @@ struct render_debug_system : public entity_system
 	{
 		if (!Geometries.MeshCount) return;
 
-#if 0
-		for(entity& Entity : Entities)
 		{
-			dynamic_instances_component* InstancesComponent = Entity.GetComponent<dynamic_instances_component>();
-
-			for(mesh_draw_command& EntityInstance : InstancesComponent->Data)
-			{
-				DynamicMeshInstances.push_back({EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 1});
-				DynamicMeshVisibility.push_back(true);
-			}
-
-			for(mesh_draw_command& EntityInstance : InstancesComponent->Data)
-			{
-				DynamicMeshInstances.push_back({EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 2});
-				DynamicMeshVisibility.push_back(true);
-			}
-
-			for(mesh_draw_command& EntityInstance : InstancesComponent->Data)
-			{
-				DynamicMeshInstances.push_back({EntityInstance.Translate, EntityInstance.Scale, vec4(0), (*(u32*)&Entity.Handle - 1) * 3 + 3});
-				DynamicMeshVisibility.push_back(true);
-			}
-		}
-#endif
-
-		{
-#if 0
-			WorldUpdateBuffer->UpdateSize(Gfx.Backend, &WorldUpdate, sizeof(global_world_data));
-			MeshCommonCullingInputBuffer->UpdateSize(Gfx.Backend, &MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input));
-
-#else
 			Gfx.AddTransferPass("Data upload",
 			[this, &WorldUpdate, &MeshCommonCullingInput](global_graphics_context& Gfx, command_list* Cmd, void* Parameters)
 			{
 				WorldUpdateBuffer->UpdateSize(&WorldUpdate, sizeof(global_world_data), Cmd);
 				MeshCommonCullingInputBuffer->UpdateSize(&MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), Cmd);
 			});
-#endif
 		}
+
 		{
 			shader_parameter<generate_all> Parameters;
-			Parameters.Input.MeshCommonCullingInputBuffer = MeshCommonCullingInputBuffer;
-			Parameters.Input.GeometryOffsets = GeometryDebugOffsets;
-			Parameters.Input.MeshDrawCommandDataBuffer = DebugMeshDrawCommandDataBuffer;
-			Parameters.Input.MeshDrawVisibilityDataBuffer = DebugMeshDrawVisibilityDataBuffer;
-			Parameters.Output.IndirectDrawIndexedCommands = DebugIndirectDrawIndexedCommands;
-			Parameters.Output.MeshDrawCommandBuffer = MeshDrawDebugCommandBuffer;
+			Parameters.Input.MeshCommonCullingInputBuffer = Gfx.UseBuffer(MeshCommonCullingInputBuffer);
+			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryDebugOffsets);
+			Parameters.Input.MeshDrawCommandDataBuffer = Gfx.UseBuffer(DebugMeshDrawCommandDataBuffer);
+			Parameters.Input.MeshDrawVisibilityDataBuffer = Gfx.UseBuffer(DebugMeshDrawVisibilityDataBuffer);
+			Parameters.Output.IndirectDrawIndexedCommands = Gfx.UseBuffer(DebugIndirectDrawIndexedCommands);
+			Parameters.Output.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawDebugCommandBuffer);
 
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DebugDrawCount, MeshCommonCullingInput.DebugMeshCount};
 			Gfx.AddPass<generate_all>("Command generation for debug meshes", Parameters, pass_type::compute,
@@ -166,11 +136,11 @@ struct render_debug_system : public entity_system
 		}
 		{
 			shader_parameter<debug_raster> Parameters;
-			Parameters.Input.WorldUpdateBuffer = WorldUpdateBuffer;
-			Parameters.Input.VertexBuffer = DebugVertexBuffer;
-			Parameters.Input.MeshDrawCommandBuffer = MeshDrawDebugCommandBuffer;
-			Parameters.Input.MeshMaterialsBuffer = MeshDebugMaterialsBuffer;
-			Parameters.Input.GeometryOffsets = GeometryDebugOffsets;
+			Parameters.Input.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
+			Parameters.Input.VertexBuffer = Gfx.UseBuffer(DebugVertexBuffer);
+			Parameters.Input.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawDebugCommandBuffer);
+			Parameters.Input.MeshMaterialsBuffer = Gfx.UseBuffer(MeshDebugMaterialsBuffer);
+			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryDebugOffsets);
 
 			Gfx.AddPass<debug_raster>("Debug raster", Parameters, pass_type::graphics, 
 			[this, GfxColorTarget = Gfx.GfxColorTarget, GfxDepthTarget = Gfx.GfxDepthTarget](global_graphics_context& Gfx, command_list* Cmd, void* Parameters)

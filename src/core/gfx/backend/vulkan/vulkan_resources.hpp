@@ -153,8 +153,8 @@ struct vulkan_buffer : public buffer
 		if (UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
 
-		GlobalPipeline->SetBufferBarriers({{this, AF_TransferRead, PSF_Transfer}});
 		vulkan_command_list* PipelineContext = static_cast<vulkan_command_list*>(GlobalPipeline);
+		GlobalPipeline->SetBufferBarriers({{this, AF_TransferRead, PSF_Transfer}});
 
 		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
 		vkCmdCopyBuffer(PipelineContext->CommandList, Handle, Temp, 1, &Region);
@@ -294,10 +294,10 @@ struct vulkan_texture : public texture
 		if(Data || Info.UseStagingBuffer)
 		{
 			CreateStagingResource();
-			Update(Backend, Data);
+			if(Data) Update(Backend, Data);
 		}
-		//if(Data && !Info.UseStagingBuffer)
-			//DestroyStagingResource();
+		if(Data && !Info.UseStagingBuffer)
+			DestroyStagingResource();
 
 		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
 		ReductionMode.reductionMode = GetVKSamplerReductionMode(Info.ReductionMode);
@@ -519,12 +519,14 @@ struct vulkan_texture : public texture
 		vkAllocateMemory(Device, &AllocateInfo, 0, &TempMemory);
 		vkBindBufferMemory(Device, Temp, TempMemory, 0);
 
+#if 0
 		std::string TempName = (Name + ".buffer.temp");
 		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 		DebugNameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
 		DebugNameInfo.objectHandle = (u64)Temp;
 		DebugNameInfo.pObjectName = TempName.c_str();
 		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
+#endif
 	}
 
 	void DestroyResource() override

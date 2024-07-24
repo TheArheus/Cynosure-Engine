@@ -4,16 +4,16 @@ struct frustum_culling : public shader_compute_view_context
 {
 	struct input_type
 	{
-		buffer* MeshCommonCullingInputBuffer;
-		buffer* GeometryOffsets;
-		buffer* MeshDrawCommandDataBuffer;
-		buffer* MeshDrawVisibilityDataBuffer;
+		buffer_ref MeshCommonCullingInputBuffer;
+		buffer_ref GeometryOffsets;
+		buffer_ref MeshDrawCommandDataBuffer;
+		buffer_ref MeshDrawVisibilityDataBuffer;
 	};
 
 	struct output_type
 	{
-		buffer* IndirectDrawIndexedCommands;
-		buffer* MeshDrawCommandBuffer;
+		buffer_ref IndirectDrawIndexedCommands;
+		buffer_ref MeshDrawCommandBuffer;
 	};
 
 	frustum_culling()
@@ -27,15 +27,15 @@ struct occlusion_culling : public shader_compute_view_context
 {
 	struct input_type
 	{
-		buffer*  MeshCommonCullingInputBuffer;
-		buffer*  GeometryOffsets;
-		buffer*  MeshDrawCommandDataBuffer;
+		buffer_ref  MeshCommonCullingInputBuffer;
+		buffer_ref  GeometryOffsets;
+		buffer_ref  MeshDrawCommandDataBuffer;
 		texture_ref DepthPyramid;
 	};
 
 	struct output_type
 	{
-		buffer* MeshDrawVisibilityDataBuffer;
+		buffer_ref MeshDrawVisibilityDataBuffer;
 	};
 
 public:
@@ -49,16 +49,16 @@ struct generate_all : public shader_compute_view_context
 {
 	struct input_type
 	{
-		buffer* MeshCommonCullingInputBuffer;
-		buffer* GeometryOffsets;
-		buffer* MeshDrawCommandDataBuffer;
-		buffer* MeshDrawVisibilityDataBuffer;
+		buffer_ref MeshCommonCullingInputBuffer;
+		buffer_ref GeometryOffsets;
+		buffer_ref MeshDrawCommandDataBuffer;
+		buffer_ref MeshDrawVisibilityDataBuffer;
 	};
 
 	struct output_type
 	{
-		buffer* IndirectDrawIndexedCommands;
-		buffer* MeshDrawCommandBuffer;
+		buffer_ref IndirectDrawIndexedCommands;
+		buffer_ref MeshDrawCommandBuffer;
 	};
 
 	generate_all()

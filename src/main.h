@@ -47,15 +47,14 @@ class window;
 #include "core/gfx/common.hpp"
 #include "core/gfx/renderer_utils.hpp"
 
-
 #include "core/gfx/backend/vulkan/vulkan_gfx.hpp"
 #if _WIN32
 	#include "core/gfx/backend/dx12/directx12_gfx.hpp"
 #endif
 
+struct scene_manager;
 #include "core/gfx/renderer.h"
 #include "core/platform/window.hpp"
-
 
 
 u32 GetImageMipLevels(u32 Width, u32 Height)

@@ -129,8 +129,8 @@ void main()
 		NewMin = min(ClipPos.xyz, NewMin);
 		NewMax = max(ClipPos.xyz, NewMax);
 	}
-	NewMin = clamp(NewMin * vec3(0.5, -0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
-	NewMax = clamp(NewMax * vec3(0.5, -0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
+	NewMin = clamp(NewMin * vec3(0.5, 0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
+	NewMax = clamp(NewMax * vec3(0.5, 0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
 
 	vec2 HiZSize = textureSize(DepthPyramid, 0);
 

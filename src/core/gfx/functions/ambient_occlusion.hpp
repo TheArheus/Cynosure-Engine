@@ -4,11 +4,11 @@ struct ssao : public shader_compute_view_context
 {
 	struct input_type
 	{
-		buffer* WorldUpdateBuffer;
-		buffer* RandomSamplesBuffer;
+		buffer_ref WorldUpdateBuffer;
+		buffer_ref RandomSamplesBuffer;
 		texture_ref NoiseTexture;
 		texture_ref DepthTarget;
-		std::vector<texture*> GBuffer;
+		texture_ref GBuffer;
 	};
 
 	struct output_type

@@ -128,6 +128,17 @@ vulkan_backend(window* Window)
 	std::vector<VkQueueFamilyProperties> QueueFamilyProperties(QueueFamilyPropertiesCount);
 	vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &QueueFamilyPropertiesCount, QueueFamilyProperties.data());
 
+	u32 PrimaryQueueIdx = 0;
+	u32 SecondaryQueueIdx = 0;
+	u32 TransferQueueIdx = 0;
+	for(u32 Idx = 0; Idx < QueueFamilyProperties.size(); ++Idx)
+	{
+		VkQueueFamilyProperties Property = QueueFamilyProperties[Idx];
+		if((Property.queueFlags & (VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) PrimaryQueueIdx = Idx;
+		if((Property.queueFlags & (VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) SecondaryQueueIdx = Idx;
+		if((Property.queueFlags & (VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_TRANSFER_BIT)) TransferQueueIdx = Idx;
+	}
+
 	vkGetPhysicalDeviceMemoryProperties(PhysicalDevice, &MemoryProperties);
 	vkGetPhysicalDeviceProperties(PhysicalDevice, &PhysicalDeviceProperties);
 
@@ -426,6 +437,92 @@ VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
 	}
 }
 
+bool GlslCompile(std::vector<u32>& SpirvOut, const std::string& Name, const std::string& ShaderCode, shader_stage ShaderType, u32 HighestUsedVulkanVersion)
+{
+	glslang::InitializeProcess();
+
+	EShLanguage LanguageStage = EShLangVertex;
+	glslang::EShTargetClientVersion ClientVersion = glslang::EShTargetVulkan_1_0;
+	glslang::EShTargetLanguageVersion TargetLanguageVersion = glslang::EShTargetSpv_1_0;
+	switch (ShaderType)
+	{
+		case shader_stage::tessellation_control:
+			LanguageStage = EShLangTessControl;
+			break;
+		case shader_stage::tessellation_eval:
+			LanguageStage = EShLangTessEvaluation;
+			break;
+		case shader_stage::geometry:
+			LanguageStage = EShLangGeometry;
+			break;
+		case shader_stage::fragment:
+			LanguageStage = EShLangFragment;
+			break;
+		case shader_stage::compute:
+			LanguageStage = EShLangCompute;
+			break;
+	}
+
+	if(HighestUsedVulkanVersion >= VK_API_VERSION_1_3)
+	{
+		ClientVersion = glslang::EShTargetVulkan_1_3;
+		TargetLanguageVersion = glslang::EShTargetSpv_1_6;
+	}
+	else if(HighestUsedVulkanVersion >= VK_API_VERSION_1_2)
+	{
+		ClientVersion = glslang::EShTargetVulkan_1_2;
+		TargetLanguageVersion = glslang::EShTargetSpv_1_5;
+	}
+	else if(HighestUsedVulkanVersion >= VK_API_VERSION_1_1)
+	{
+		ClientVersion = glslang::EShTargetVulkan_1_1;
+		TargetLanguageVersion = glslang::EShTargetSpv_1_3;
+	}
+
+	const char* GlslSource = ShaderCode.c_str();
+	glslang::TShader ShaderModule(LanguageStage);
+	ShaderModule.setStrings(&GlslSource, 1);
+
+	ShaderModule.setEnvInput(glslang::EShSourceGlsl, LanguageStage, glslang::EShClientVulkan, 100);
+	ShaderModule.setEnvClient(glslang::EShClientVulkan, ClientVersion);
+	ShaderModule.setEnvTarget(glslang::EshTargetSpv, TargetLanguageVersion);
+
+	const char* ShaderStrings[1];
+	ShaderStrings[0] = ShaderCode.c_str();
+	ShaderModule.setStrings(ShaderStrings, 1);
+
+	TBuiltInResource DefaultBuiltInResource = GetDefaultBuiltInResource();
+	if (!ShaderModule.parse(&DefaultBuiltInResource, 100, false, static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgDefault)))
+	{
+		std::cerr << "Shader: " << std::string(Name) << std::endl;
+		std::cerr << ShaderModule.getInfoLog() << std::endl;
+		std::cerr << ShaderModule.getInfoDebugLog() << std::endl;
+		return true;
+	}
+
+	glslang::TProgram Program;
+	Program.addShader(&ShaderModule);
+
+	if (!Program.link(static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules)))
+	{
+		std::cerr << "Shader: " << std::string(Name) << std::endl;
+		std::cerr << Program.getInfoLog() << std::endl;
+		std::cerr << Program.getInfoDebugLog() << std::endl;
+		return true;
+	}
+
+	glslang::SpvOptions CompileOptions;
+#ifdef CE_DEBUG
+	CompileOptions.generateDebugInfo = true;
+	CompileOptions.stripDebugInfo = false;
+#endif
+	glslang::TIntermediate *Intermediate = Program.getIntermediate(ShaderModule.getStage());
+	glslang::GlslangToSpv(*Intermediate, SpirvOut, &CompileOptions);
+
+	glslang::FinalizeProcess();
+
+	return false;
+}
 
 // TODO: Parse for push constant sizes
 // TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
@@ -498,87 +595,25 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 			ShaderCode = ShaderCode.substr(0, LineEnd) + "\n" + ShaderDefinesResult + ShaderCode.substr(LineEnd);
 		}
 
-		glslang::InitializeProcess();
-
-		EShLanguage LanguageStage = EShLangVertex;
-		glslang::EShTargetClientVersion ClientVersion = glslang::EShTargetVulkan_1_0;
-		glslang::EShTargetLanguageVersion TargetLanguageVersion = glslang::EShTargetSpv_1_0;
-		switch (ShaderType)
-		{
-			case shader_stage::tessellation_control:
-				LanguageStage = EShLangTessControl;
-				break;
-			case shader_stage::tessellation_eval:
-				LanguageStage = EShLangTessEvaluation;
-				break;
-			case shader_stage::geometry:
-				LanguageStage = EShLangGeometry;
-				break;
-			case shader_stage::fragment:
-				LanguageStage = EShLangFragment;
-				break;
-			case shader_stage::compute:
-				LanguageStage = EShLangCompute;
-				break;
-		}
-
-		if(HighestUsedVulkanVersion >= VK_API_VERSION_1_3)
-		{
-			ClientVersion = glslang::EShTargetVulkan_1_3;
-			TargetLanguageVersion = glslang::EShTargetSpv_1_6;
-		}
-		else if(HighestUsedVulkanVersion >= VK_API_VERSION_1_2)
-		{
-			ClientVersion = glslang::EShTargetVulkan_1_2;
-			TargetLanguageVersion = glslang::EShTargetSpv_1_5;
-		}
-		else if(HighestUsedVulkanVersion >= VK_API_VERSION_1_1)
-		{
-			ClientVersion = glslang::EShTargetVulkan_1_1;
-			TargetLanguageVersion = glslang::EShTargetSpv_1_3;
-		}
-
-		const char* GlslSource = ShaderCode.c_str();
-		glslang::TShader ShaderModule(LanguageStage);
-		ShaderModule.setStrings(&GlslSource, 1);
-
-		ShaderModule.setEnvInput(glslang::EShSourceGlsl, LanguageStage, glslang::EShClientVulkan, 100);
-		ShaderModule.setEnvClient(glslang::EShClientVulkan, ClientVersion);
-		ShaderModule.setEnvTarget(glslang::EshTargetSpv, TargetLanguageVersion);
-
-		const char* ShaderStrings[1];
-		ShaderStrings[0] = ShaderCode.c_str();
-		ShaderModule.setStrings(ShaderStrings, 1);
-
-		TBuiltInResource DefaultBuiltInResource = GetDefaultBuiltInResource();
-		if (!ShaderModule.parse(&DefaultBuiltInResource, 100, false, static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgDefault)))
-		{
-			std::cerr << "Shader: " << std::string(Path) << std::endl;
-			std::cerr << ShaderModule.getInfoLog() << std::endl;
-			std::cerr << ShaderModule.getInfoDebugLog() << std::endl;
+		if(GlslCompile(SpirvCode, Path, ShaderCode, ShaderType, HighestUsedVulkanVersion))
 			return VK_NULL_HANDLE;
-		}
 
-		glslang::TProgram Program;
-		Program.addShader(&ShaderModule);
-
-		if (!Program.link(static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules)))
+#if 0
 		{
-			std::cerr << "Shader: " << std::string(Path) << std::endl;
-			std::cerr << Program.getInfoLog() << std::endl;
-			std::cerr << Program.getInfoDebugLog() << std::endl;
-			return VK_NULL_HANDLE;
-		}
+			spirv_cross::CompilerGLSL Compiler(SpirvCode.data(), SpirvCode.size());
 
-		glslang::SpvOptions CompileOptions;
-#ifdef CE_DEBUG
-		CompileOptions.generateDebugInfo = true;
-		CompileOptions.stripDebugInfo = false;
+			spirv_cross::CompilerGLSL::Options CommonOptions;
+			CommonOptions.vulkan_semantics = true;
+			CommonOptions.vertex.flip_vert_y = true;
+
+			Compiler.set_common_options(CommonOptions);
+			std::string NewGlslCode = Compiler.compile();
+
+			SpirvCode.clear();
+			if(GlslCompile(SpirvCode, Path, NewGlslCode, ShaderType, HighestUsedVulkanVersion))
+				return VK_NULL_HANDLE;
+		}
 #endif
-		glslang::TIntermediate *Intermediate = Program.getIntermediate(ShaderModule.getStage());
-		glslang::GlslangToSpv(*Intermediate, SpirvCode, &CompileOptions);
-
-		glslang::FinalizeProcess();
 
 		u32 LocalSizeIdX;
 		u32 LocalSizeIdY;

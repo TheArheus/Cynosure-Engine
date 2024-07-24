@@ -17,7 +17,7 @@ set DepthCascades=-DDEPTH_CASCADES_COUNT=3
 set UseDebugColorBlend=-DDEBUG_COLOR_BLEND=0
 set GBufferCount=-DGBUFFER_COUNT=5
 set LightSourcesMax=-DLIGHT_SOURCES_MAX_COUNT=256
-set VoxelGridSize=-DVOXEL_SIZE=256
+set VoxelGridSize=-DVOXEL_SIZE=128
 
 if not exist ..\build\ mkdir ..\build\
 if not exist ..\build\scenes\ mkdir ..\build\scenes\

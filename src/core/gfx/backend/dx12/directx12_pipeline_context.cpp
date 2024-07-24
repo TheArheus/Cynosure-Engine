@@ -208,7 +208,7 @@ SetConstant(void* Data, size_t Size)
 void directx12_command_list::
 SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight)
 {
-	D3D12_VIEWPORT Viewport = {(r32)StartX, (r32)StartY, (r32)RenderWidth, (r32)RenderHeight, 0, 1};
+	D3D12_VIEWPORT Viewport = {(r32)StartX, (r32)(RenderHeight - StartY), (r32)RenderWidth, -(r32)RenderHeight, 0, 1};
 	CommandList->RSSetViewports(1, &Viewport);
 
 	D3D12_RECT Scissors = {(LONG)StartX, (LONG)StartY, (LONG)RenderWidth, (LONG)RenderHeight};
@@ -430,25 +430,16 @@ BindShaderParameters(void* Data)
 			}
 			else if(Parameter.Type == resource_type::texture_sampler)
 			{
-				if(Parameter.Count > 1)
+				texture_ref TextureToBind = *(texture_ref*)StaticIt;
+
+				u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
+				Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::shader_read, MipToUse, LayoutIdx);
+				for(texture* CurrentTexture : TextureToBind.Handle)
 				{
-					std::vector<texture*> TextureToBind = *(std::vector<texture*>*)StaticIt;
-					Binder.SetImageSampler(Parameter.Count, TextureToBind, Parameter.ImageType, barrier_state::shader_read, 0, LayoutIdx);
-					for(texture* CurrentTexture : TextureToBind)
-					{
-						TexturesToCommon.insert(CurrentTexture);
-						AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
-					}
-					StaticIt = (void*)((u8*)StaticIt + sizeof(std::vector<texture*>));
+					TexturesToCommon.insert(CurrentTexture);
+					AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
 				}
-				else
-				{
-					texture_ref TextureToBind = *(texture_ref*)StaticIt;
-					Binder.SetImageSampler(Parameter.Count, {TextureToBind.Handle}, Parameter.ImageType, barrier_state::shader_read, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex, LayoutIdx);
-					TexturesToCommon.insert(TextureToBind.Handle);
-					AttachmentImageBarriers.push_back({TextureToBind.Handle, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
-					StaticIt = (void*)((u8*)StaticIt + sizeof(texture_ref));
-				}
+				StaticIt = (void*)((u8*)StaticIt + sizeof(texture_ref));
 			}
 			else if(Parameter.Type == resource_type::texture_storage)
 			{
@@ -478,29 +469,17 @@ BindShaderParameters(void* Data)
 		}
 		else if(Parameter.Type == resource_type::texture_sampler)
 		{
-			if(Parameter.Count > 1)
+			texture_ref TextureToBind = *(texture_ref*)It;
+			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
+			Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::shader_read, MipToUse);
+
+			for(texture* CurrentTexture : TextureToBind.Handle)
 			{
-				std::vector<texture*> TextureToBind = *(std::vector<texture*>*)It;
-
-				Binder.SetImageSampler(Parameter.Count, TextureToBind, Parameter.ImageType, barrier_state::shader_read);
-
-				for(texture* CurrentTexture : TextureToBind)
-				{
-					TexturesToCommon.insert(CurrentTexture);
-					AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
-				}
-				It = (void*)((u8*)It + sizeof(std::vector<texture*>));
+				TexturesToCommon.insert(CurrentTexture);
+				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
 			}
-			else
-			{
-				texture_ref TextureToBind = *(texture_ref*)It;
-				Binder.SetImageSampler(Parameter.Count, {TextureToBind.Handle}, Parameter.ImageType, barrier_state::shader_read, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex);
 
-				TexturesToCommon.insert(TextureToBind.Handle);
-				AttachmentImageBarriers.push_back({TextureToBind.Handle, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
-
-				It = (void*)((u8*)It + sizeof(texture_ref));
-			}
+			It = (void*)((u8*)It + sizeof(texture_ref));
 		}
 		else if(Parameter.Type == resource_type::texture_storage)
 		{
@@ -530,10 +509,14 @@ BindShaderParameters(void* Data)
 		{
 			texture_ref TextureToBind = *(texture_ref*)It;
 
-			Binder.SetStorageImage(Parameter.Count, {TextureToBind.Handle}, Parameter.ImageType, barrier_state::general, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex);
+			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
+			Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::general, MipToUse);
 
-			TexturesToCommon.insert(TextureToBind.Handle);
-			AttachmentImageBarriers.push_back({TextureToBind.Handle, AF_ShaderWrite, barrier_state::general, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+			for(texture* CurrentTexture : TextureToBind.Handle)
+			{
+				TexturesToCommon.insert(CurrentTexture);
+				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderWrite, barrier_state::general, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+			}
 
 			It = (void*)((u8*)It + sizeof(texture_ref));
 		}
@@ -622,8 +605,7 @@ DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance,
 	SetBufferBarriers(AttachmentBufferBarriers);
 	SetImageBarriers(AttachmentImageBarriers);
 
-	//if((ColorTargets.size() > 0) || Context->Info.UseDepth)
-		CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
+	CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
 
 	CommandList->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 
@@ -646,8 +628,7 @@ DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructure
 	SetBufferBarriers(AttachmentBufferBarriers);
 	SetImageBarriers(AttachmentImageBarriers);
 
-	//if((ColorTargets.size() > 0) || Context->Info.UseDepth)
-		CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
+	CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
 
 	directx12_buffer* Indirect = static_cast<directx12_buffer*>(IndirectCommands);
 	CommandList->ExecuteIndirect(Context->IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), !Context->HaveDrawID * 4, Indirect->CounterHandle.Get(), 0);
@@ -677,15 +658,15 @@ Dispatch(u32 X, u32 Y, u32 Z)
 void directx12_command_list::
 FillBuffer(buffer* Buffer, u32 Value)
 {
-	//std::vector<u32> Fill(Buffer->Size / sizeof(u32), Value);
-	//Buffer->Update(Fill.data(), this);
+	std::vector<u32> Fill(Buffer->Size / sizeof(u32), Value);
+	Buffer->Update(Fill.data(), this);
 }
 
 void directx12_command_list::
 FillTexture(texture* Texture, vec4 Value)
 {
-	//std::vector<vec4> Fill(Texture->Size / sizeof(vec4), Value);
-	//Texture->Update(Fill.data(), this);
+	std::vector<vec4> Fill(Texture->Size / sizeof(vec4), Value);
+	Texture->Update(Fill.data(), this);
 }
 
 void directx12_command_list::
@@ -703,13 +684,14 @@ SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData)
 	{
 		directx12_buffer* Buffer = static_cast<directx12_buffer*>(std::get<0>(Data));
 
+		u32 ResourceLayoutPrev = Buffer->CurrentLayout;
 		u32 ResourceLayoutNext = std::get<1>(Data);
 		u32 BufferPrevShader = Buffer->PrevShader;
 		u32 BufferNextShader = std::get<2>(Data);
 		Buffer->PrevShader = BufferNextShader;
 		Buffer->CurrentLayout = ResourceLayoutNext;
 
-		D3D12_RESOURCE_STATES CurrState = GetDXBufferLayout(Buffer->CurrentLayout, BufferPrevShader);
+		D3D12_RESOURCE_STATES CurrState = GetDXBufferLayout(ResourceLayoutPrev, BufferPrevShader);
 		D3D12_RESOURCE_STATES NextState = GetDXBufferLayout(ResourceLayoutNext, BufferNextShader);
 
 		if(CurrState != NextState)

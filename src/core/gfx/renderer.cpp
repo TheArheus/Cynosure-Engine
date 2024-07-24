@@ -24,11 +24,13 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
 	TextureInputData.MipLevels = GetImageMipLevels(VOXEL_SIZE, VOXEL_SIZE);
 	TextureInputData.AddressMode = sampler_address_mode::clamp_to_border;
+	TextureInputData.UseStagingBuffer = true;
 	VoxelGridTarget   = PushTexture("VoxelGridTarget", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
 
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.Format    = image_format::R11G11B10_SFLOAT;
 	TextureInputData.MipLevels = 1;
+	TextureInputData.UseStagingBuffer = false;
 	HdrColorTarget = PushTexture("HdrColorTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TextureInputData.MipLevels = 6;
 	TextureInputData.AddressMode = sampler_address_mode::clamp_to_border;
@@ -406,7 +408,7 @@ Compile()
 
 // TODO: Consider of pushing pass work in different thread if some of them are not dependent and can use different queue type
 void global_graphics_context::
-Execute()
+Execute(scene_manager& SceneManager)
 {
 	ExecutionContext->AcquireNextImage();
 	ExecutionContext->Begin();
@@ -414,6 +416,33 @@ Execute()
 	{
 		Dispatches[Pass.get()](*this, ExecutionContext, Pass->Parameters);
 	}
+
+	ExecutionContext->DebugGuiBegin(GfxColorTarget[BackBufferIndex]);
+	ImGui::NewFrame();
+
+	SceneManager.RenderUI();
+
+	if(SceneManager.Count() > 1)
+	{
+		ImGui::SetNextWindowPos(ImVec2(0, 300));
+		ImGui::SetNextWindowSize(ImVec2(150, 100));
+		ImGui::Begin("Active Scenes", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+
+		for(u32 SceneIdx = 0; SceneIdx < SceneManager.Count(); ++SceneIdx)
+		{
+			if(ImGui::Button(SceneManager.Infos[SceneIdx].Name.c_str()))
+			{
+				SceneManager.CurrentScene = SceneIdx;
+			}
+		}
+
+		ImGui::End();
+	}
+
+	ImGui::EndFrame();
+	ImGui::Render();
+	ExecutionContext->DebugGuiEnd();
+
 	ExecutionContext->EmplaceColorTarget(GfxColorTarget[BackBufferIndex]);
 	ExecutionContext->Present();
 

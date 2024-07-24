@@ -96,7 +96,7 @@ void main()
 		vec4 Offset = vec4(SamplePosVS, 1.0);
 		Offset = WorldUpdate.Proj * Offset;
 		Offset.xyz /= Offset.w;
-		Offset.xy   = Offset.xy * vec2(0.5, -0.5) + 0.5;
+		Offset.xy   = Offset.xy * vec2(0.5) + 0.5;
 
 		vec3 SampledPosVS = ViewPosFromDepth2(Offset.xy, texture(DepthTarget, Offset.xy).x);
 

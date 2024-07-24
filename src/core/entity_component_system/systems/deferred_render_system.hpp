@@ -40,6 +40,7 @@ struct deferred_raster_system : public entity_system
 		RequireComponent<static_instances_component>();
 	}
 
+	// TODO: Move to/create a asset storage
 	void Setup(window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCommonCullingInput)
 	{
 		texture_data Texture = {};
@@ -155,6 +156,7 @@ struct deferred_raster_system : public entity_system
 		MeshCommonCullingInput.DrawCount = StaticMeshInstances.size();
 		MeshCommonCullingInput.MeshCount = Geometries.MeshCount;
 
+		// TODO: Move resource management into renderer_backend class
 		MeshMaterialsBuffer = Window.Gfx.PushBuffer("MeshMaterialsBuffer", Materials.data(), sizeof(mesh::material), Materials.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 		LightSourcesBuffer = Window.Gfx.PushBuffer("LightSourcesBuffer", sizeof(light_source), LIGHT_SOURCES_MAX_COUNT, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
@@ -177,17 +179,9 @@ struct deferred_raster_system : public entity_system
 		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer("MeshCommonCullingInputBuffer", sizeof(mesh_comp_culling_common_input), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 	}
 
+	// TODO: Move out all render commands. There will be only a geometry render command generation I guess
 	void Render(global_graphics_context& Gfx, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCommonCullingInput, alloc_vector<light_source>& GlobalLightSources)
 	{
-#if 0
-		for(entity& Entity : Entities)
-		{
-			dynamic_instances_component* InstancesComponent = Entity.GetComponent<dynamic_instances_component>();
-
-			DynamicMeshInstances.insert(DynamicMeshInstances.end(), InstancesComponent->Data.begin(), InstancesComponent->Data.end());
-			DynamicMeshVisibility.insert(DynamicMeshVisibility.end(), InstancesComponent->Visibility.begin(), InstancesComponent->Visibility.end());
-		}
-#endif
 		{
 			u32 PointLightSourceCount = 0;
 			u32 SpotLightSourceCount = 0;
@@ -223,13 +217,8 @@ struct deferred_raster_system : public entity_system
 				}
 			}
 		}
-		{
-#if 0
-			WorldUpdateBuffer->UpdateSize(Gfx.Backend, &WorldUpdate, sizeof(global_world_data));
-			MeshCommonCullingInputBuffer->UpdateSize(Gfx.Backend, &MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input));
-			LightSourcesBuffer->UpdateSize(Gfx.Backend, GlobalLightSources.data(), GlobalLightSources.size() * sizeof(light_source));
 
-#else
+		{
 			Gfx.AddTransferPass("Data upload",
 			[this, &WorldUpdate, &MeshCommonCullingInput, &GlobalLightSources](global_graphics_context& Gfx, command_list* Cmd, void* Parameters)
 			{
@@ -237,17 +226,16 @@ struct deferred_raster_system : public entity_system
 				MeshCommonCullingInputBuffer->UpdateSize(&MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), Cmd);
 				LightSourcesBuffer->UpdateSize(GlobalLightSources.data(), GlobalLightSources.size() * sizeof(light_source), Cmd);
 			});
-#endif
 		}
 
 		{
 			shader_parameter<frustum_culling> Parameters;
-			Parameters.Input.MeshCommonCullingInputBuffer = MeshCommonCullingInputBuffer;
-			Parameters.Input.GeometryOffsets = GeometryOffsets;
-			Parameters.Input.MeshDrawCommandDataBuffer = MeshDrawCommandDataBuffer;
-			Parameters.Input.MeshDrawVisibilityDataBuffer = MeshDrawVisibilityDataBuffer;
-			Parameters.Output.IndirectDrawIndexedCommands = IndirectDrawIndexedCommands;
-			Parameters.Output.MeshDrawCommandBuffer = MeshDrawCommandBuffer;
+			Parameters.Input.MeshCommonCullingInputBuffer = Gfx.UseBuffer(MeshCommonCullingInputBuffer);
+			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryOffsets);
+			Parameters.Input.MeshDrawCommandDataBuffer = Gfx.UseBuffer(MeshDrawCommandDataBuffer);
+			Parameters.Input.MeshDrawVisibilityDataBuffer = Gfx.UseBuffer(MeshDrawVisibilityDataBuffer);
+			Parameters.Output.IndirectDrawIndexedCommands = Gfx.UseBuffer(IndirectDrawIndexedCommands);
+			Parameters.Output.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawCommandBuffer);
 
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
 			Gfx.AddPass<frustum_culling>("Frustum culling/indirect command generation", Parameters, pass_type::compute,
@@ -262,12 +250,12 @@ struct deferred_raster_system : public entity_system
 
 		{
 			shader_parameter<generate_all> Parameters;
-			Parameters.Input.MeshCommonCullingInputBuffer = MeshCommonCullingInputBuffer;
-			Parameters.Input.GeometryOffsets = GeometryOffsets;
-			Parameters.Input.MeshDrawCommandDataBuffer = MeshDrawCommandDataBuffer;
-			Parameters.Input.MeshDrawVisibilityDataBuffer = MeshDrawShadowVisibilityDataBuffer;
-			Parameters.Output.IndirectDrawIndexedCommands = ShadowIndirectDrawIndexedCommands;
-			Parameters.Output.MeshDrawCommandBuffer = MeshDrawShadowCommandBuffer;
+			Parameters.Input.MeshCommonCullingInputBuffer = Gfx.UseBuffer(MeshCommonCullingInputBuffer);
+			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryOffsets);
+			Parameters.Input.MeshDrawCommandDataBuffer = Gfx.UseBuffer(MeshDrawCommandDataBuffer);
+			Parameters.Input.MeshDrawVisibilityDataBuffer = Gfx.UseBuffer(MeshDrawShadowVisibilityDataBuffer);
+			Parameters.Output.IndirectDrawIndexedCommands = Gfx.UseBuffer(ShadowIndirectDrawIndexedCommands);
+			Parameters.Output.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawShadowCommandBuffer);
 
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
 			Gfx.AddPass<generate_all>("Frustum culling/indirect command generation for shadow maps", Parameters, pass_type::compute,
@@ -282,9 +270,9 @@ struct deferred_raster_system : public entity_system
 
 		{
 			shader_parameter<mesh_shadow> Parameters;
-			Parameters.Input.VertexBuffer = VertexBuffer;
-			Parameters.Input.CommandBuffer = MeshDrawShadowCommandBuffer;
-			Parameters.Input.GeometryOffsets = GeometryOffsets;
+			Parameters.Input.VertexBuffer = Gfx.UseBuffer(VertexBuffer);
+			Parameters.Input.CommandBuffer = Gfx.UseBuffer(MeshDrawShadowCommandBuffer);
+			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryOffsets);
 
 			for(u32 CascadeIdx = 0; CascadeIdx < DEPTH_CASCADES_COUNT; ++CascadeIdx)
 			{
@@ -338,11 +326,11 @@ struct deferred_raster_system : public entity_system
 
 		{
 			shader_parameter<gbuffer_raster> Parameters;
-			Parameters.Input.WorldUpdateBuffer = WorldUpdateBuffer;
-			Parameters.Input.VertexBuffer = VertexBuffer;
-			Parameters.Input.MeshDrawCommandBuffer = MeshDrawCommandBuffer;
-			Parameters.Input.MeshMaterialsBuffer = MeshMaterialsBuffer;
-			Parameters.Input.GeometryOffsets = GeometryOffsets;
+			Parameters.Input.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
+			Parameters.Input.VertexBuffer = Gfx.UseBuffer(VertexBuffer);
+			Parameters.Input.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawCommandBuffer);
+			Parameters.Input.MeshMaterialsBuffer = Gfx.UseBuffer(MeshMaterialsBuffer);
+			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryOffsets);
 
 			Parameters.StaticStorage.DiffuseTextures = Gfx.UseTextureArray(DiffuseTextures);
 			Parameters.StaticStorage.NormalTextures = Gfx.UseTextureArray(NormalTextures);
@@ -367,12 +355,12 @@ struct deferred_raster_system : public entity_system
 
 		{
 			shader_parameter<voxelization> Parameters;
-			Parameters.Input.WorldUpdateBuffer = WorldUpdateBuffer;
-			Parameters.Input.VertexBuffer = VertexBuffer;
-			Parameters.Input.MeshDrawCommandBuffer = MeshDrawCommandBuffer;
-			Parameters.Input.MeshMaterialsBuffer = MeshMaterialsBuffer;
-			Parameters.Input.GeometryOffsets = GeometryOffsets;
-			Parameters.Input.LightSources = LightSourcesBuffer;
+			Parameters.Input.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
+			Parameters.Input.VertexBuffer = Gfx.UseBuffer(VertexBuffer);
+			Parameters.Input.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawCommandBuffer);
+			Parameters.Input.MeshMaterialsBuffer = Gfx.UseBuffer(MeshMaterialsBuffer);
+			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryOffsets);
+			Parameters.Input.LightSources = Gfx.UseBuffer(LightSourcesBuffer);
 
 			Parameters.Output.VoxelGrid = Gfx.UseTexture(Gfx.VoxelGridTarget);
 
@@ -416,8 +404,8 @@ struct deferred_raster_system : public entity_system
 
 		{
 			shader_parameter<ssao> Parameters;
-			Parameters.Input.WorldUpdateBuffer = WorldUpdateBuffer;
-			Parameters.Input.RandomSamplesBuffer = Gfx.RandomSamplesBuffer;
+			Parameters.Input.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
+			Parameters.Input.RandomSamplesBuffer = Gfx.UseBuffer(Gfx.RandomSamplesBuffer);
 			Parameters.Input.NoiseTexture = Gfx.UseTexture(Gfx.NoiseTexture);
 			Parameters.Input.DepthTarget = Gfx.UseTexture(Gfx.GfxDepthTarget);
 			Parameters.Input.GBuffer = Gfx.UseTextureArray(Gfx.GBuffer);
@@ -464,10 +452,10 @@ struct deferred_raster_system : public entity_system
 
 		{
 			shader_parameter<color_pass> Parameters;
-			Parameters.Input.WorldUpdateBuffer = WorldUpdateBuffer;
-			Parameters.Input.LightSourcesBuffer = LightSourcesBuffer;
-			Parameters.Input.PoissonDiskBuffer = Gfx.PoissonDiskBuffer;
-			Parameters.Input.RandomSamplesBuffer = Gfx.RandomSamplesBuffer;
+			Parameters.Input.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
+			Parameters.Input.LightSourcesBuffer = Gfx.UseBuffer(LightSourcesBuffer);
+			Parameters.Input.PoissonDiskBuffer = Gfx.UseBuffer(Gfx.PoissonDiskBuffer);
+			Parameters.Input.RandomSamplesBuffer = Gfx.UseBuffer(Gfx.RandomSamplesBuffer);
 			Parameters.Input.GfxColorTarget = Gfx.UseTexture(Gfx.GfxColorTarget[(Gfx.BackBufferIndex + 1) % 2]);
 			Parameters.Input.GfxDepthTarget = Gfx.UseTexture(Gfx.GfxDepthTarget);
 			Parameters.Input.VoxelGridTarget = Gfx.UseTexture(Gfx.VoxelGridTarget);
@@ -574,11 +562,11 @@ struct deferred_raster_system : public entity_system
 
 		{
 			shader_parameter<occlusion_culling> Parameters;
-			Parameters.Input.MeshCommonCullingInputBuffer = MeshCommonCullingInputBuffer;
-			Parameters.Input.GeometryOffsets = GeometryOffsets;
-			Parameters.Input.MeshDrawCommandDataBuffer = MeshDrawCommandDataBuffer;
+			Parameters.Input.MeshCommonCullingInputBuffer = Gfx.UseBuffer(MeshCommonCullingInputBuffer);
+			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryOffsets);
+			Parameters.Input.MeshDrawCommandDataBuffer = Gfx.UseBuffer(MeshDrawCommandDataBuffer);
 			Parameters.Input.DepthPyramid = Gfx.UseTexture(Gfx.DepthPyramid);
-			Parameters.Output.MeshDrawVisibilityDataBuffer = MeshDrawVisibilityDataBuffer;
+			Parameters.Output.MeshDrawVisibilityDataBuffer = Gfx.UseBuffer(MeshDrawVisibilityDataBuffer);
 
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
 			Gfx.AddPass<occlusion_culling>("Occlusion culling", Parameters, pass_type::compute,

@@ -549,7 +549,7 @@ struct resource_binder
 struct texture_ref
 {
 	u64 SubresourceIndex = TEXTURE_MIPS_ALL;
-	texture* Handle;
+	std::vector<texture*> Handle;
 };
 
 struct buffer_ref

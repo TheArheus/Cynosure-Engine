@@ -4,9 +4,9 @@ struct mesh_shadow : public shader_graphics_view_context
 {
 	struct input_type
 	{
-		buffer* VertexBuffer;
-		buffer* CommandBuffer;
-		buffer* GeometryOffsets;
+		buffer_ref VertexBuffer;
+		buffer_ref CommandBuffer;
+		buffer_ref GeometryOffsets;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -33,9 +33,9 @@ struct point_shadow : public shader_graphics_view_context
 {
 	struct input_type
 	{
-		buffer* VertexBuffer;
-		buffer* CommandBuffer;
-		buffer* GeometryOffsets;
+		buffer_ref VertexBuffer;
+		buffer_ref CommandBuffer;
+		buffer_ref GeometryOffsets;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -62,9 +62,9 @@ struct depth_prepass : public shader_graphics_view_context
 {
 	struct input_type
 	{
-		buffer* VertexBuffer;
-		buffer* CommandBuffer;
-		buffer* GeometryOffsets;
+		buffer_ref VertexBuffer;
+		buffer_ref CommandBuffer;
+		buffer_ref GeometryOffsets;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override

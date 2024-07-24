@@ -67,6 +67,7 @@ struct directx12_buffer : public buffer
 	void Update(void* Data, command_list* GlobalPipeline) override 
 	{
 		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
+		GlobalPipeline->SetBufferBarriers({{this, AF_TransferWrite, PSF_Transfer}});
 
 		void* CpuPtr;
 		TempHandle->Map(0, nullptr, &CpuPtr);
@@ -74,13 +75,15 @@ struct directx12_buffer : public buffer
 		TempHandle->Unmap(0, 0);
 
 		PipelineContext->CommandList->CopyResource(Handle.Get(), TempHandle.Get());
-		CurrentLayout = AF_TransferWrite;
 	}
 
 	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override 
 	{
-		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
+		if(UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
+
+		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
+		GlobalPipeline->SetBufferBarriers({{this, AF_TransferWrite, PSF_Transfer}});
 
 		void* CpuPtr;
 		TempHandle->Map(0, nullptr, &CpuPtr);
@@ -88,7 +91,6 @@ struct directx12_buffer : public buffer
 		TempHandle->Unmap(0, 0);
 
 		PipelineContext->CommandList->CopyBufferRegion(Handle.Get(), 0, TempHandle.Get(), 0, UpdateByteSize);
-		CurrentLayout = AF_TransferWrite;
 	}
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
@@ -118,10 +120,9 @@ struct directx12_buffer : public buffer
 	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override 
 	{
 		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
+		GlobalPipeline->SetBufferBarriers({{this, AF_TransferRead, PSF_Transfer}});
 
 		PipelineContext->CommandList->CopyBufferRegion(TempHandle.Get(), 0, Handle.Get(), 0, UpdateByteSize);
-
-		CurrentLayout = AF_TransferRead;
 
 		void* CpuPtr;
 		TempHandle->Map(0, nullptr, &CpuPtr);
@@ -233,7 +234,7 @@ struct directx12_texture : public texture
 		if(Data || Info.UseStagingBuffer)
 		{
 			CreateStagingResource();
-			Update(Backend, Data);
+			if(Data) Update(Backend, Data);
 		}
 		if(Data && !Info.UseStagingBuffer)
 			DestroyStagingResource();
@@ -332,6 +333,7 @@ struct directx12_texture : public texture
 	void Update(void* Data, command_list* GlobalPipeline) override 
 	{
 		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
+		GlobalPipeline->SetImageBarriers({{this, AF_TransferWrite, barrier_state::transfer_dst, TEXTURE_MIPS_ALL, PSF_Transfer}});
 
 		D3D12_SUBRESOURCE_FOOTPRINT SubresourceDesc = {};
 		SubresourceDesc.Format   = GetDXFormat(Info.Format);
@@ -370,9 +372,6 @@ struct directx12_texture : public texture
 
 		PipelineContext->CommandList->CopyTextureRegion(&DstCopyLocation, 0, 0, 0, 
 														&SrcCopyLocation, nullptr);
-
-		std::fill(CurrentLayout.begin(), CurrentLayout.end(), AF_TransferWrite);
-		std::fill(CurrentState.begin(), CurrentState.end(), barrier_state::general);
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override 

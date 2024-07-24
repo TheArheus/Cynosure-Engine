@@ -700,7 +700,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 				HlslOptions.shader_model = 62;
 				HlslOptions.use_entry_point_name = true;
 				HlslOptions.enable_16bit_types   = true;
-				//CommonOptions.vertex.flip_vert_y = true;
+				CommonOptions.vertex.flip_vert_y = true;
 
 				Compiler.set_hlsl_options(HlslOptions);
 				Compiler.set_common_options(CommonOptions);

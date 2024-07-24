@@ -4,11 +4,11 @@ struct debug_raster : public shader_graphics_view_context
 {
 	struct input_type
 	{
-		buffer* WorldUpdateBuffer;
-		buffer* VertexBuffer;
-		buffer* MeshDrawCommandBuffer;
-		buffer* MeshMaterialsBuffer;
-		buffer* GeometryOffsets;
+		buffer_ref WorldUpdateBuffer;
+		buffer_ref VertexBuffer;
+		buffer_ref MeshDrawCommandBuffer;
+		buffer_ref MeshMaterialsBuffer;
+		buffer_ref GeometryOffsets;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -41,19 +41,19 @@ struct gbuffer_raster : public shader_graphics_view_context
 {
 	struct input_type
 	{
-		buffer* WorldUpdateBuffer;
-		buffer* VertexBuffer;
-		buffer* MeshDrawCommandBuffer;
-		buffer* MeshMaterialsBuffer;
-		buffer* GeometryOffsets;
+		buffer_ref WorldUpdateBuffer;
+		buffer_ref VertexBuffer;
+		buffer_ref MeshDrawCommandBuffer;
+		buffer_ref MeshMaterialsBuffer;
+		buffer_ref GeometryOffsets;
 	};
 
 	struct static_storage_type
 	{
-		std::vector<texture*> DiffuseTextures;
-		std::vector<texture*> NormalTextures;
-		std::vector<texture*> SpecularTextures;
-		std::vector<texture*> HeightTextures;
+		texture_ref DiffuseTextures;
+		texture_ref NormalTextures;
+		texture_ref SpecularTextures;
+		texture_ref HeightTextures;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -85,12 +85,12 @@ struct voxelization : public shader_graphics_view_context
 {
 	struct input_type
 	{
-		buffer* WorldUpdateBuffer;
-		buffer* VertexBuffer;
-		buffer* MeshDrawCommandBuffer;
-		buffer* MeshMaterialsBuffer;
-		buffer* GeometryOffsets;
-		buffer* LightSources;
+		buffer_ref WorldUpdateBuffer;
+		buffer_ref VertexBuffer;
+		buffer_ref MeshDrawCommandBuffer;
+		buffer_ref MeshMaterialsBuffer;
+		buffer_ref GeometryOffsets;
+		buffer_ref LightSources;
 	};
 
 	struct output_type
@@ -100,10 +100,10 @@ struct voxelization : public shader_graphics_view_context
 
 	struct static_storage_type
 	{
-		std::vector<texture*> DiffuseTextures;
-		std::vector<texture*> NormalTextures;
-		std::vector<texture*> SpecularTextures;
-		std::vector<texture*> HeightTextures;
+		texture_ref DiffuseTextures;
+		texture_ref NormalTextures;
+		texture_ref SpecularTextures;
+		texture_ref HeightTextures;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -128,17 +128,17 @@ struct color_pass : public shader_compute_view_context
 {
 	struct input_type
 	{
-		buffer* WorldUpdateBuffer;
-		buffer* LightSourcesBuffer;
-		buffer* PoissonDiskBuffer;
-		buffer* RandomSamplesBuffer;
+		buffer_ref WorldUpdateBuffer;
+		buffer_ref LightSourcesBuffer;
+		buffer_ref PoissonDiskBuffer;
+		buffer_ref RandomSamplesBuffer;
 		texture_ref GfxColorTarget;
 		texture_ref GfxDepthTarget;
 		texture_ref VoxelGridTarget;
 		texture_ref RandomAnglesTexture;
-		std::vector<texture*> GBuffer;
+		texture_ref GBuffer;
 		texture_ref AmbientOcclusionData;
-		std::vector<texture*> GlobalShadow;
+		texture_ref GlobalShadow;
 	};
 
 	struct output_type
@@ -149,8 +149,8 @@ struct color_pass : public shader_compute_view_context
 
 	struct static_storage_type
 	{
-		std::vector<texture*> LightShadows;
-		std::vector<texture*> PointLightShadows;
+		texture_ref LightShadows;
+		texture_ref PointLightShadows;
 	};
 
 	color_pass()

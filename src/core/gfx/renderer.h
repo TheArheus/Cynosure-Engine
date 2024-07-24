@@ -45,17 +45,20 @@ public:
 		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Data, Width, Height, Depth, InputData);
 	}
 
-	// TODO: For this functions implement better resource handling
-	std::vector<texture*> UseTextureArray(std::vector<texture*> ArrayOfTextures)
+	// TODO: Implement better resource handling
+	texture_ref UseTextureArray(std::vector<texture*> ArrayOfTextures)
 	{
-		return ArrayOfTextures;
+		texture_ref NewRef;
+		NewRef.SubresourceIndex = TEXTURE_MIPS_ALL;
+		NewRef.Handle = ArrayOfTextures;
+		return NewRef;
 	}
 
 	texture_ref UseTexture(texture* Texture)
 	{
 		texture_ref NewRef;
 		NewRef.SubresourceIndex = TEXTURE_MIPS_ALL;
-		NewRef.Handle = Texture;
+		NewRef.Handle.push_back(Texture);
 		return NewRef;
 	}
 
@@ -63,7 +66,7 @@ public:
 	{
 		texture_ref NewRef;
 		NewRef.SubresourceIndex = Idx;
-		NewRef.Handle = Texture;
+		NewRef.Handle.push_back(Texture);
 		return NewRef;
 	}
 
@@ -204,7 +207,7 @@ public:
 	shader_pass* AddTransferPass(std::string Name, execute_func Exec);
 
 	void Compile();
-	void Execute();
+	void Execute(scene_manager& SceneManager);
 
 	renderer_backend* Backend;
 	backend_type BackendType;
