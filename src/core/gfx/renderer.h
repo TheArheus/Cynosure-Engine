@@ -16,7 +16,7 @@ class global_graphics_context
 	global_graphics_context& operator=(const global_graphics_context&) = delete;
 
 	using setup_func = std::function<void()>;
-	using execute_func = std::function<void(global_graphics_context&, command_list*, void*)>;
+	using execute_func = std::function<void(command_list*, void*)>;
 
 public:
 	global_graphics_context() = default;
@@ -192,14 +192,7 @@ public:
 		}
 	}
 
-	template<typename context_type>
-	void SetGraphicsContext(command_list* Context);
-
-	template<template<u32> typename context_type, u32 FaceIdx>
-	void SetGraphicsContext(command_list* Context);
-
-	template<typename context_type>
-	void SetComputeContext(command_list* Context);
+	void SetContext(const std::unique_ptr<shader_pass>& Pass, command_list* Context);
 
 	template<typename context_type, typename param_type>
 	shader_pass* AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec);

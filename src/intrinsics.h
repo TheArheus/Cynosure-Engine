@@ -222,6 +222,12 @@ typedef double   r64;
 typedef uint32_t b32;
 typedef uint64_t b64;
 
+typedef uintptr_t uptr;
+typedef  intptr_t sptr;
+
+typedef size_t memory_index;
+
+
 constexpr size_t KB(size_t val) { return val * 1000; };
 constexpr size_t MB(size_t val) { return KB(val) * 1000; };
 constexpr size_t GB(size_t val) { return MB(val) * 1000; };
@@ -234,6 +240,40 @@ template<typename T> struct type_name;
 
 #include "core/math.h"
 #include "core/mesh_loader/mesh.h"
+
+struct memory_block
+{
+    u8* Base;
+
+    memory_index Size;
+    memory_index Used;
+};
+
+void AllocateMemoryBlock(memory_block* Block, u8* Base, memory_index Size)
+{
+    Block->Base = (u8*)Base;
+    Block->Size = Size;
+    Block->Used = 0;
+}
+
+#define PushStruct(Block, Type) (Type*)PushSize_(Block, sizeof(Type)); 
+#define PushArray(Block, Type, Ammount) (Type*)PushSize_(Block, sizeof(Type) * Ammount);
+#define PushSize(Block, Size) (Type*)PushSize_(Block, Size);
+void* PushSize_(memory_block* Block, memory_index Size)
+{
+    assert((Block->Used + Size) <= Block->Size);
+    void* Result = 0;
+
+    if(((Block->Used + Size) <= Block->Size))
+    {
+        Result = Block->Base;
+
+        Block->Base += Size;
+        Block->Used += Size;
+    }
+
+    return Result;
+}
 
 struct button
 {

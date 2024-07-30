@@ -261,8 +261,6 @@ struct has_static_storage_type<T, std::void_t<typename T::static_storage_type>> 
 template<typename T, bool HasOutput, bool HasStaticStorage>
 struct shader_pass_parameter_type {};
 
-// TODO: Somehow I need to know subresource index(for mips or etc.), so that when I bind a texture, I would know the actual mip to use(for example, when I will do depth reduce of the depth texture to generate mip chain)
-// TODO: Maybe I should use some kind of a reference to an actual resource
 template<typename T>
 struct shader_pass_parameter_type<T, false, false>
 {

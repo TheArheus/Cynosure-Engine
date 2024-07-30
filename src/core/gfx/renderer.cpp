@@ -248,70 +248,42 @@ operator=(global_graphics_context&& Oth) noexcept
 	return *this;
 }
 
-template<typename context_type>
 void global_graphics_context::
-SetGraphicsContext(command_list* Context)
+SetContext(const std::unique_ptr<shader_pass>& Pass, command_list* Context)
 {
-	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));
+	std::type_index ContextType = PassToContext.at(Pass.get());
+	shader_view_context* ContextView = GeneralShaderViewMap[ContextType].get();
 
-	shader_graphics_view_context* NewContextView = nullptr;
+	auto FindIt = ContextMap.find(ContextType);
+
 	if(FindIt != ContextMap.end())
 	{
 		CurrentContext = FindIt->second.get();
+		if(Pass->Type == pass_type::graphics)
+		{
+			Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
+		}
+		else if(Pass->Type == pass_type::compute)
+		{
+			Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
+		}
 	}
 	else
 	{
-		NewContextView = new context_type();
-		CurrentContext = CreateRenderContext(NewContextView->LoadOp, NewContextView->StoreOp, NewContextView->Shaders, NewContextView->SetupAttachmentDescription(), NewContextView->SetupPipelineState(), NewContextView->Defines);
-		ContextMap[std::type_index(typeid(context_type))] = std::unique_ptr<general_context>(CurrentContext);
-		GeneralShaderViewMap[std::type_index(typeid(context_type))] = std::unique_ptr<shader_view_context>(NewContextView);
+		if(Pass->Type == pass_type::graphics)
+		{
+			shader_graphics_view_context* NewContextView = static_cast<shader_graphics_view_context*>(ContextView);
+			CurrentContext = CreateRenderContext(NewContextView->LoadOp, NewContextView->StoreOp, NewContextView->Shaders, NewContextView->SetupAttachmentDescription(), NewContextView->SetupPipelineState(), NewContextView->Defines);
+			Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
+		}
+		else if(Pass->Type == pass_type::compute)
+		{
+			shader_compute_view_context* NewContextView = static_cast<shader_compute_view_context*>(ContextView);
+			CurrentContext = CreateComputeContext(NewContextView->Shader, NewContextView->Defines);
+			Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
+		}
+		ContextMap[ContextType] = std::unique_ptr<general_context>(CurrentContext);
 	}
-
-	Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
-}
-
-template<template<u32> typename context_type, u32 FaceIdx>
-void global_graphics_context::
-SetGraphicsContext(command_list* Context)
-{
-	auto FindIt = ContextMap.find(std::type_index(typeid(context_type<FaceIdx>)));
-
-	shader_graphics_view_context* NewContextView = nullptr;
-	if(FindIt != ContextMap.end())
-	{
-		CurrentContext = FindIt->second.get();
-	}
-	else
-	{
-		NewContextView = new context_type<FaceIdx>();
-		CurrentContext = CreateRenderContext(NewContextView->LoadOp, NewContextView->StoreOp, NewContextView->Shaders, NewContextView->SetupAttachmentDescription(), NewContextView->SetupPipelineState(), NewContextView->Defines);
-		ContextMap[std::type_index(typeid(context_type<FaceIdx>))] = std::unique_ptr<general_context>(CurrentContext);
-		GeneralShaderViewMap[std::type_index(typeid(context_type<FaceIdx>))] = std::unique_ptr<shader_view_context>(NewContextView);
-	}
-
-	Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
-}
-
-template<typename context_type>
-void global_graphics_context::
-SetComputeContext(command_list* Context)
-{
-	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));
-
-	shader_compute_view_context* NewContextView = nullptr;
-	if(FindIt != ContextMap.end())
-	{
-		CurrentContext = FindIt->second.get();
-	}
-	else
-	{
-		NewContextView = new context_type();
-		CurrentContext = CreateComputeContext(NewContextView->Shader, NewContextView->Defines);
-		ContextMap[std::type_index(typeid(context_type))] = std::unique_ptr<general_context>(CurrentContext);
-		GeneralShaderViewMap[std::type_index(typeid(context_type))] = std::unique_ptr<shader_view_context>(NewContextView);
-	}
-
-	Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
 }
 
 template<typename context_type, typename param_type>
@@ -414,7 +386,8 @@ Execute(scene_manager& SceneManager)
 	ExecutionContext->Begin();
 	for(const auto& Pass : Passes)
 	{
-		Dispatches[Pass.get()](*this, ExecutionContext, Pass->Parameters);
+		SetContext(Pass, ExecutionContext);
+		Dispatches[Pass.get()](ExecutionContext, Pass->Parameters);
 	}
 
 	ExecutionContext->DebugGuiBegin(GfxColorTarget[BackBufferIndex]);

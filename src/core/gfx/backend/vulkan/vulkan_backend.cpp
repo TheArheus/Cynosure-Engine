@@ -598,23 +598,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 		if(GlslCompile(SpirvCode, Path, ShaderCode, ShaderType, HighestUsedVulkanVersion))
 			return VK_NULL_HANDLE;
 
-#if 0
-		{
-			spirv_cross::CompilerGLSL Compiler(SpirvCode.data(), SpirvCode.size());
-
-			spirv_cross::CompilerGLSL::Options CommonOptions;
-			CommonOptions.vulkan_semantics = true;
-			CommonOptions.vertex.flip_vert_y = true;
-
-			Compiler.set_common_options(CommonOptions);
-			std::string NewGlslCode = Compiler.compile();
-
-			SpirvCode.clear();
-			if(GlslCompile(SpirvCode, Path, NewGlslCode, ShaderType, HighestUsedVulkanVersion))
-				return VK_NULL_HANDLE;
-		}
-#endif
-
 		u32 LocalSizeIdX;
 		u32 LocalSizeIdY;
 		u32 LocalSizeIdZ;
