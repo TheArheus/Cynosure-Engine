@@ -19,6 +19,15 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	GfxDepthTarget = PushTexture("DepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	DebugCameraViewDepthTarget = PushTexture("DebugCameraViewDepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 
+	TextureInputData.Type	   = image_type::Texture2D;
+	TextureInputData.MipLevels = 1;
+	TextureInputData.Layers    = 1;
+	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
+	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
+	VolumetricLightOut = PushTexture("Volumetric light Result", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
+	IndirectLightOut   = PushTexture("Indirect light result"  , nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
+	LightColor         = PushTexture("Light color"  , nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
+
 	TextureInputData.Type	   = image_type::Texture3D;
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
@@ -208,6 +217,10 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 	BrightTarget = std::move(Oth.BrightTarget);
 	TempBrTarget = std::move(Oth.TempBrTarget);
 
+	VolumetricLightOut = std::move(Oth.VolumetricLightOut);
+	IndirectLightOut = std::move(Oth.IndirectLightOut);
+	LightColor = std::move(Oth.LightColor);
+
 	ExecutionContext = std::move(Oth.ExecutionContext);
 	ContextMap = std::move(Oth.ContextMap);
 	GeneralShaderViewMap = std::move(Oth.GeneralShaderViewMap);
@@ -238,6 +251,10 @@ operator=(global_graphics_context&& Oth) noexcept
 		DepthPyramid = std::move(Oth.DepthPyramid);
 		RandomAnglesTexture = std::move(Oth.RandomAnglesTexture);
 		NoiseTexture = std::move(Oth.NoiseTexture);
+
+		VolumetricLightOut = std::move(Oth.VolumetricLightOut);
+		IndirectLightOut = std::move(Oth.IndirectLightOut);
+		LightColor = std::move(Oth.LightColor);
 
 		ExecutionContext = std::move(Oth.ExecutionContext);
 		ContextMap = std::move(Oth.ContextMap);

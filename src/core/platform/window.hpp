@@ -8,3 +8,4 @@
 	#include "other/oth_window.cpp"
 #endif
 
+#define CComPtr ComPtr

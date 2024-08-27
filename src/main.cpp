@@ -49,10 +49,9 @@
 	double TimeElapsed = 0.0;
 	double TimeEnd = 0.0;
 	double AvgCpuTime = 0.0;
-	u32    FrameIndex = 0;
-	u32    CurrentScene = 0;
 	while(Window.IsRunning())
 	{
+		// TODO: Hide allocator creations
 		linear_allocator SystemsAllocator(GlobalMemorySize, MemoryBlock);
 		linear_allocator LightSourcesAlloc(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT, SystemsAllocator.Allocate(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT));
 		linear_allocator GlobalMeshInstancesAlloc(MiB(16), SystemsAllocator.Allocate(MiB(16)));
@@ -113,7 +112,7 @@
 		TimeLast = TimeEnd;
 		AvgCpuTime = 0.75 * AvgCpuTime + TimeElapsed * 0.25;
 
-		FrameIndex++;
+		// TODO: move this into text rendering
 		std::string Title = "Frame " + std::to_string(AvgCpuTime) + "ms, " + std::to_string(1.0 / AvgCpuTime * 1000.0) + "fps";
 		Window.SetTitle(Title);
 	}

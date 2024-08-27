@@ -11,7 +11,6 @@
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-const float GScat    = 0.7;
 const float RayStep  = 0.1;
 const uint  MaxSteps = 128;
 
@@ -27,9 +26,6 @@ vec3 CascadeColors[] =
 	vec3(0, 1, 1),
 	vec3(1, 1, 1),
 };
-
-const vec3  DiffuseConeDirections[CONE_SAMPLES] = {vec3(0.0, 1.0, 0.0), vec3(0.0, 0.5, 0.866025), vec3(0.823639, 0.5, 0.267617), vec3(0.509037, 0.5, -0.7006629), vec3(-0.50937, 0.5, -0.7006629), vec3(-0.823639, 0.5, 0.267617)};
-const float DiffuseConeWeights[CONE_SAMPLES]    = {Pi / 4.0, 3.0 * Pi / 20.0, 3.0 * Pi / 20.0, 3.0 * Pi / 20.0, 3.0 * Pi / 20.0, 3.0 * Pi / 20.0};
 
 struct global_world_data
 {
@@ -69,13 +65,14 @@ layout(set = 0, binding = 2)  readonly buffer b2 { vec2 PoissonDisk[SAMPLES_COUN
 layout(set = 0, binding = 3)  readonly buffer b3 { vec4 HemisphereSamples[SAMPLES_COUNT]; };
 layout(set = 0, binding = 4)  uniform sampler2D PrevColorTarget;
 layout(set = 0, binding = 5)  uniform sampler2D DepthTarget;
-layout(set = 0, binding = 6)  uniform sampler3D VoxelGrid;
-layout(set = 0, binding = 7)  uniform sampler3D RandomAnglesTexture;
-layout(set = 0, binding = 8)  uniform sampler2D GBuffer[GBUFFER_COUNT];
-layout(set = 0, binding = 9)  uniform sampler2D AmbientOcclusionBuffer;
-layout(set = 0, binding = 10) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
-layout(set = 0, binding = 11) uniform writeonly image2D ColorTarget;
-layout(set = 0, binding = 12) uniform writeonly image2D BrightTarget;
+layout(set = 0, binding = 6)  uniform sampler2D VolumetricLightTexture;
+layout(set = 0, binding = 7)  uniform sampler2D IndirectLightTexture;
+layout(set = 0, binding = 8)  uniform sampler3D RandomAnglesTexture;
+layout(set = 0, binding = 9)  uniform sampler2D GBuffer[GBUFFER_COUNT];
+layout(set = 0, binding = 10) uniform sampler2D AmbientOcclusionBuffer;
+layout(set = 0, binding = 11) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
+layout(set = 0, binding = 12) uniform writeonly image2D ColorTarget;
+layout(set = 0, binding = 13) uniform writeonly image2D BrightTarget;
 
 layout(set = 1, binding = 0) uniform sampler2D ShadowMaps[LIGHT_SOURCES_MAX_COUNT];
 layout(set = 2, binding = 0) uniform samplerCube PointShadowMaps[LIGHT_SOURCES_MAX_COUNT];
@@ -243,11 +240,6 @@ float GetPointLightShadow(samplerCube ShadowSampler, vec3 Position, vec3 LightPo
 	return Result;
 }
 
-float MieScattering(float Angle)
-{
-	return (1.0 - GScat * GScat) / (4.0 * Pi * pow(1.0 + GScat * GScat - 2.0 * GScat * Angle, 1.5));
-}
-
 float NormalDistributionGGX(vec3 Normal, vec3 Half, float Roughness)
 {
 	float a2    = Roughness * Roughness;
@@ -381,42 +373,6 @@ vec2 ReflectedRayCast(vec3 Coord, vec3 ReflDir)
 	return vec2(-1);
 }
 
-bool IsInsideUnitCube(vec3 Coord)
-{
-	return abs(Coord.x) < 1.0 && abs(Coord.y) < 1.0 && abs(Coord.z) < 1.0;
-}
-
-vec4 TraceCone(vec3 Coord, vec3 Direction, vec3 Normal, float Angle)
-{
-	vec3 VoxelSceneScale = WorldUpdate.SceneScale.xyz;
-
-	float Aperture  = max(0.01, tan(Angle / 2.0));
-	float Distance  = 0.1;
-	vec3  AccumColor = vec3(0);
-	float AccumOcclusion = 0.0;
-
-	vec3 StartPos   = (Coord - WorldUpdate.SceneCenter.xyz) + Normal * Distance;
-	while(Distance <= 1.0 && AccumOcclusion < 0.9)
-	{
-		vec3  ConePos = (StartPos + Direction * Distance) * VoxelSceneScale;
-		if(!IsInsideUnitCube(ConePos)) break;
-
-		ConePos = ConePos * 0.5 + 0.5;
-
-		float Diameter = 2.0 * Aperture * Distance;
-		int Mip = int(floor(log2(Distance)));
-		vec4  VoxelSample = textureLod(VoxelGrid, ConePos, Mip);
-
-		AccumColor += (1.0 - AccumOcclusion) * VoxelSample.rgb;
-		AccumOcclusion += (1.0 - AccumOcclusion) * VoxelSample.a;
-
-		Distance += Diameter;
-	}
-
-	AccumOcclusion = min(AccumOcclusion, 1.0);
-	return vec4(AccumColor, AccumOcclusion);
-}
-
 
 void main()
 {
@@ -436,7 +392,7 @@ void main()
 	vec3  CoordWS = WorldPosFromDepth(TextCoord / TextureDims, CurrDepth);
 	vec3  CoordVS = vec3(WorldUpdate.DebugView * vec4(CoordWS, 1.0));
 
-	vec3  Volumetric = vec3(0);
+	vec3  Volumetric = texelFetch(VolumetricLightTexture, ivec2(TextCoord), 0).rgb;
 	uint  Layer = 0;
 	for(uint CascadeIdx = 1;
 		CascadeIdx <= DEPTH_CASCADES_COUNT;
@@ -448,40 +404,21 @@ void main()
 			break;
 		}
 	}
-	{
-		vec3 LightViewDir = normalize(CoordWS - WorldUpdate.CameraPos.xyz);
-
-		uint LightSamplesCount = 64;
-		vec3 RayP = WorldUpdate.CameraPos.xyz;
-		vec3 RayD = LightViewDir * (1.0 / LightSamplesCount);
-
-		for(uint StepIdx = 0; StepIdx < LightSamplesCount; ++StepIdx)
-		{
-			RayP += RayD;
-
-			vec4 ProjectedRayCoord = WorldUpdate.LightProj[Layer] * WorldUpdate.LightView[Layer] * vec4(RayP, 1.0);
-			ProjectedRayCoord.xyz /= ProjectedRayCoord.w;
-			ProjectedRayCoord.xy   = ProjectedRayCoord.xy * vec2(0.5, -0.5) + 0.5;
-
-			float SampledDepth = texture(ShadowMap[Layer], ProjectedRayCoord.xy).r;
-			if((ProjectedRayCoord.z + 0.01) < SampledDepth)
-			{
-				Volumetric += MieScattering(dot(LightViewDir, -GlobalLightDirWS)) * vec3(0.8235, 0.7215, 0.0745);
-			}
-		}
-
-		Volumetric /= LightSamplesCount;
-	}
 
 	float Metallic  = 1.0;
 	float Roughness = 0.8;
 	if(CurrDepth == 1.0)
 	{
-		imageStore(ColorTarget , ivec2(gl_GlobalInvocationID.xy), vec4(Volumetric, 1));
+#if 0
+		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(Volumetric, 1));
 		if(dot(Volumetric, vec3(0.2126, 0.7152, 0.0722)) > 1.0)
 			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(Volumetric, 1));
 		else
 			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
+#else
+		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(Volumetric, 1));
+		imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
+#endif
 		return;
 	}
 
@@ -566,33 +503,7 @@ void main()
 	}
 	LightShadow /= float(TotalLightSourceCount);
 
-	vec4  IndirectDiffuse  = vec4(0);
-	vec4  IndirectSpecular = vec4(0);
-	{
-		vec3 Guide = vec3(0, 1, 0);
-		if(abs(dot(VertexNormalWS, Guide)) == 1.0)
-			 Guide = vec3(0, 0, 1);
-		vec3 Right = normalize(Guide - dot(Guide, VertexNormalWS) * VertexNormalWS);
-		vec3 Up    = cross(Right, VertexNormalWS);
-
-		for(uint i = 0; i < CONE_SAMPLES; i++)
-		{
-			vec3 ConeDirection = VertexNormalWS;
-			ConeDirection += DiffuseConeDirections[i].x * Right + DiffuseConeDirections[i].z * Up;
-			ConeDirection  = normalize(ConeDirection);
-
-			IndirectDiffuse += TraceCone(CoordWS, ConeDirection, VertexNormalWS, Pi / 4.0) * DiffuseConeWeights[i];
-		}
-
-		IndirectDiffuse.rgb *= Diffuse * 0.01;
-	}
-
-	{
-		vec3 ViewDirWS = normalize(WorldUpdate.CameraPos.xyz - CoordWS);
-		vec3 ReflDirWS = normalize(reflect(-ViewDirWS, VertexNormalWS));
-		IndirectSpecular = TraceCone(CoordWS, ReflDirWS, VertexNormalWS, Pi / 12.0);
-		IndirectSpecular.rgb *= Specular;
-	}
+	vec3 IndirectLight = texelFetch(IndirectLightTexture, ivec2(TextCoord), 0).rgb;
 
 	float GlobalShadow = 0.0;
 	vec3  CascadeCol;
@@ -622,7 +533,6 @@ void main()
 	}
 	else
 	{
-		vec3 IndirectLight = IndirectDiffuse.rgb + IndirectSpecular.rgb;
 		vec3 FinalLight = (LightDiffuse + LightSpecular);
 			 FinalLight = Volumetric + IndirectLight + Emmit * EmmitSze + mix(vec3(0.001), FinalLight, 1.0 - Shadow);
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(FinalLight, 1));

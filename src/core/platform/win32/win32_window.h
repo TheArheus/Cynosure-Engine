@@ -1,6 +1,10 @@
 
 #ifndef WIN32_WINDOWS_H_
 
+#define NOMINMAX
+#include <windows.h>
+#include <windowsx.h>
+
 #include "../../vendor/imgui/backends/imgui_impl_win32.h"
 
 #define ProcFunc(name) LRESULT name(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)

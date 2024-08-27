@@ -519,14 +519,12 @@ struct vulkan_texture : public texture
 		vkAllocateMemory(Device, &AllocateInfo, 0, &TempMemory);
 		vkBindBufferMemory(Device, Temp, TempMemory, 0);
 
-#if 0
 		std::string TempName = (Name + ".buffer.temp");
 		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 		DebugNameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
 		DebugNameInfo.objectHandle = (u64)Temp;
 		DebugNameInfo.pObjectName = TempName.c_str();
 		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
-#endif
 	}
 
 	void DestroyResource() override

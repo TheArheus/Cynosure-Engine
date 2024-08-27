@@ -1,25 +1,7 @@
-#define  VK_NO_PROTOTYPES
-#define  VMA_IMPLEMENTATION
-#include <vulkan/vulkan.h>
+// TODO: clean this file(and make better project architecture)
+// 
 
 #define TEXTURE_MIPS_ALL ~0u
-
-#if _WIN32
-	#define NOMINMAX
-	#include <windows.h>
-	#include <windowsx.h>
-	#include <vulkan/vulkan_win32.h>
-#else
-	#include <glfw/glfw3native.h>
-	#include <glfw/glfw3.h>
-	#define CComPtr ComPtr
-#endif
-
-#include <Volk/volk.h>
-#include <Volk/volk.c>
-
-#include <dxc/dxcapi.h>
-//#include <dxc/WinAdapter.h>
 
 #define  AMD_EXTENSIONS
 #define  NV_EXTENSIONS
@@ -55,6 +37,8 @@ class window;
 struct scene_manager;
 #include "core/gfx/renderer.h"
 #include "core/platform/window.hpp"
+
+#include <dxc/dxcapi.h>
 
 
 u32 GetImageMipLevels(u32 Width, u32 Height)

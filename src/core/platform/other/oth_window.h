@@ -3,6 +3,9 @@
 #include <time.h>
 #include <dlfcn.h>
 
+#include <glfw/glfw3native.h>
+#include <glfw/glfw3.h>
+
 #include "core/vendor/imgui/backends/imgui_impl_glfw.h"
 
 #define library_block void*

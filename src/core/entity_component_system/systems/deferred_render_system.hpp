@@ -133,20 +133,6 @@ struct deferred_raster_system : public entity_system
 				{
 					StaticMeshInstances.push_back({ EntityInstance.Translate, EntityInstance.Scale, vec4(0), EntityIdx });
 					StaticMeshVisibility.push_back(true);
-
-					vec3 Scale = EntityInstance.Scale.xyz;
-					vec3 Trans = EntityInstance.Translate.xyz;
-					vec3 WorldCenter = MeshCenter * Scale + Trans;
-					vec3 WorldMin = MeshMin * Scale + Trans;
-					vec3 WorldMax = MeshMax * Scale + Trans;
-
-					if(SceneMin.x > WorldMin.x) SceneMin.x = WorldMin.x;
-					if(SceneMin.y > WorldMin.y) SceneMin.y = WorldMin.y;
-					if(SceneMin.z > WorldMin.z) SceneMin.z = WorldMin.z;
-
-					if(SceneMax.x < WorldMax.x) SceneMax.x = WorldMax.x;
-					if(SceneMax.y < WorldMax.y) SceneMax.y = WorldMax.y;
-					if(SceneMax.z < WorldMax.z) SceneMax.z = WorldMax.z;
 				}
 			}
 
@@ -237,7 +223,12 @@ struct deferred_raster_system : public entity_system
 			Parameters.Output.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawCommandBuffer);
 
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
-			Gfx.AddPass<frustum_culling>("Frustum culling/indirect command generation", Parameters, pass_type::compute,
+			Gfx.AddPass<frustum_culling>("Frustum culling/indirect command generation", Parameters, pass_type::compute, 
+#if 0
+			[](resource_scheduler* Scheduler)
+			{
+			},
+#endif
 			[this, Input](command_list* Cmd, void* Parameters)
 			{
 				Cmd->BindShaderParameters(Parameters);
@@ -437,14 +428,50 @@ struct deferred_raster_system : public entity_system
 		}
 
 		{
+			shader_parameter<volumetric_light_calc> Parameters;
+			Parameters.Input.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
+			Parameters.Input.DepthTarget = Gfx.UseTexture(Gfx.GfxDepthTarget);
+			Parameters.Input.GBuffer = Gfx.UseTextureArray(Gfx.GBuffer);
+			Parameters.Input.GlobalShadow = Gfx.UseTextureArray(Gfx.GlobalShadow);
+			Parameters.Output.Out = Gfx.UseTexture(Gfx.VolumetricLightOut);
+
+			float GScat = 0.7;
+			Gfx.AddPass<volumetric_light_calc>("Draw volumetric light", Parameters, pass_type::compute,
+			[this, Width = Gfx.Backend->Width, Height = Gfx.Backend->Height, GScat](command_list* Cmd, void* Parameters)
+			{
+				Cmd->BindShaderParameters(Parameters);
+				Cmd->SetConstant((void*)&GScat, sizeof(float));
+				Cmd->Dispatch(Width, Height);
+			});
+		}
+
+		{
+			shader_parameter<voxel_indirect_light_calc> Parameters;
+			Parameters.Input.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
+			Parameters.Input.DepthTarget = Gfx.UseTexture(Gfx.GfxDepthTarget);
+			Parameters.Input.GBuffer = Gfx.UseTextureArray(Gfx.GBuffer);
+			Parameters.Input.VoxelGrid = Gfx.UseTexture(Gfx.VoxelGridTarget);
+			Parameters.Output.Out = Gfx.UseTexture(Gfx.IndirectLightOut);
+
+			Gfx.AddPass<voxel_indirect_light_calc>("Draw voxel indirect light", Parameters, pass_type::compute,
+			[this, Width = Gfx.Backend->Width, Height = Gfx.Backend->Height](command_list* Cmd, void* Parameters)
+			{
+				Cmd->BindShaderParameters(Parameters);
+				Cmd->Dispatch(Width, Height);
+			});
+		}
+
+		{
+			// TODO: Reduce the ammount of the input parameters/symplify color pass shader
 			shader_parameter<color_pass> Parameters;
 			Parameters.Input.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
 			Parameters.Input.LightSourcesBuffer = Gfx.UseBuffer(LightSourcesBuffer);
 			Parameters.Input.PoissonDiskBuffer = Gfx.UseBuffer(Gfx.PoissonDiskBuffer);
 			Parameters.Input.RandomSamplesBuffer = Gfx.UseBuffer(Gfx.RandomSamplesBuffer);
-			Parameters.Input.GfxColorTarget = Gfx.UseTexture(Gfx.GfxColorTarget[(Gfx.BackBufferIndex + 1) % 2]);
+			Parameters.Input.PrevColorTarget = Gfx.UseTexture(Gfx.GfxColorTarget[(Gfx.BackBufferIndex + 1) % 2]);
 			Parameters.Input.GfxDepthTarget = Gfx.UseTexture(Gfx.GfxDepthTarget);
-			Parameters.Input.VoxelGridTarget = Gfx.UseTexture(Gfx.VoxelGridTarget);
+			Parameters.Input.VolumetricLightTexture = Gfx.UseTexture(Gfx.VolumetricLightOut);
+			Parameters.Input.IndirectLightTexture = Gfx.UseTexture(Gfx.IndirectLightOut);
 			Parameters.Input.RandomAnglesTexture = Gfx.UseTexture(Gfx.RandomAnglesTexture);
 			Parameters.Input.GBuffer = Gfx.UseTextureArray(Gfx.GBuffer);
 			Parameters.Input.AmbientOcclusionData = Gfx.UseTexture(Gfx.AmbientOcclusionData);

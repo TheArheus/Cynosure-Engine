@@ -132,9 +132,10 @@ struct color_pass : public shader_compute_view_context
 		buffer_ref LightSourcesBuffer;
 		buffer_ref PoissonDiskBuffer;
 		buffer_ref RandomSamplesBuffer;
-		texture_ref GfxColorTarget;
+		texture_ref PrevColorTarget;
 		texture_ref GfxDepthTarget;
-		texture_ref VoxelGridTarget;
+		texture_ref VolumetricLightTexture;
+		texture_ref IndirectLightTexture;
 		texture_ref RandomAnglesTexture;
 		texture_ref GBuffer;
 		texture_ref AmbientOcclusionData;
@@ -157,5 +158,68 @@ struct color_pass : public shader_compute_view_context
 	{
 		Shader = "../shaders/color_pass.comp.glsl";
 		Defines = {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}};
+	}
+};
+
+struct voxel_indirect_light_calc : public shader_compute_view_context
+{
+	struct input_type
+	{
+		buffer_ref  WorldUpdateBuffer;
+		texture_ref DepthTarget;
+		texture_ref GBuffer;
+		texture_ref VoxelGrid;
+	};
+
+	struct output_type
+	{
+		texture_ref Out;
+	};
+
+	voxel_indirect_light_calc()
+	{
+		Shader = "../shaders/voxel_indirect_light_calc.comp.glsl";
+		Defines = {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}};
+	}
+};
+
+struct volumetric_light_calc : public shader_compute_view_context
+{
+	struct input_type
+	{
+		buffer_ref  WorldUpdateBuffer;
+		texture_ref DepthTarget;
+		texture_ref GBuffer;
+		texture_ref GlobalShadow;
+	};
+
+	struct output_type
+	{
+		texture_ref Out;
+	};
+
+	volumetric_light_calc()
+	{
+		Shader  = "../shaders/volumetric_light_calc.comp.glsl";
+		Defines = {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}};
+	}
+};
+
+struct textures_combine : public shader_compute_view_context
+{
+	struct input_type
+	{
+		texture_ref A;
+		texture_ref B;
+	};
+
+	struct output_type
+	{
+		texture_ref Out;
+	};
+
+	textures_combine()
+	{
+		Shader = "../shaders/texture_combine.comp.glsl";
 	}
 };

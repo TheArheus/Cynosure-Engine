@@ -5,6 +5,11 @@ struct shader_pass
 	std::string Name;
 	pass_type Type;
 	void* Parameters;
+	//std::vector<> Inputs;
+	//std::vector<> Outputs;
+	//std::vector<> Statics;
+	//std::vector<> BufferBarriers;
+	//std::vector<> ImageBarriers;
 	bool HaveStaticStorage;
 };
 
@@ -25,27 +30,32 @@ public:
 	global_graphics_context(global_graphics_context&& Oth) noexcept;
 	global_graphics_context& operator=(global_graphics_context&& Oth) noexcept;
 
+	// TODO: Get buffer_ref
 	buffer* PushBuffer(std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
 	{
 		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, DataSize, Count, NewWithCounter, Flags);
 	}
 
+	// TODO: Get buffer_ref
 	buffer* PushBuffer(std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
 	{
 		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, Data, DataSize, Count, NewWithCounter, Flags);
 	}
 
+	// TODO: Get texture_ref
 	texture* PushTexture(std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
 		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Width, Height, Depth, InputData);
 	}
 
+	// TODO: Get texture_ref
 	texture* PushTexture(std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
 		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Data, Width, Height, Depth, InputData);
 	}
 
 	// TODO: Implement better resource handling
+	// Get the texture by texture_ref
 	texture_ref UseTextureArray(std::vector<texture*> ArrayOfTextures)
 	{
 		texture_ref NewRef;
@@ -54,6 +64,7 @@ public:
 		return NewRef;
 	}
 
+	// Get the texture by texture_ref
 	texture_ref UseTexture(texture* Texture)
 	{
 		texture_ref NewRef;
@@ -62,6 +73,7 @@ public:
 		return NewRef;
 	}
 
+	// Get the texture by texture_ref
 	texture_ref UseTextureMip(texture* Texture, u32 Idx)
 	{
 		texture_ref NewRef;
@@ -70,6 +82,7 @@ public:
 		return NewRef;
 	}
 
+	// Get the buffer by texture_ref
 	buffer_ref UseBuffer(buffer* Buffer)
 	{
 		buffer_ref NewRef;
@@ -220,6 +233,9 @@ public:
 	//////////////////////////////////////////////////////
 	u32 BackBufferIndex = 0;
 
+	buffer* PoissonDiskBuffer;
+	buffer* RandomSamplesBuffer;
+
 	texture* GfxColorTarget[2];
 	texture* GfxDepthTarget;
 	texture* DebugCameraViewDepthTarget;
@@ -238,6 +254,7 @@ public:
 	texture* RandomAnglesTexture;
 	texture* NoiseTexture;
 
-	buffer* PoissonDiskBuffer;
-	buffer* RandomSamplesBuffer;
+	texture* VolumetricLightOut;
+	texture* IndirectLightOut;
+	texture* LightColor;
 };

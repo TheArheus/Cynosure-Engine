@@ -1,6 +1,16 @@
 #pragma once
 
+#define  VK_NO_PROTOTYPES
+#include <vulkan/vulkan.h>
+
+#if _WIN32
+	#include <vulkan/vulkan_win32.h>
+#endif
+
+#define  VMA_IMPLEMENTATION
 #include "core/vendor/vk_mem_alloc.h"
+
+#include <Volk/volk.h>
 
 #include "vulkan_command_queue.h"
 #include "vulkan_backend.h"

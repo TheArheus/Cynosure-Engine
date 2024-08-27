@@ -543,13 +543,15 @@ struct resource_binder
 	virtual void SetImageSampler(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 };
 
-
 struct texture_ref
 {
 	u64 SubresourceIndex = TEXTURE_MIPS_ALL;
 	std::vector<texture*> Handle;
 };
 
+// TODO: use the actual structure for the data.
+// Create one VkBuffer and then update the buffer when the structure is being actually updated
+// Destroy if actually stopped being used/haven't being used for some time
 struct buffer_ref
 {
 	buffer* Handle = nullptr;
