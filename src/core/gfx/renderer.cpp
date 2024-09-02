@@ -266,16 +266,16 @@ operator=(global_graphics_context&& Oth) noexcept
 }
 
 void global_graphics_context::
-SetContext(const std::unique_ptr<shader_pass>& Pass, command_list* Context)
+SetContext(shader_pass* Pass, command_list* Context)
 {
-	std::type_index ContextType = PassToContext.at(Pass.get());
-	shader_view_context* ContextView = GeneralShaderViewMap[ContextType].get();
+	std::type_index ContextType = PassToContext.at(Pass);
+	shader_view_context* ContextView = GeneralShaderViewMap[ContextType];
 
 	auto FindIt = ContextMap.find(ContextType);
 
 	if(FindIt != ContextMap.end())
 	{
-		CurrentContext = FindIt->second.get();
+		CurrentContext = FindIt->second;
 		if(Pass->Type == pass_type::graphics)
 		{
 			Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
@@ -299,7 +299,7 @@ SetContext(const std::unique_ptr<shader_pass>& Pass, command_list* Context)
 			CurrentContext = CreateComputeContext(NewContextView->Shader, NewContextView->Defines);
 			Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
 		}
-		ContextMap[ContextType] = std::unique_ptr<general_context>(CurrentContext);
+		ContextMap[ContextType] = CurrentContext;
 	}
 }
 
@@ -307,49 +307,47 @@ template<typename context_type, typename param_type>
 shader_pass* global_graphics_context::
 AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec)
 {
-	std::unique_ptr<shader_pass> NewPass = std::make_unique<shader_pass>();
+	shader_pass* NewPass = PushStructConstruct(shader_pass);
 	NewPass->Name = Name;
 	NewPass->Type = Type;
 	NewPass->HaveStaticStorage = has_static_storage_type<context_type>::value;
-	NewPass->Parameters = new param_type;
+	NewPass->Parameters = PushStructConstruct(param_type);
 	*((param_type*)NewPass->Parameters) = Parameters;
 
-	shader_pass* PassPtr = NewPass.get();
-	Passes.push_back(std::move(NewPass));
-	Dispatches[PassPtr] = Exec;
-	PassToContext.emplace(PassPtr, std::type_index(typeid(context_type)));
+	Passes.push_back(NewPass);
+	Dispatches[NewPass] = Exec;
+	PassToContext.emplace(NewPass, std::type_index(typeid(context_type)));
 
 	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));
 
 	if(FindIt == ContextMap.end())
 	{
-		GeneralShaderViewMap[std::type_index(typeid(context_type))] = std::make_unique<context_type>();
+		GeneralShaderViewMap[std::type_index(typeid(context_type))] = PushStructConstruct(context_type);
 	}
 
-	return PassPtr;
+	return NewPass;
 }
 
 shader_pass* global_graphics_context::
 AddTransferPass(std::string Name, execute_func Exec)
 {
-	std::unique_ptr<shader_pass> NewPass = std::make_unique<shader_pass>();
+	shader_pass* NewPass = PushStructConstruct(shader_pass);
 	NewPass->Name = Name;
 	NewPass->Type = pass_type::transfer;
 	NewPass->Parameters = nullptr;
 
-	shader_pass* PassPtr = NewPass.get();
-	Passes.push_back(std::move(NewPass));
-	Dispatches[PassPtr] = Exec;
-	PassToContext.emplace(PassPtr, std::type_index(typeid(transfer)));
+	Passes.push_back(NewPass);
+	Dispatches[NewPass] = Exec;
+	PassToContext.emplace(NewPass, std::type_index(typeid(transfer)));
 
 	auto FindIt = ContextMap.find(std::type_index(typeid(transfer)));
 
 	if(FindIt == ContextMap.end())
 	{
-		GeneralShaderViewMap[std::type_index(typeid(transfer))] = std::make_unique<transfer>();
+		GeneralShaderViewMap[std::type_index(typeid(transfer))] = PushStructConstruct(transfer);
 	}
 
-	return PassPtr;
+	return NewPass;
 }
 
 // TODO: Prepass and postpass barriers (postpass barrier is for when the resource is not fully in the same state, for example, after mip generation etc)
@@ -357,20 +355,20 @@ AddTransferPass(std::string Name, execute_func Exec)
 void global_graphics_context::
 Compile()
 {
-	std::unique_ptr<resource_binder> Binder(CreateResourceBinder());
-	for(const auto& Pass : Passes)
+	resource_binder* Binder = CreateResourceBinder();
+	for(shader_pass* Pass : Passes)
 	{
 		if(Pass->Type == pass_type::transfer) continue;
 
-		std::type_index ContextType = PassToContext.at(Pass.get());
-		shader_view_context* ContextView = GeneralShaderViewMap[ContextType].get();
+		std::type_index ContextType = PassToContext.at(Pass);
+		shader_view_context* ContextView = GeneralShaderViewMap[ContextType];
 
 		auto FindIt = ContextMap.find(ContextType);
 
 		general_context* UseContext = nullptr;
 		if(FindIt != ContextMap.end())
 		{
-			UseContext = FindIt->second.get();
+			UseContext = FindIt->second;
 		}
 		else
 		{
@@ -384,7 +382,7 @@ Compile()
 				shader_compute_view_context* NewContextView = static_cast<shader_compute_view_context*>(ContextView);
 				UseContext = CreateComputeContext(NewContextView->Shader, NewContextView->Defines);
 			}
-			ContextMap[ContextType] = std::unique_ptr<general_context>(UseContext);
+			ContextMap[ContextType] = UseContext;
 		}
 
 		if(Pass->HaveStaticStorage)
@@ -401,10 +399,10 @@ Execute(scene_manager& SceneManager)
 {
 	ExecutionContext->AcquireNextImage();
 	ExecutionContext->Begin();
-	for(const auto& Pass : Passes)
+	for(shader_pass* Pass : Passes)
 	{
 		SetContext(Pass, ExecutionContext);
-		Dispatches[Pass.get()](ExecutionContext, Pass->Parameters);
+		Dispatches[Pass](ExecutionContext, Pass->Parameters);
 	}
 
 	ExecutionContext->DebugGuiBegin(GfxColorTarget[BackBufferIndex]);
@@ -436,13 +434,13 @@ Execute(scene_manager& SceneManager)
 	ExecutionContext->EmplaceColorTarget(GfxColorTarget[BackBufferIndex]);
 	ExecutionContext->Present();
 
-	for(const auto& Pass : Passes)
+	for(shader_pass* Pass : Passes)
 	{
 		if(Pass->Type == pass_type::transfer) continue;
-		ContextMap[PassToContext.at(Pass.get())]->Clear();
-		delete Pass->Parameters;
+		ContextMap[PassToContext.at(Pass)]->Clear();
 	}
-	std::vector<std::unique_ptr<shader_pass>>().swap(Passes);
+
+	Passes.clear();
 	Dispatches.clear();
 	PassToContext.clear();
 

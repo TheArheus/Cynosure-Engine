@@ -21,6 +21,8 @@ public:
 	window& operator=(window&& rhs) = default;
 	~window();
 
+	void Create(unsigned int Width, unsigned int Height, const char* Name);
+
 	void NewFrame() {ImGui_ImplGlfw_NewFrame();};
 	void EmitEvents();
 	void InitVulkanGraphics();
@@ -61,6 +63,8 @@ private:
     static void WindowSizeCallback(GLFWwindow* window, int width, int height);
     static void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
     static void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+
+	bool IsInited = false;
 };
 
 

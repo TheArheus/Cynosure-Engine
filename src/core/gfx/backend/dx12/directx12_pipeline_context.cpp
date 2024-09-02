@@ -270,7 +270,25 @@ Present()
 			directx12_texture* Resource = static_cast<directx12_texture*>(*std::next(TexturesToCommon.begin(), Idx));
 
 			if(GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader) == D3D12_RESOURCE_STATE_COMMON) continue;
-			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
+
+			bool AreAllSubresourcesInSameState = true;
+			for(u32 MipIdx = 1; MipIdx < Resource->Info.MipLevels; ++MipIdx)
+			{
+				if(Resource->CurrentLayout[0] != Resource->CurrentLayout[MipIdx])
+					AreAllSubresourcesInSameState = false;
+			}
+
+			if(AreAllSubresourcesInSameState)
+			{
+				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
+			}
+			else
+			{
+				for(u32 MipIdx = 0; MipIdx < Resource->Info.MipLevels; ++MipIdx)
+				{
+					Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[MipIdx], Resource->CurrentLayout[MipIdx], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON, MipIdx));
+				}
+			}
 
 			std::fill(Resource->CurrentLayout.begin(), Resource->CurrentLayout.end(), 0);
 			std::fill(Resource->CurrentState.begin(), Resource->CurrentState.end(), barrier_state::general);
@@ -476,7 +494,7 @@ BindShaderParameters(void* Data)
 			for(texture* CurrentTexture : TextureToBind.Handle)
 			{
 				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
+				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
 			}
 
 			It = (void*)((u8*)It + sizeof(texture_ref));

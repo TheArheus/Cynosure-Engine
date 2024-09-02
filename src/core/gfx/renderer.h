@@ -205,7 +205,7 @@ public:
 		}
 	}
 
-	void SetContext(const std::unique_ptr<shader_pass>& Pass, command_list* Context);
+	void SetContext(shader_pass* Pass, command_list* Context);
 
 	template<typename context_type, typename param_type>
 	shader_pass* AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec);
@@ -218,13 +218,13 @@ public:
 	renderer_backend* Backend;
 	backend_type BackendType;
 
-	std::unordered_map<std::type_index, std::unique_ptr<general_context>> ContextMap;
-	std::unordered_map<std::type_index, std::unique_ptr<shader_view_context>> GeneralShaderViewMap;
+	std::unordered_map<std::type_index, general_context*> ContextMap;
+	std::unordered_map<std::type_index, shader_view_context*> GeneralShaderViewMap;
 	
 	std::unordered_map<shader_pass*, execute_func> Dispatches;
 	std::unordered_map<shader_pass*, std::type_index> PassToContext;
 
-	std::vector<std::unique_ptr<shader_pass>> Passes;
+	std::vector<shader_pass*> Passes;
 
 	general_context* CurrentContext = nullptr;
 

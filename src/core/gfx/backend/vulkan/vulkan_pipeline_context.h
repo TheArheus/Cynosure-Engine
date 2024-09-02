@@ -90,8 +90,7 @@ struct vulkan_command_list : public command_list
 
 	std::vector<VkImageView>  AttachmentViews;
 	std::vector<VkClearValue> RenderTargetClears;
-	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>   RenderingAttachmentInfos;
-	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>> RenderingAttachmentInfoArrays;
+	std::vector<VkRenderingAttachmentInfoKHR*> RenderingAttachmentInfos;
 };
 
 struct vulkan_resource_binder;
@@ -154,7 +153,6 @@ private:
 	VkRenderPass RenderPass;
 };
 
-// TODO: This is highly unefficient so I need to refactor this
 class vulkan_compute_context : public compute_context
 {
 	friend vulkan_command_list;
@@ -247,7 +245,10 @@ struct vulkan_resource_binder : public resource_binder
 
 	void DestroyObject()
 	{
+		Sets.clear();
+		PushDescriptors.clear();
 		DescriptorInfos.clear();
+		PushDescriptorBindings.clear();
 		StaticDescriptorBindings.clear();
 	};
 
@@ -272,8 +273,7 @@ struct vulkan_resource_binder : public resource_binder
 	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;
 	std::vector<VkWriteDescriptorSet> StaticDescriptorBindings;
 
-	std::vector<std::unique_ptr<descriptor_info>>   DescriptorInfos;
-	std::vector<std::unique_ptr<descriptor_info[]>> DescriptorArrayInfos;
+	std::vector<descriptor_info*> DescriptorInfos;
 
 	std::vector<bool> PushDescriptors;
 	std::vector<VkDescriptorSet> Sets;

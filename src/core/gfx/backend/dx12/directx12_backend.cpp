@@ -808,7 +808,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 		if (Code.Get() != NULL)
 		{
 			Result.BytecodeLength  = Code->GetBufferSize();
-			Result.pShaderBytecode = new u8[Result.BytecodeLength];
+			Result.pShaderBytecode = PushArray(u8, Result.BytecodeLength);
 			memcpy((void*)Result.pShaderBytecode, Code->GetBufferPointer(), Result.BytecodeLength);
 			Code->Release();
 		}

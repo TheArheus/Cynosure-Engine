@@ -55,6 +55,9 @@ public:
 		}
 	}
 
+
+	void Create(unsigned int _Width, unsigned int _Height, const char* _Name);
+
 	void NewFrame() {ImGui_ImplWin32_NewFrame();};
 	void EmitEvents();
 

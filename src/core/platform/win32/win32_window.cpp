@@ -8,6 +8,17 @@ event_bus window::EventsDispatcher;
 window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	: Width(_Width), Height(_Height), Name(_Name)
 {
+	Create(Width, Height, Name);
+}
+
+window::window(const char* _Name)
+	: Width(GetSystemMetrics(SM_CXSCREEN)), Height(GetSystemMetrics(SM_CYSCREEN)), Name(_Name)
+{
+	Create(Width, Height, Name);
+}
+
+void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name)
+{
 	WindowClass.IsRunning = true;
 	WindowClass.WindowNames.push_back(_Name);
 
@@ -25,33 +36,6 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	ImGui_ImplWin32_Init(Handle);
 
 	ShowWindow(Handle, SW_SHOWNORMAL);
-
-	QueryPerformanceFrequency(&TimerFrequency);
-}
-
-window::window(const char* _Name)
-	: Width(GetSystemMetrics(SM_CXSCREEN)), Height(GetSystemMetrics(SM_CYSCREEN)), Name(_Name)
-{
-	WindowClass.IsRunning = true;
-	WindowClass.WindowNames.push_back(_Name);
-
-	RECT AdjustRect = {};
-	AdjustRect.left   = 0;
-	AdjustRect.top    = 0;
-	AdjustRect.right  = AdjustRect.left + Width;
-	AdjustRect.bottom = AdjustRect.top + Height;
-
-	AdjustWindowRect(&AdjustRect, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), 0);
-
-	Handle = CreateWindow(WindowClass.Name, Name, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), AdjustRect.left, AdjustRect.right, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
-
-	DWORD Style = GetWindowLong(Handle, GWL_STYLE);
-	SetWindowLong(Handle, GWL_STYLE, Style & ~WS_OVERLAPPEDWINDOW);
-
-	ImGui::CreateContext();
-	ImGui_ImplWin32_Init(Handle);
-
-	ShowWindow(Handle, SW_MAXIMIZE);
 
 	QueryPerformanceFrequency(&TimerFrequency);
 }

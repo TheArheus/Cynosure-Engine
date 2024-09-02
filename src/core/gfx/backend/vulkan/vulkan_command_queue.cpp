@@ -23,7 +23,6 @@ DestroyObject()
 		VkCommandBuffer* CommandList = CommandLists[Idx];
 		Execute(CommandList, ReleaseSemaphore, AcquireSemaphore);
 		CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), CommandList), CommandLists.end());
-		delete CommandList;
 	}
 #endif
 	if(CommandAlloc)

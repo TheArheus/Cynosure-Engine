@@ -29,6 +29,7 @@ LoadScene(const std::filesystem::directory_entry& SceneCode)
 
 	if(NewGameScene)
 	{
+		// TODO: Use new allocator?
 		std::unique_ptr<scene> ScenePtr(NewGameScene());
 		Scenes.push_back(std::move(ScenePtr));
 
@@ -98,6 +99,7 @@ UpdateScenes(std::string ScenesPath)
 					std::string CreateFunctionName = SceneFileName + "Create";
 
 					{
+						// TODO: Use new allocator?
 						std::unique_ptr<scene> OldScene(std::move(Scenes[SceneIdx]));
 					}
 
@@ -113,6 +115,7 @@ UpdateScenes(std::string ScenesPath)
 
 					if(NewGameScene)
 					{
+						// TODO: Use new allocator?
 						std::unique_ptr<scene> ScenePtr(NewGameScene());
 
 						Scenes[SceneIdx] = std::move(ScenePtr);

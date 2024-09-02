@@ -87,8 +87,7 @@ SetStorageBufferView(buffer* Buffer, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
-	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
+	descriptor_info* BufferInfo = PushStruct(descriptor_info);
 	BufferInfo->buffer = Attachment->Handle;
 	BufferInfo->offset = 0;
 	BufferInfo->range  = Attachment->WithCounter ? Attachment->CounterOffset : Attachment->Size;
@@ -101,16 +100,17 @@ SetStorageBufferView(buffer* Buffer, u32 Set)
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
+	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo);
 	if(PushDescriptors[Set])
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
-	DescriptorInfos.push_back(std::move(BufferInfo));
+	DescriptorInfos.push_back(BufferInfo);
 
 	if(Buffer->WithCounter)
 	{
+		descriptor_info* CounterBufferInfo = PushStruct(descriptor_info);
 		CounterBufferInfo->buffer = Attachment->Handle;
 		CounterBufferInfo->offset = Attachment->CounterOffset;
 		CounterBufferInfo->range  = sizeof(u32);
@@ -121,13 +121,13 @@ SetStorageBufferView(buffer* Buffer, u32 Set)
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
+		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo);
 		if(PushDescriptors[Set])
 			PushDescriptorBindings.push_back(CounterDescriptorSet);
 		else
 			StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
-		DescriptorInfos.push_back(std::move(CounterBufferInfo));
+		DescriptorInfos.push_back(CounterBufferInfo);
 	}
 }
 
@@ -136,8 +136,7 @@ SetUniformBufferView(buffer* Buffer, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
-	std::unique_ptr<descriptor_info> BufferInfo = std::make_unique<descriptor_info>();
-	std::unique_ptr<descriptor_info> CounterBufferInfo = std::make_unique<descriptor_info>();
+	descriptor_info* BufferInfo = PushStruct(descriptor_info);
 	BufferInfo->buffer = Attachment->Handle;
 	BufferInfo->offset = 0;
 	BufferInfo->range  = Attachment->WithCounter ? Attachment->CounterOffset : Attachment->Size;
@@ -150,16 +149,17 @@ SetUniformBufferView(buffer* Buffer, u32 Set)
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = 1;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo.get());
+	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo);
 	if(PushDescriptors[Set])
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
-	DescriptorInfos.push_back(std::move(BufferInfo));
+	DescriptorInfos.push_back(BufferInfo);
 
 	if(Buffer->WithCounter)
 	{
+		descriptor_info* CounterBufferInfo = PushStruct(descriptor_info);
 		CounterBufferInfo->buffer = Attachment->Handle;
 		CounterBufferInfo->offset = Attachment->CounterOffset;
 		CounterBufferInfo->range  = sizeof(u32);
@@ -170,20 +170,20 @@ SetUniformBufferView(buffer* Buffer, u32 Set)
 		CounterDescriptorSet.dstBinding = SetIndices[Set];
 		CounterDescriptorSet.descriptorCount = 1;
 		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo.get());
+		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo);
 		if(PushDescriptors[Set])
 			PushDescriptorBindings.push_back(CounterDescriptorSet);
 		else
 			StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
-		DescriptorInfos.push_back(std::move(CounterBufferInfo));
+		DescriptorInfos.push_back(CounterBufferInfo);
 	}
 }
 
 void vulkan_resource_binder::
 SetSampledImage(u32 DescriptorCount, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), DescriptorCount));
+	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -215,19 +215,19 @@ SetSampledImage(u32 DescriptorCount, const std::vector<texture*>& Textures, imag
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = DescriptorCount;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
+	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo);
 	if(PushDescriptors[Set])
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
-	DescriptorArrayInfos.push_back(std::move(ImageInfo));
+	DescriptorInfos.push_back(ImageInfo);
 }
 
 void vulkan_resource_binder::
 SetStorageImage(u32 DescriptorCount, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), DescriptorCount));
+	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -259,19 +259,19 @@ SetStorageImage(u32 DescriptorCount, const std::vector<texture*>& Textures, imag
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = DescriptorCount;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
+	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo);
 	if(PushDescriptors[Set])
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
-	DescriptorArrayInfos.push_back(std::move(ImageInfo));
+	DescriptorInfos.push_back(ImageInfo);
 }
 
 void vulkan_resource_binder::
 SetImageSampler(u32 DescriptorCount, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	std::unique_ptr<descriptor_info[]> ImageInfo((descriptor_info*)calloc(sizeof(descriptor_info), DescriptorCount));
+	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -303,13 +303,13 @@ SetImageSampler(u32 DescriptorCount, const std::vector<texture*>& Textures, imag
 	DescriptorSet.dstBinding = SetIndices[Set];
 	DescriptorSet.descriptorCount = DescriptorCount;
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo.get());
+	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo);
 	if(PushDescriptors[Set])
 		PushDescriptorBindings.push_back(DescriptorSet);
 	else
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
-	DescriptorArrayInfos.push_back(std::move(ImageInfo));
+	DescriptorInfos.push_back(ImageInfo);
 }
 
 
@@ -453,6 +453,7 @@ Present()
 	TexturesToCommon.clear();
 	AttachmentImageBarriers.clear();
 	AttachmentBufferBarriers.clear();
+	RenderingAttachmentInfos.clear();
 	CommandQueue->Execute(&CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 
 	VkPresentInfoKHR PresentInfo = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
@@ -471,7 +472,7 @@ SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
 
-	std::unique_ptr<VkRenderingAttachmentInfoKHR[]> ColorInfo((VkRenderingAttachmentInfoKHR*)calloc(sizeof(VkRenderingAttachmentInfoKHR), ColorTargets.size()));
+	VkRenderingAttachmentInfoKHR* ColorInfo = PushArray(VkRenderingAttachmentInfoKHR, ColorTargets.size());
 	for(u32 AttachmentIdx = 0; AttachmentIdx < ColorTargets.size(); ++AttachmentIdx)
 	{
 		AttachmentImageBarriers.push_back({ColorTargets[AttachmentIdx], AF_ColorAttachmentWrite, barrier_state::color_attachment, TEXTURE_MIPS_ALL, PSF_ColorAttachment});
@@ -480,6 +481,7 @@ SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 		vulkan_texture* Attachment = static_cast<vulkan_texture*>(ColorTargets[AttachmentIdx]);
 
 		ColorInfo[AttachmentIdx].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+		ColorInfo[AttachmentIdx].pNext = nullptr;
 		ColorInfo[AttachmentIdx].imageView = Attachment->Views[0];
 		ColorInfo[AttachmentIdx].imageLayout = GetVKLayout(barrier_state::color_attachment);
 		ColorInfo[AttachmentIdx].loadOp = GetVKLoadOp(Context->LoadOp);
@@ -491,9 +493,9 @@ SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 	}
 
 	RenderingInfo.colorAttachmentCount = ColorTargets.size();
-	RenderingInfo.pColorAttachments = ColorInfo.get();
+	RenderingInfo.pColorAttachments = ColorInfo;
 
-	RenderingAttachmentInfoArrays.push_back(std::move(ColorInfo));
+	RenderingAttachmentInfos.push_back(ColorInfo);
 }
 
 void vulkan_command_list::
@@ -507,19 +509,20 @@ SetDepthTarget(texture* Target, vec2 Clear)
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
 	vulkan_texture* Attachment = static_cast<vulkan_texture*>(Target);
 
-	std::unique_ptr<VkRenderingAttachmentInfoKHR> DepthInfo = std::make_unique<VkRenderingAttachmentInfoKHR>();
+	VkRenderingAttachmentInfoKHR* DepthInfo = PushStruct(VkRenderingAttachmentInfoKHR);
 	DepthInfo->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+	DepthInfo->pNext = nullptr;
 	DepthInfo->imageView = Attachment->Views[0];
 	DepthInfo->imageLayout = GetVKLayout(barrier_state::depth_stencil_attachment);
 	DepthInfo->loadOp = GetVKLoadOp(Context->LoadOp);
 	DepthInfo->storeOp = GetVKStoreOp(Context->StoreOp);
 	DepthInfo->clearValue.depthStencil.depth   = Clear.E[0];
 	DepthInfo->clearValue.depthStencil.stencil = Clear.E[1];
-	RenderingInfo.pDepthAttachment = DepthInfo.get();
+	RenderingInfo.pDepthAttachment = DepthInfo;
 
 	AttachmentViews.push_back(Attachment->Views[0]);
 	RenderTargetClears.push_back(DepthInfo->clearValue);
-	RenderingAttachmentInfos.push_back(std::move(DepthInfo));
+	RenderingAttachmentInfos.push_back(DepthInfo);
 }
 
 void vulkan_command_list::
@@ -533,19 +536,20 @@ SetStencilTarget(texture* Target, vec2 Clear)
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
 	vulkan_texture* Attachment = static_cast<vulkan_texture*>(Target);
 
-	std::unique_ptr<VkRenderingAttachmentInfoKHR> StencilInfo = std::make_unique<VkRenderingAttachmentInfoKHR>();
+	VkRenderingAttachmentInfoKHR* StencilInfo = PushStruct(VkRenderingAttachmentInfoKHR);
 	StencilInfo->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+	StencilInfo->pNext = nullptr;
 	StencilInfo->imageView = Attachment->Views[0];
 	StencilInfo->imageLayout = GetVKLayout(barrier_state::depth_stencil_attachment);
 	StencilInfo->loadOp = GetVKLoadOp(Context->LoadOp);
 	StencilInfo->storeOp = GetVKStoreOp(Context->StoreOp);
 	StencilInfo->clearValue.depthStencil.depth   = Clear.E[0];
 	StencilInfo->clearValue.depthStencil.stencil = Clear.E[1];
-	RenderingInfo.pStencilAttachment = StencilInfo.get();
+	RenderingInfo.pStencilAttachment = StencilInfo;
 
 	AttachmentViews.push_back(Attachment->Views[0]);
 	RenderTargetClears.push_back(StencilInfo->clearValue);
-	RenderingAttachmentInfos.push_back(std::move(StencilInfo));
+	RenderingAttachmentInfos.push_back(StencilInfo);
 }
 
 // TODO: A better code
@@ -721,6 +725,50 @@ BindShaderParameters(void* Data)
 	vkCmdPushDescriptorSetKHR(CommandList, BindPoint, Layout, 0, Binder.PushDescriptorBindings.size(), Binder.PushDescriptorBindings.data());
 }
 
+#if 0
+void vulkan_render_context::
+Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount)
+{
+	vulkan_buffer* VertexAttachment = static_cast<vulkan_buffer*>(VertexBuffer);
+
+	vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, 0, PushDescriptorBindings.size(), PushDescriptorBindings.data());
+	if(UseFramebuffer)
+	{
+		FramebufferCreateInfo.attachmentCount = AttachmentViews.size();
+		FramebufferCreateInfo.pAttachments    = AttachmentViews.data();
+		RenderPassInfo.clearValueCount        = RenderTargetClears.size();
+		RenderPassInfo.pClearValues           = RenderTargetClears.data();
+
+		VkFramebuffer& FrameBuffer = FrameBuffers[FrameBufferIdx];
+		if(!FrameBuffer)
+			vkCreateFramebuffer(Device, &FramebufferCreateInfo, nullptr, &FrameBuffer);
+		FrameBufferIdx++;
+
+		RenderPassInfo.framebuffer = FrameBuffer;
+		vkCmdBeginRenderPass(*PipelineContext->CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
+		vkCmdEndRenderPass(*PipelineContext->CommandList);
+	}
+	else
+	{
+		vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
+		vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
+		vkCmdEndRenderingKHR(*PipelineContext->CommandList);
+	}
+
+	AttachmentViews.clear();
+	RenderTargetClears.clear();
+	RenderingAttachmentInfos.clear();
+
+	AttachmentBufferBarriers.clear();
+	AttachmentImageBarriers.clear();
+
+	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
+	RenderPassInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+	FramebufferCreateInfo = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+}
+#endif
+
 void vulkan_command_list::
 DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount)
 {
@@ -755,8 +803,7 @@ DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance,
 
 	AttachmentViews.clear();
 	RenderTargetClears.clear();
-	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>().swap(RenderingAttachmentInfos);
-	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>>().swap(RenderingAttachmentInfoArrays);
+	RenderingAttachmentInfos.clear();
 
 	AttachmentBufferBarriers.clear();
 	AttachmentImageBarriers.clear();
@@ -806,8 +853,7 @@ DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructure
 
 	AttachmentViews.clear();
 	RenderTargetClears.clear();
-	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR>>().swap(RenderingAttachmentInfos);
-	std::vector<std::unique_ptr<VkRenderingAttachmentInfoKHR[]>>().swap(RenderingAttachmentInfoArrays);
+	RenderingAttachmentInfos.clear();
 
 	AttachmentBufferBarriers.clear();
 	AttachmentImageBarriers.clear();
@@ -828,8 +874,9 @@ Dispatch(u32 X, u32 Y, u32 Z)
 	vulkan_compute_context* Context = static_cast<vulkan_compute_context*>(CurrentContext);
 	vkCmdDispatch(CommandList, (X + Context->BlockSizeX - 1) / Context->BlockSizeX, (Y + Context->BlockSizeY - 1) / Context->BlockSizeY, (Z + Context->BlockSizeZ - 1) / Context->BlockSizeZ);
 
-	AttachmentBufferBarriers.clear();
 	AttachmentImageBarriers.clear();
+	AttachmentBufferBarriers.clear();
+	RenderingAttachmentInfos.clear();
 }
 
 void vulkan_command_list::
@@ -1460,39 +1507,6 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	DebugNameInfo.pObjectName = Name.c_str();
 	vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
 }
-
-#if 0
-void vulkan_render_context::
-Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount)
-{
-	vulkan_buffer* VertexAttachment = static_cast<vulkan_buffer*>(VertexBuffer);
-
-	vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, 0, PushDescriptorBindings.size(), PushDescriptorBindings.data());
-	if(UseFramebuffer)
-	{
-		FramebufferCreateInfo.attachmentCount = AttachmentViews.size();
-		FramebufferCreateInfo.pAttachments    = AttachmentViews.data();
-		RenderPassInfo.clearValueCount        = RenderTargetClears.size();
-		RenderPassInfo.pClearValues           = RenderTargetClears.data();
-
-		VkFramebuffer& FrameBuffer = FrameBuffers[FrameBufferIdx];
-		if(!FrameBuffer)
-			vkCreateFramebuffer(Device, &FramebufferCreateInfo, nullptr, &FrameBuffer);
-		FrameBufferIdx++;
-
-		RenderPassInfo.framebuffer = FrameBuffer;
-		vkCmdBeginRenderPass(*PipelineContext->CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
-		vkCmdEndRenderPass(*PipelineContext->CommandList);
-	}
-	else
-	{
-		vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
-		vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
-		vkCmdEndRenderingKHR(*PipelineContext->CommandList);
-	}
-}
-#endif
 
 vulkan_compute_context::
 vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, const std::vector<shader_define>& ShaderDefines)

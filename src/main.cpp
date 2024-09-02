@@ -24,24 +24,20 @@
 // TODO: Handle dynamic entities that updates every frame
 //			One entity - one instance for a group of the object(would be easy to handle each instance and add to them the component if needed)
 //
-// TODO: Only one scene at a time
 // TODO: Implement sound system with openal???
 //
-// TODO: Better memory allocation. Reallocation of the GlobalMemoryBlock when needed?
-// TODO: Use only one staging buffer instead of many (a lot of memory usage here, current solution is totally not optimal)
 // TODO: Implement mesh shading pipeline in the future
 // TODO: Implement ray  tracing pipeline in the future
 
 
+
+// TODO: make a class from this
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
 	window Window(1280, 720, "3D Renderer");
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
-	scene_manager SceneManager(Window);
-
-	u32 GlobalMemorySize = MiB(128);
-	void* MemoryBlock = malloc(GlobalMemorySize);
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
+	scene_manager SceneManager;
 
 	double TargetFrameRate = 1.0 / 60.0 * 1000.0; // Frames Per Milliseconds
 
@@ -49,21 +45,20 @@
 	double TimeElapsed = 0.0;
 	double TimeEnd = 0.0;
 	double AvgCpuTime = 0.0;
+	u64 FrameIdx = 0;
 	while(Window.IsRunning())
 	{
 		// TODO: Hide allocator creations
-		linear_allocator SystemsAllocator(GlobalMemorySize, MemoryBlock);
-		linear_allocator LightSourcesAlloc(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT, SystemsAllocator.Allocate(sizeof(light_source) * LIGHT_SOURCES_MAX_COUNT));
-		linear_allocator GlobalMeshInstancesAlloc(MiB(16), SystemsAllocator.Allocate(MiB(16)));
-		linear_allocator GlobalMeshVisibleAlloc(MiB(16), SystemsAllocator.Allocate(MiB(16)));
-		linear_allocator DebugMeshInstancesAlloc(MiB(16), SystemsAllocator.Allocate(MiB(16)));
-		linear_allocator DebugMeshVisibleAlloc(MiB(16), SystemsAllocator.Allocate(MiB(16)));
+		linear_allocator LightSourcesAlloc(PushAllocArrayArg(light_source, LIGHT_SOURCES_MAX_COUNT));
+		linear_allocator GlobalMeshInstancesAlloc(PushAllocSizeArg(MiB(16)));
+		linear_allocator GlobalMeshVisibleAlloc(PushAllocSizeArg(MiB(16)));
+		linear_allocator DebugMeshInstancesAlloc(PushAllocSizeArg(MiB(16)));
+		linear_allocator DebugMeshVisibleAlloc(PushAllocSizeArg(MiB(16)));
 
 		alloc_vector<mesh_draw_command> GlobalMeshInstances(GlobalMeshInstancesAlloc);
 		alloc_vector<u32> GlobalMeshVisibility(GlobalMeshVisibleAlloc);
 		alloc_vector<mesh_draw_command> DebugMeshInstances(DebugMeshInstancesAlloc);
 		alloc_vector<u32> DebugMeshVisibility(DebugMeshVisibleAlloc);
-
 		alloc_vector<light_source> GlobalLightSources(LightSourcesAlloc);
 
 		Window.NewFrame();
@@ -115,9 +110,8 @@
 		// TODO: move this into text rendering
 		std::string Title = "Frame " + std::to_string(AvgCpuTime) + "ms, " + std::to_string(1.0 / AvgCpuTime * 1000.0) + "fps";
 		Window.SetTitle(Title);
+		Allocator.UpdateAndReset();
 	}
-
-	free(MemoryBlock);
 
 	return 0;
 }

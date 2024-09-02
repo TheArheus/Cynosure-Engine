@@ -9,10 +9,43 @@ event_bus window::EventsDispatcher;
 window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	: Width(_Width), Height(_Height), Name(_Name)
 {
-	window::IsWindowRunning = true;
 	glfwInit();
-
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+	IsInited = true;
+
+	Create(Width, Height, Name);
+}
+
+window::window(const char* _Name)
+{
+	glfwInit();
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+	IsInited = true;
+
+	GLFWmonitor* Monitor = glfwGetPrimaryMonitor();
+	const GLFWvidmode* Mode = glfwGetVideoMode(Monitor);
+
+	Width  = Mode->width;
+	Height = Mode->height;
+
+	Create(Width, Height, Name);
+
+	glfwSetWindowMonitor(Handle, glfwGetPrimaryMonitor(), 0, 0, Width, Height, GLFW_DONT_CARE);
+}
+
+void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name)
+{
+	window::IsWindowRunning = true;
+
+#if 0
+	if(!IsInited)
+	{
+		glfwInit();
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	}
+#endif
 
 	Handle = glfwCreateWindow(Width, Height, Name, nullptr, nullptr);
 	if(!Handle) glfwTerminate();
@@ -27,33 +60,6 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 
 	ImGui::CreateContext();
 	ImGui_ImplGlfw_InitForVulkan(Handle, true);
-}
-
-window::window(const char* _Name)
-{
-	window::IsWindowRunning = true;
-	glfwInit();
-
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-	GLFWmonitor* Monitor = glfwGetPrimaryMonitor();
-	const GLFWvidmode* Mode = glfwGetVideoMode(Monitor);
-
-	Width  = Mode->width;
-	Height = Mode->height;
-
-	Handle = glfwCreateWindow(Width, Height, Name, nullptr, nullptr);
-	if(!Handle) glfwTerminate();
-
-    glfwMakeContextCurrent(Handle);
-
-	glfwSetWindowMonitor(Handle, glfwGetPrimaryMonitor(), 0, 0, Width, Height, GLFW_DONT_CARE);
-
-    glfwSetKeyCallback(Handle, KeyCallback);
-    glfwSetMouseButtonCallback(Handle, MouseButtonCallback);
-    glfwSetWindowSizeCallback(Handle, WindowSizeCallback);
-    glfwSetCursorPosCallback(Handle, CursorPosCallback);
-    glfwSetScrollCallback(Handle, ScrollCallback);
 }
 
 window::~window()

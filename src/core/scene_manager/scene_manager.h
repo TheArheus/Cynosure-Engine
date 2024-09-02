@@ -11,8 +11,8 @@ struct scene_manager
 		bool IsInitialized;
 	};
 
-	global_world_data WorldUpdate;
-	mesh_comp_culling_common_input MeshCompCullingCommonData;
+	global_world_data WorldUpdate = {};
+	mesh_comp_culling_common_input MeshCompCullingCommonData = {};
 
 	u32  CurrentScene = 0;
 	std::vector<std::unique_ptr<scene>> Scenes;
@@ -23,7 +23,7 @@ struct scene_manager
 
 	bool DebugMeshesDrawEnabled = true;
 
-	scene_manager(window& Window, std::string ScenesPath = "../build/scenes/")
+	scene_manager(std::string ScenesPath = "../build/scenes/")
 	{
 		WorldUpdate = {};
 		MeshCompCullingCommonData = {};

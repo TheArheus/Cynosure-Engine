@@ -2,6 +2,8 @@
 
 class linear_allocator : public allocator
 {
+	friend global_memory_allocator;
+
 public:
 	linear_allocator(const std::size_t MemSize, void* const Start) : allocator(MemSize, Start), Current(Start) {}
 	linear_allocator(linear_allocator&& Other) : allocator(std::move(Other)), Current(Other.Current) { Other.Current = nullptr; }
@@ -43,8 +45,10 @@ public:
 	virtual void Clear() noexcept
 	{
 		Current = Start;
+		UnusedCycles = 0;
 		AllocCount = 0;
 		Used = 0;
+		if(Start) memset(Start, 0, Size);
 	}
 
 	virtual void Rewind(void* const Mark) noexcept
