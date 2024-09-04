@@ -5,6 +5,7 @@ class global_memory_allocator;
 #include "allocator_base.hpp"
 #include "linear_allocator.hpp"
 
+
 template<typename T, class alloc_type>
 class allocator_adapter
 {
@@ -14,8 +15,22 @@ public:
 	allocator_adapter() = delete;
 	allocator_adapter(alloc_type& NewAllocator) noexcept : Allocator(NewAllocator) {}
 
+	allocator_adapter(const allocator_adapter&) = default;
+	allocator_adapter& operator=(const allocator_adapter&) = default;
+	allocator_adapter(allocator_adapter&&) noexcept = default;
+	allocator_adapter& operator=(allocator_adapter&&) noexcept = default;
+
 	template<typename U>
-	allocator_adapter(const allocator_adapter<U, alloc_type> Other) noexcept : Allocator(Other.Allocator) {}
+	allocator_adapter(const allocator_adapter<U, alloc_type>& Other) noexcept : Allocator(Other.Allocator) {}
+	template<typename U>
+	allocator_adapter& operator=(const allocator_adapter<U, alloc_type>& Other) noexcept
+	{
+		if(this != &Other)
+		{
+			Allocator = Other.Allocator;
+		}
+		return *this;
+	}
 
 	[[nodiscard]] constexpr value_type* allocate(const std::size_t& AllocCount)
 	{
@@ -50,8 +65,12 @@ public:
 		return !(*this == Other);
 	}
 
-	alloc_type& Allocator;
+	alloc_type Allocator;
 };
+
+// TODO: use another default allocator
+template<typename type, typename allocator_type = linear_allocator>
+using alloc_vector = std::vector<type, allocator_adapter<type, allocator_type>>;
 
 
 // TODO: implement data for memory footprint visualization
@@ -72,13 +91,21 @@ public:
 		}
 	}
 
-	void* Allocate(const size_t& Size, const std::uintptr_t& Alignment = sizeof(std::uintptr_t))
+	[[nodiscard]] void* Allocate(const size_t& Size, const std::uintptr_t& Alignment = sizeof(std::uintptr_t)) noexcept
 	{
 		if(MemoryBlocks[CurrentBlockIndex]->Used + Size > MemoryBlocks[CurrentBlockIndex]->Size)
 		{
 			AllocateNewBlock(Size > BlockSize ? Size : BlockSize);
 		}
 		return MemoryBlocks[CurrentBlockIndex]->Allocate(Size, Alignment);
+	}
+
+	// TODO: Maybe generalize this function for every container type???
+	template<typename type, typename allocator_type = linear_allocator>
+	[[nodiscard]] alloc_vector<type, allocator_type> NewVector(const size_t& Count) noexcept
+	{
+		allocator_type AllocatorResult(sizeof(type) * Count, Allocate(sizeof(type) * Count, alignof(type)));
+		return alloc_vector<type, allocator_type>(AllocatorResult);
 	}
 
 	void UpdateAndReset()
@@ -89,6 +116,8 @@ public:
 			{
 				if((*it)->UnusedCycles > TotalUnusedCyclesCount)
 				{
+					free((*it)->Start);
+					(*it)->Start = nullptr;
 					delete *it;
 					it = MemoryBlocks.erase(it);
 					continue;
@@ -108,12 +137,6 @@ public:
 		}	
 
 		CurrentBlockIndex = MemoryBlocks.size() - 1;
-
-		for(auto it = ContainerAllocators.begin(); it != ContainerAllocators.end();)
-		{
-			free(*it);
-		}
-		ContainerAllocators.clear();
 	}
 
 private:
@@ -129,7 +152,6 @@ private:
 	}
 
 	std::vector<linear_allocator*> MemoryBlocks;
-	std::vector<allocator*> ContainerAllocators;
 };
 
 static global_memory_allocator Allocator;
@@ -145,14 +167,4 @@ static global_memory_allocator Allocator;
 #define PushStruct(Type) (Type*)Allocator.Allocate(sizeof(Type), alignof(Type))
 #define PushArray(Type, Count) (Type*)Allocator.Allocate(sizeof(Type) * Count, alignof(Type))
 #define PushSize(Size) Allocator.Allocate(Size)
-
-#define PushAllocStructArg(Type) sizeof(Type), PushStruct(Type)
-#define PushAllocArrayArg(Type, Count) sizeof(Type) * Count, PushArray(Type, Count)
-#define PushAllocSizeArg(Size) Size, PushSize(Size)
-
-
-// TODO: use another default allocator
-// TODO: implement alloc_vector to use custom allocator inside for everything
-template<typename type, typename allocator_type = linear_allocator>
-using alloc_vector = std::vector<type, allocator_adapter<type, allocator_type>>;
 

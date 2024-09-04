@@ -6,16 +6,16 @@ struct vulkan_buffer : public buffer
 	vulkan_buffer() = default;
 	~vulkan_buffer() override = default;
 
-	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, bool NewWithCounter, u32 Flags)
+	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 Flags)
 	{
 		Flags |= resource_flags::RF_CopyDst;
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, Flags);
+		CreateResource(Backend, Heap, DebugName, NewSize, Count, Flags);
 		Update(Backend, Data);
 	}
 
-	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 Flags)
+	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 Flags)
 	{
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, Flags);
+		CreateResource(Backend, Heap, DebugName, NewSize, Count, Flags);
 	}
 
 	void Update(renderer_backend* Backend, void* Data) override
@@ -165,12 +165,12 @@ struct vulkan_buffer : public buffer
 		vkUnmapMemory(Device, TempMemory);
 	}
 
-	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 Flags) override
+	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) override
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 		vulkan_memory_heap* VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
-		WithCounter = NewWithCounter;
+		WithCounter = Flags & RF_WithCounter;
 		PrevShader = PSF_TopOfPipe;
 
 		Device = Gfx->Device;
@@ -585,16 +585,16 @@ CreateResource(renderer_backend* Backend)
 }
 
 buffer* vulkan_memory_heap::
-PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
+PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags)
 {
-	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, DataSize, Count, NewWithCounter, Flags);
+	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, DataSize, Count, Flags);
 	return Buffer;
 }
 
 buffer* vulkan_memory_heap::
-PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
+PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags)
 {
-	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, Data, DataSize, Count, NewWithCounter, Flags);
+	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, Data, DataSize, Count, Flags);
 	return Buffer;
 }
 

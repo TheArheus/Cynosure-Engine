@@ -31,15 +31,15 @@ public:
 	global_graphics_context& operator=(global_graphics_context&& Oth) noexcept;
 
 	// TODO: Get buffer_ref
-	buffer* PushBuffer(std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
+	buffer* PushBuffer(std::string DebugName, u64 DataSize, u64 Count, u32 Flags)
 	{
-		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, DataSize, Count, NewWithCounter, Flags);
+		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, DataSize, Count, Flags);
 	}
 
 	// TODO: Get buffer_ref
-	buffer* PushBuffer(std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags)
+	buffer* PushBuffer(std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags)
 	{
-		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, Data, DataSize, Count, NewWithCounter, Flags);
+		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, Data, DataSize, Count, Flags);
 	}
 
 	// TODO: Get texture_ref

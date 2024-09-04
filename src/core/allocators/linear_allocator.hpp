@@ -5,19 +5,40 @@ class linear_allocator : public allocator
 	friend global_memory_allocator;
 
 public:
-	linear_allocator(const std::size_t MemSize, void* const Start) : allocator(MemSize, Start), Current(Start) {}
-	linear_allocator(linear_allocator&& Other) : allocator(std::move(Other)), Current(Other.Current) { Other.Current = nullptr; }
-	~linear_allocator() noexcept
+
+	linear_allocator(const std::size_t& MemSize, void* const Start) : allocator(MemSize, Start), Current(Start) {}
+	linear_allocator(const std::size_t& MemSize) : allocator(MemSize), Current(Start) {}
+
+	virtual ~linear_allocator() noexcept override 
 	{
-		Clear();
+		Current = nullptr;
+		UnusedCycles = 0;
+		AllocCount = 0;
+		Used = 0;
 	}
 
+	linear_allocator(const linear_allocator& Other) : allocator(Other), Current(Other.Current) {}
+	linear_allocator& operator=(const linear_allocator& Other)
+	{
+		if(this != &Other)
+		{
+			allocator::operator=(Other);
+			Current = Other.Current;
+		}
+
+		return *this;
+	}
+
+	linear_allocator(linear_allocator&& Other) : allocator(std::move(Other)), Current(Other.Current) { Other.Current = nullptr; }
 	linear_allocator& operator=(linear_allocator&& Other)
 	{
-		allocator::operator=(std::move(Other));
+		if(this != &Other)
+		{
+			allocator::operator=(std::move(Other));
 
-		Current = Other.Current;
-		Other.Current = nullptr;
+			Current = Other.Current;
+			Other.Current = nullptr;
+		}
 
 		return *this;
 	}
@@ -44,11 +65,11 @@ public:
 
 	virtual void Clear() noexcept
 	{
+		memset(Start, 0, Size);
 		Current = Start;
 		UnusedCycles = 0;
 		AllocCount = 0;
 		Used = 0;
-		if(Start) memset(Start, 0, Size);
 	}
 
 	virtual void Rewind(void* const Mark) noexcept

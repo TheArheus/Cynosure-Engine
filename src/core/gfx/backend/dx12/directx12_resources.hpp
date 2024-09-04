@@ -2,15 +2,15 @@
 
 struct directx12_buffer : public buffer
 {
-	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, bool NewWithCounter, u32 NewUsage)
+	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 NewUsage)
 	{
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, NewUsage);
+		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewUsage);
 		Update(Backend, Data);
 	}
 
-	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 NewUsage)
+	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage)
 	{
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewWithCounter, NewUsage);
+		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewUsage);
 	}
 
 	~directx12_buffer() override = default;
@@ -130,11 +130,11 @@ struct directx12_buffer : public buffer
 		TempHandle->Unmap(0, 0);
 	}
 
-	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 NewUsage) override 
+	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage) override 
 	{
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
-		WithCounter = NewWithCounter;
+		WithCounter = NewUsage & RF_WithCounter;
 
 		Name = DebugName;
 		Size = NewSize * Count + WithCounter * sizeof(u32);
@@ -734,15 +734,15 @@ CreateResource(renderer_backend* Backend)
 }
 
 buffer* directx12_memory_heap::
-PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Usage)
+PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Usage)
 {
-	return new directx12_buffer(Backend, this, DebugName, DataSize, Count, NewWithCounter, Usage);
+	return new directx12_buffer(Backend, this, DebugName, DataSize, Count, Usage);
 }
 
 buffer* directx12_memory_heap::
-PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Usage)
+PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Usage)
 {
-	return new directx12_buffer(Backend, this, DebugName, Data, DataSize, Count, NewWithCounter, Usage);
+	return new directx12_buffer(Backend, this, DebugName, Data, DataSize, Count, Usage);
 }
 
 texture* directx12_memory_heap::

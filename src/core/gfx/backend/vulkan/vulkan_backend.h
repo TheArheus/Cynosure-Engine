@@ -11,12 +11,10 @@ public:
 
 	void CreateResource(renderer_backend* Backend) override;
 
-	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) override;
-
-	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) override;
+	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags) override;
+	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags) override;
 
 	texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
-
 	texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
 
 	VmaAllocator Handle;

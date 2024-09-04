@@ -382,8 +382,8 @@ public:
 
 	virtual void CreateResource(renderer_backend* Backend) = 0;
 
-	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) = 0;
-	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, bool NewWithCounter, u32 Flags) = 0;
+	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags) = 0;
+	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags) = 0;
 
 	virtual texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) = 0;
 	virtual texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) = 0;
@@ -637,7 +637,7 @@ struct buffer
 	virtual void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) = 0;
 	virtual void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* PipelineContext) = 0;
 
-	virtual void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, bool NewWithCounter, u32 Flags) = 0;
+	virtual void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) = 0;
 	virtual void DestroyResource() = 0;
 
 	std::string Name;

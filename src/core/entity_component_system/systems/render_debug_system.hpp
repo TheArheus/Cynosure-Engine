@@ -83,21 +83,21 @@ struct render_debug_system : public entity_system
 
 		if (!Geometries.MeshCount) return;
 
-		GeometryDebugOffsets = Window.Gfx.PushBuffer("GeometryDebugOffsets", Geometries.Offsets.data(), sizeof(mesh::offset), Geometries.Offsets.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		GeometryDebugOffsets = Window.Gfx.PushBuffer("GeometryDebugOffsets", Geometries.Offsets.data(), sizeof(mesh::offset), Geometries.Offsets.size(), resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		DebugMeshDrawCommandDataBuffer = Window.Gfx.PushBuffer("DebugMeshDrawCommandDataBuffer", StaticMeshInstances.data(), sizeof(mesh_draw_command), StaticMeshInstances.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
-		DebugMeshDrawVisibilityDataBuffer = Window.Gfx.PushBuffer("DebugMeshDrawVisibilityDataBuffer", StaticMeshVisibility.data(), sizeof(u32), StaticMeshVisibility.size(), false, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
+		DebugMeshDrawCommandDataBuffer = Window.Gfx.PushBuffer("DebugMeshDrawCommandDataBuffer", StaticMeshInstances.data(), sizeof(mesh_draw_command), StaticMeshInstances.size(), resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
+		DebugMeshDrawVisibilityDataBuffer = Window.Gfx.PushBuffer("DebugMeshDrawVisibilityDataBuffer", StaticMeshVisibility.data(), sizeof(u32), StaticMeshVisibility.size(), resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
 
-		DebugIndirectDrawIndexedCommands = Window.Gfx.PushBuffer("DebugIndirectDrawIndexedCommands", sizeof(indirect_draw_indexed_command), StaticMeshInstances.size(), true, resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
+		DebugIndirectDrawIndexedCommands = Window.Gfx.PushBuffer("DebugIndirectDrawIndexedCommands", sizeof(indirect_draw_indexed_command), StaticMeshInstances.size(), resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst | resource_flags::RF_WithCounter);
 
-		MeshDebugMaterialsBuffer = Window.Gfx.PushBuffer("MeshDebugMaterialsBuffer", Materials.data(), sizeof(mesh::material), Materials.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshDebugMaterialsBuffer = Window.Gfx.PushBuffer("MeshDebugMaterialsBuffer", Materials.data(), sizeof(mesh::material), Materials.size(), resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		DebugVertexBuffer = Window.Gfx.PushBuffer("DebugVertexBuffer", Geometries.Vertices.data(), sizeof(vertex), Geometries.Vertices.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		DebugIndexBuffer = Window.Gfx.PushBuffer("DebugIndexBuffer", Geometries.VertexIndices.data(), sizeof(u32), Geometries.VertexIndices.size(), false, resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
-		MeshDrawDebugCommandBuffer = Window.Gfx.PushBuffer("MeshDrawDebugCommandBuffer", sizeof(mesh_draw_command) * 2, StaticMeshInstances.size(), false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		DebugVertexBuffer = Window.Gfx.PushBuffer("DebugVertexBuffer", Geometries.Vertices.data(), sizeof(vertex), Geometries.Vertices.size(), resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		DebugIndexBuffer = Window.Gfx.PushBuffer("DebugIndexBuffer", Geometries.VertexIndices.data(), sizeof(u32), Geometries.VertexIndices.size(), resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
+		MeshDrawDebugCommandBuffer = Window.Gfx.PushBuffer("MeshDrawDebugCommandBuffer", sizeof(mesh_draw_command) * 2, StaticMeshInstances.size(), resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		WorldUpdateBuffer = Window.Gfx.PushBuffer("WorldUpdateBuffer", sizeof(global_world_data), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer("MeshCommonCullingInputBuffer", sizeof(mesh_comp_culling_common_input), 1, false, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		WorldUpdateBuffer = Window.Gfx.PushBuffer("WorldUpdateBuffer", sizeof(global_world_data), 1, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer("MeshCommonCullingInputBuffer", sizeof(mesh_comp_culling_common_input), 1, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 	}
 
 	void Render(global_graphics_context& Gfx, command_list* PipelineContext, 

@@ -111,7 +111,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	PoissonDisk[61] = vec2(0.789239, -0.419965);
 	PoissonDisk[62] = vec2(-0.545396, 0.538133);
 	PoissonDisk[63] = vec2(-0.178564, -0.596057);
-	PoissonDiskBuffer = PushBuffer("PoissonDiskBuffer", PoissonDisk, sizeof(vec2), 64, false, resource_flags::RF_StorageBuffer);
+	PoissonDiskBuffer = PushBuffer("PoissonDiskBuffer", PoissonDisk, sizeof(vec2), 64, resource_flags::RF_StorageBuffer);
 
 	const u32 Res = 32;
 	vec4  RandomAngles[Res][Res][Res] = {};
@@ -154,7 +154,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 		Scale = Lerp(0.1, Scale, 1.0);
 		RandomSamples[RotIdx] = vec4(Sample * Scale, 0);
 	}
-	RandomSamplesBuffer = PushBuffer("RandomSamplesBuffer", (void*)RandomSamples, sizeof(vec4), 64, false, resource_flags::RF_StorageBuffer);
+	RandomSamplesBuffer = PushBuffer("RandomSamplesBuffer", (void*)RandomSamples, sizeof(vec4), 64, resource_flags::RF_StorageBuffer);
 
 	GlobalShadow.resize(DEPTH_CASCADES_COUNT);
 	TextureInputData.Format    = image_format::D32_SFLOAT;

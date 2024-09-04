@@ -35,8 +35,8 @@
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
 	window Window(1280, 720, "3D Renderer");
-	//Window.InitVulkanGraphics();
-	Window.InitDirectx12Graphics();
+	Window.InitVulkanGraphics();
+	//Window.InitDirectx12Graphics();
 	scene_manager SceneManager;
 
 	double TargetFrameRate = 1.0 / 60.0 * 1000.0; // Frames Per Milliseconds
@@ -48,18 +48,12 @@
 	u64 FrameIdx = 0;
 	while(Window.IsRunning())
 	{
-		// TODO: Hide allocator creations
-		linear_allocator LightSourcesAlloc(PushAllocArrayArg(light_source, LIGHT_SOURCES_MAX_COUNT));
-		linear_allocator GlobalMeshInstancesAlloc(PushAllocSizeArg(MiB(16)));
-		linear_allocator GlobalMeshVisibleAlloc(PushAllocSizeArg(MiB(16)));
-		linear_allocator DebugMeshInstancesAlloc(PushAllocSizeArg(MiB(16)));
-		linear_allocator DebugMeshVisibleAlloc(PushAllocSizeArg(MiB(16)));
-
-		alloc_vector<mesh_draw_command> GlobalMeshInstances(GlobalMeshInstancesAlloc);
-		alloc_vector<u32> GlobalMeshVisibility(GlobalMeshVisibleAlloc);
-		alloc_vector<mesh_draw_command> DebugMeshInstances(DebugMeshInstancesAlloc);
-		alloc_vector<u32> DebugMeshVisibility(DebugMeshVisibleAlloc);
-		alloc_vector<light_source> GlobalLightSources(LightSourcesAlloc);
+		// TODO: Maybe move out this arrays out of here
+		alloc_vector<mesh_draw_command> GlobalMeshInstances = Allocator.NewVector<mesh_draw_command>(16384);
+		alloc_vector<u32> GlobalMeshVisibility = Allocator.NewVector<u32>(16384);
+		alloc_vector<mesh_draw_command> DebugMeshInstances = Allocator.NewVector<mesh_draw_command>(16384);
+		alloc_vector<u32> DebugMeshVisibility = Allocator.NewVector<u32>(16384);
+		alloc_vector<light_source> GlobalLightSources = Allocator.NewVector<light_source>(LIGHT_SOURCES_MAX_COUNT);
 
 		Window.NewFrame();
 		Window.EventsDispatcher.Reset();
