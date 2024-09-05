@@ -234,7 +234,6 @@ struct deferred_raster_system : public entity_system
 
 #if 0
 		{
-			frustum_culling::parameter Parameters;
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
 			Gfx.AddPass<frustum_culling>("Frustum culling/indirect command generation", Parameters, pass_type::compute, 
 			[](resource_scheduler* Scheduler)

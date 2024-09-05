@@ -17,18 +17,6 @@ public:
 		Used = 0;
 	}
 
-	linear_allocator(const linear_allocator& Other) : allocator(Other), Current(Other.Current) {}
-	linear_allocator& operator=(const linear_allocator& Other)
-	{
-		if(this != &Other)
-		{
-			allocator::operator=(Other);
-			Current = Other.Current;
-		}
-
-		return *this;
-	}
-
 	linear_allocator(linear_allocator&& Other) : allocator(std::move(Other)), Current(Other.Current) { Other.Current = nullptr; }
 	linear_allocator& operator=(linear_allocator&& Other)
 	{

@@ -451,11 +451,11 @@ BindShaderParameters(void* Data)
 				texture_ref TextureToBind = *(texture_ref*)StaticIt;
 
 				u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
-				Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::shader_read, MipToUse, LayoutIdx);
+				Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse, LayoutIdx);
 				for(texture* CurrentTexture : TextureToBind.Handle)
 				{
 					TexturesToCommon.insert(CurrentTexture);
-					AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+					AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
 				}
 				StaticIt = (void*)((u8*)StaticIt + sizeof(texture_ref));
 			}
@@ -466,9 +466,8 @@ BindShaderParameters(void* Data)
 		}
 	}
 
-	u32 ParamIdx = 0;
-	u32 BindingsCount = InputCount;
-	for(; ParamIdx < BindingsCount; ++ParamIdx)
+	u32 BindingsCount = InputCount + OutputCount;
+	for(u32 ParamIdx = 0; ParamIdx < BindingsCount; ++ParamIdx)
 	{
 		descriptor_param Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
 		if(Parameter.Type == resource_type::buffer)
@@ -478,7 +477,7 @@ BindShaderParameters(void* Data)
 			Binder.SetStorageBufferView(BufferToBind);
 
 			BuffersToCommon.insert(BufferToBind);
-			AttachmentBufferBarriers.push_back({BufferToBind, AF_ShaderRead, Parameter.ShaderToUse});
+			AttachmentBufferBarriers.push_back({BufferToBind, Parameter.AspectMask, Parameter.ShaderToUse});
 
 			It = (void*)((u8*)It + sizeof(buffer*));
 
@@ -489,58 +488,29 @@ BindShaderParameters(void* Data)
 		{
 			texture_ref TextureToBind = *(texture_ref*)It;
 			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
-			Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::shader_read, MipToUse);
+			Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
 
 			for(texture* CurrentTexture : TextureToBind.Handle)
 			{
 				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
 			}
 
 			It = (void*)((u8*)It + sizeof(texture_ref));
-		}
-		else if(Parameter.Type == resource_type::texture_storage)
-		{
-			assert(false && "Storage image in input. Check the shader bindings. Should be image sampler or combined image sampler");
-		}
-	}
-
-	BindingsCount += OutputCount;
-	for(; ParamIdx < BindingsCount; ++ParamIdx)
-	{
-		descriptor_param Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
-		if(Parameter.Type == resource_type::buffer)
-		{
-			buffer* BufferToBind = *(buffer**)It;
-
-			Binder.SetStorageBufferView(BufferToBind);
-
-			BuffersToCommon.insert(BufferToBind);
-			AttachmentBufferBarriers.push_back({BufferToBind, AF_ShaderWrite, Parameter.ShaderToUse});
-
-			It = (void*)((u8*)It + sizeof(buffer*));
-
-			ParamIdx += BufferToBind->WithCounter;
-			BindingsCount += BufferToBind->WithCounter;
 		}
 		else if(Parameter.Type == resource_type::texture_storage)
 		{
 			texture_ref TextureToBind = *(texture_ref*)It;
-
 			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
-			Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::general, MipToUse);
+			Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
 
 			for(texture* CurrentTexture : TextureToBind.Handle)
 			{
 				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderWrite, barrier_state::general, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
 			}
 
 			It = (void*)((u8*)It + sizeof(texture_ref));
-		}
-		else if(Parameter.Type == resource_type::texture_sampler)
-		{
-			assert(false && "Sampler image (or combined image sampler) is in output. Check the shader bindings. Should be storage image");
 		}
 	}
 

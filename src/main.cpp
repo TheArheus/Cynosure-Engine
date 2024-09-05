@@ -31,7 +31,6 @@
 
 
 
-// TODO: make a class from this
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
 	window Window(1280, 720, "3D Renderer");
@@ -48,12 +47,11 @@
 	u64 FrameIdx = 0;
 	while(Window.IsRunning())
 	{
-		// TODO: Maybe move out this arrays out of here
-		alloc_vector<mesh_draw_command> GlobalMeshInstances = Allocator.NewVector<mesh_draw_command>(16384);
-		alloc_vector<u32> GlobalMeshVisibility = Allocator.NewVector<u32>(16384);
-		alloc_vector<mesh_draw_command> DebugMeshInstances = Allocator.NewVector<mesh_draw_command>(16384);
-		alloc_vector<u32> DebugMeshVisibility = Allocator.NewVector<u32>(16384);
-		alloc_vector<light_source> GlobalLightSources = Allocator.NewVector<light_source>(LIGHT_SOURCES_MAX_COUNT);
+		alloc_vector<mesh_draw_command> GlobalMeshInstances(16384);
+		alloc_vector<u32> GlobalMeshVisibility(16384);
+		alloc_vector<mesh_draw_command> DebugMeshInstances(16384);
+		alloc_vector<u32> DebugMeshVisibility(16384);
+		alloc_vector<light_source> GlobalLightSources(LIGHT_SOURCES_MAX_COUNT);
 
 		Window.NewFrame();
 		Window.EventsDispatcher.Reset();

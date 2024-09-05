@@ -14,21 +14,6 @@ public:
 		assert(Used == 0 && AllocCount == 0);
 	}
 
-	allocator(const allocator& Oth) noexcept : Size(Oth.Size), Used(Oth.Used), AllocCount(Oth.AllocCount), Start(Oth.Start), UnusedCycles(Oth.UnusedCycles) {}
-	allocator& operator=(const allocator& Oth) noexcept
-	{
-		if(this != &Oth)
-		{
-			Size = Oth.Size;
-			Used = Oth.Used;
-			Start = Oth.Start;
-			AllocCount = Oth.AllocCount;
-			UnusedCycles = Oth.UnusedCycles;
-		}
-
-		return *this;
-	}
-
 	allocator(allocator&& Oth) noexcept : Size(Oth.Size), Used(Oth.Used), AllocCount(Oth.AllocCount), Start(Oth.Start), UnusedCycles(Oth.UnusedCycles)
 	{
 		Oth.Size = 0;

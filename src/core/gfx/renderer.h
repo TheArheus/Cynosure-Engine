@@ -5,16 +5,9 @@ struct shader_pass
 	std::string Name;
 	pass_type Type;
 	void* Parameters;
-	//std::vector<> Inputs;
-	//std::vector<> Outputs;
-	//std::vector<> Statics;
-	//std::vector<> BufferBarriers;
-	//std::vector<> ImageBarriers;
 	bool HaveStaticStorage;
 };
 
-// TODO: Use linear allocator for memory here instead of allocating every frame
-// TODO: Make graph builder from this for render graph
 class global_graphics_context
 {
 	global_graphics_context(const global_graphics_context&) = delete;

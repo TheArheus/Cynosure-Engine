@@ -411,6 +411,8 @@ struct descriptor_param
 	u32 Count = 0;
 	image_type ImageType;
 	u32 ShaderToUse = 0;
+	barrier_state BarrierState;
+	u32 AspectMask;
 };
 
 class general_context

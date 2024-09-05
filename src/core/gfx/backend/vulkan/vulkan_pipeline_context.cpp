@@ -6,6 +6,7 @@
 void vulkan_resource_binder::
 AppendStaticStorage(general_context* ContextToUse, void* Data)
 {
+	if(!Data) return;
 	SetIndices.clear();
 	if(ContextToUse->Type == pass_type::graphics)
 	{
@@ -64,7 +65,7 @@ AppendStaticStorage(general_context* ContextToUse, void* Data)
 			else if(Parameter.Type == resource_type::texture_sampler)
 			{
 				texture_ref TextureToBind = *(texture_ref*)It;
-				SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::shader_read, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex, LayoutIdx);
+				SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex, LayoutIdx);
 				It = (void*)((u8*)It + sizeof(texture_ref));
 			}
 			else if(Parameter.Type == resource_type::texture_storage)
@@ -556,6 +557,7 @@ SetStencilTarget(texture* Target, vec2 Clear)
 void vulkan_command_list::
 BindShaderParameters(void* Data)
 {
+	if(!Data) return;
 	vulkan_resource_binder Binder(Gfx, CurrentContext);
 
 	VkPipelineLayout Layout = {};
@@ -607,9 +609,8 @@ BindShaderParameters(void* Data)
 		It = (void*)((u8*)It + sizeof(u32));
 	}
 
-	u32 ParamIdx = 0;
-	u32 BindingsCount = InputCount;
-	for(; ParamIdx < BindingsCount; ++ParamIdx)
+	u32 BindingsCount = InputCount + OutputCount;
+	for(u32 ParamIdx = 0; ParamIdx < BindingsCount; ++ParamIdx)
 	{
 		descriptor_param Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
 		if(Parameter.Type == resource_type::buffer)
@@ -619,7 +620,7 @@ BindShaderParameters(void* Data)
 			Binder.SetStorageBufferView(BufferToBind);
 
 			BuffersToCommon.insert(BufferToBind);
-			AttachmentBufferBarriers.push_back({BufferToBind, AF_ShaderRead, Parameter.ShaderToUse});
+			AttachmentBufferBarriers.push_back({BufferToBind, Parameter.AspectMask, Parameter.ShaderToUse});
 
 			It = (void*)((u8*)It + sizeof(buffer*));
 
@@ -630,63 +631,35 @@ BindShaderParameters(void* Data)
 		{
 			texture_ref TextureToBind = *(texture_ref*)It;
 			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
-			Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::shader_read, MipToUse);
+			Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
 
 			for(texture* CurrentTexture : TextureToBind.Handle)
 			{
 				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
 			}
 
 			It = (void*)((u8*)It + sizeof(texture_ref));
-		}
-		else if(Parameter.Type == resource_type::texture_storage)
-		{
-			assert(false && "Storage image in input. Check the shader bindings. Should be image sampler or combined image sampler");
-		}
-	}
-
-	BindingsCount += OutputCount;
-	for(; ParamIdx < BindingsCount; ++ParamIdx)
-	{
-		descriptor_param Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
-		if(Parameter.Type == resource_type::buffer)
-		{
-			buffer* BufferToBind = *(buffer**)It;
-
-			Binder.SetStorageBufferView(BufferToBind);
-
-			BuffersToCommon.insert(BufferToBind);
-			AttachmentBufferBarriers.push_back({BufferToBind, AF_ShaderWrite, Parameter.ShaderToUse});
-
-			It = (void*)((u8*)It + sizeof(buffer*));
-
-			ParamIdx += BufferToBind->WithCounter;
-			BindingsCount += BufferToBind->WithCounter;
 		}
 		else if(Parameter.Type == resource_type::texture_storage)
 		{
 			texture_ref TextureToBind = *(texture_ref*)It;
-
-			Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, barrier_state::general, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex);
+			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
+			Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
 
 			for(texture* CurrentTexture : TextureToBind.Handle)
 			{
 				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderWrite, barrier_state::general, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
 			}
 
 			It = (void*)((u8*)It + sizeof(texture_ref));
-		}
-		else if(Parameter.Type == resource_type::texture_sampler)
-		{
-			assert(false && "Sampler image (or combined image sampler) is in output. Check the shader bindings. Should be storage image");
 		}
 	}
 
 	for(u32 LayoutIdx = 1; LayoutIdx < CurrentContext->ParameterLayout.size(); ++LayoutIdx)
 	{
-		for(ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx)
+		for(u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx)
 		{
 			descriptor_param Parameter = CurrentContext->ParameterLayout[LayoutIdx][ParamIdx];
 			if(Parameter.Type == resource_type::buffer)
@@ -700,18 +673,18 @@ BindShaderParameters(void* Data)
 				for(texture* CurrentTexture : TextureToBind.Handle)
 				{
 					TexturesToCommon.insert(CurrentTexture);
-					AttachmentImageBarriers.push_back({CurrentTexture, AF_ShaderRead, barrier_state::shader_read, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+					AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
 				}
 				if(s32(Parameter.Count - TextureToBind.Handle.size()) > 0)
 				{
 					if(Parameter.ImageType == image_type::Texture1D)
-						AttachmentImageBarriers.push_back({Binder.NullTexture1D, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
+						AttachmentImageBarriers.push_back({Binder.NullTexture1D, Parameter.AspectMask, Parameter.BarrierState, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
 					else if(Parameter.ImageType == image_type::Texture2D)
-						AttachmentImageBarriers.push_back({Binder.NullTexture2D, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
+						AttachmentImageBarriers.push_back({Binder.NullTexture2D, Parameter.AspectMask, Parameter.BarrierState, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
 					else if(Parameter.ImageType == image_type::Texture3D)
-						AttachmentImageBarriers.push_back({Binder.NullTexture3D, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
+						AttachmentImageBarriers.push_back({Binder.NullTexture3D, Parameter.AspectMask, Parameter.BarrierState, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
 					else if(Parameter.ImageType == image_type::TextureCube)
-						AttachmentImageBarriers.push_back({Binder.NullTextureCube, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
+						AttachmentImageBarriers.push_back({Binder.NullTextureCube, Parameter.AspectMask, Parameter.BarrierState, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
 				}
 				It = (void*)((u8*)It + sizeof(texture_ref));
 			}
@@ -1267,12 +1240,13 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags)});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags)});
-			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
-					Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags)});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 		}
 	}
 
@@ -1537,12 +1511,13 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags)});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags)});
-			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
-					Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags)});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 		}
 	}
 

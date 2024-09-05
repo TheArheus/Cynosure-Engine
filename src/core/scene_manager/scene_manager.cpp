@@ -168,7 +168,6 @@ StartScene(window& Window)
 void scene_manager::
 UpdateScene(window& Window, alloc_vector<light_source>& GlobalLightSources)
 {
-	GlobalLightSources.push_back({}); // TODO: temporary hack
 	if(Scenes[CurrentScene]->IsInitialized)
 	{
 		// TODO: Unload old scene, save scene state and load new scene. Load old scene saved state if old one is loaded respectively

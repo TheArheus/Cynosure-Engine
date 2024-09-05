@@ -10,15 +10,10 @@ template<typename T, class alloc_type>
 class allocator_adapter
 {
 public:
-	typedef T value_type;
+	using value_type = T;
 
 	allocator_adapter() = delete;
 	allocator_adapter(alloc_type& NewAllocator) noexcept : Allocator(NewAllocator) {}
-
-	allocator_adapter(const allocator_adapter&) = default;
-	allocator_adapter& operator=(const allocator_adapter&) = default;
-	allocator_adapter(allocator_adapter&&) noexcept = default;
-	allocator_adapter& operator=(allocator_adapter&&) noexcept = default;
 
 	template<typename U>
 	allocator_adapter(const allocator_adapter<U, alloc_type>& Other) noexcept : Allocator(Other.Allocator) {}
@@ -65,12 +60,8 @@ public:
 		return !(*this == Other);
 	}
 
-	alloc_type Allocator;
+	alloc_type& Allocator;
 };
-
-// TODO: use another default allocator
-template<typename type, typename allocator_type = linear_allocator>
-using alloc_vector = std::vector<type, allocator_adapter<type, allocator_type>>;
 
 
 // TODO: implement data for memory footprint visualization
@@ -98,14 +89,6 @@ public:
 			AllocateNewBlock(Size > BlockSize ? Size : BlockSize);
 		}
 		return MemoryBlocks[CurrentBlockIndex]->Allocate(Size, Alignment);
-	}
-
-	// TODO: Maybe generalize this function for every container type???
-	template<typename type, typename allocator_type = linear_allocator>
-	[[nodiscard]] alloc_vector<type, allocator_type> NewVector(const size_t& Count) noexcept
-	{
-		allocator_type AllocatorResult(sizeof(type) * Count, Allocate(sizeof(type) * Count, alignof(type)));
-		return alloc_vector<type, allocator_type>(AllocatorResult);
 	}
 
 	void UpdateAndReset()
@@ -168,3 +151,103 @@ static global_memory_allocator Allocator;
 #define PushArray(Type, Count) (Type*)Allocator.Allocate(sizeof(Type) * Count, alignof(Type))
 #define PushSize(Size) Allocator.Allocate(Size)
 
+
+// TODO: use another default allocator
+template<typename type, typename allocator_type = linear_allocator>
+class alloc_vector
+{
+	using base = std::vector<type, allocator_adapter<type, allocator_type>>;
+
+public:
+    explicit alloc_vector(size_t Count)
+        : Allocator_(sizeof(type) * Count, PushArray(type, Count)),
+          Vector_(Allocator_) {}
+
+    alloc_vector(const alloc_vector& other)
+        : Allocator_(other.Allocator_), Vector_(other.Vector_) {}
+
+    alloc_vector(alloc_vector&& other) noexcept
+        : Allocator_(std::move(other.Allocator_)), Vector_(std::move(other.Vector_)) {}
+
+    alloc_vector& operator=(const alloc_vector& other) {
+        if (this != &other) {
+            Vector_ = other.Vector_;
+            Allocator_ = other.Allocator_;
+        }
+        return *this;
+    }
+
+    alloc_vector& operator=(alloc_vector&& other) noexcept {
+        if (this != &other) {
+            Vector_ = std::move(other.Vector_);
+            Allocator_ = std::move(other.Allocator_);
+        }
+        return *this;
+    }
+
+    // Element Access
+    type& operator[](const size_t& idx) { return Vector_[idx]; }
+    const type& operator[](const size_t& idx) const { return Vector_[idx]; }
+
+    type& at(size_t idx) { return Vector_.at(idx); }
+    const type& at(size_t idx) const { return Vector_.at(idx); }
+
+    type& front() { return Vector_.front(); }
+    const type& front() const { return Vector_.front(); }
+
+    type& back() { return Vector_.back(); }
+    const type& back() const { return Vector_.back(); }
+
+    type* data() { return Vector_.data(); }
+    const type* data() const { return Vector_.data(); }
+
+    // Capacity
+    bool empty() const { return Vector_.empty(); }
+    size_t size() const { return Vector_.size(); }
+    size_t max_size() const { return Vector_.max_size(); }
+    void resize(size_t Count) { Vector_.resize(Count); }
+    void resize(size_t Count, const type& Value) { Vector_.resize(Count, Value); }
+    void reserve(size_t NewCapacity) { Vector_.reserve(NewCapacity); }
+    void shrink_to_fit() { Vector_.shrink_to_fit(); }
+
+    // Modifiers
+    void clear() { Vector_.clear(); }
+    void insert(typename base::iterator pos, const type& value) { Vector_.insert(pos, value); }
+    void insert(typename base::iterator pos, size_t count, const type& value) { Vector_.insert(pos, count, value); }
+    typename base::iterator erase(typename base::iterator pos) { return Vector_.erase(pos); }
+    typename base::iterator erase(typename base::iterator first, typename base::iterator last) { return Vector_.erase(first, last); }
+    void push_back(const type& Value) { Vector_.push_back(Value); }
+    void pop_back() { Vector_.pop_back(); }
+    void swap(alloc_vector& other) noexcept { Vector_.swap(other.Vector_); }
+
+    // Iterators
+    typename base::iterator begin() { return Vector_.begin(); }
+    typename base::iterator end() { return Vector_.end(); }
+    typename base::const_iterator begin() const { return Vector_.begin(); }
+    typename base::const_iterator end() const { return Vector_.end(); }
+    typename base::const_iterator cbegin() const { return Vector_.cbegin(); }
+    typename base::const_iterator cend() const { return Vector_.cend(); }
+    typename base::reverse_iterator rbegin() { return Vector_.rbegin(); }
+    typename base::reverse_iterator rend() { return Vector_.rend(); }
+    typename base::const_reverse_iterator rbegin() const { return Vector_.crbegin(); }
+    typename base::const_reverse_iterator rend() const { return Vector_.crend(); }
+
+    // Additional methods
+    void assign(size_t count, const type& value) { Vector_.assign(count, value); }
+    template <class InputIt>
+    void assign(InputIt first, InputIt last) { Vector_.assign(first, last); }
+
+    template <class... Args>
+    typename base::iterator emplace(typename base::iterator pos, Args&&... args) {
+        return Vector_.emplace(pos, std::forward<Args>(args)...);
+    }
+
+    template <class... Args>
+    void emplace_back(Args&&... args) {
+        Vector_.emplace_back(std::forward<Args>(args)...);
+    }
+
+private:
+	allocator_type Allocator_;
+	base Vector_;
+};
