@@ -117,12 +117,12 @@ struct render_debug_system : public entity_system
 
 		{
 			shader_parameter<generate_all> Parameters;
-			Parameters.Input.MeshCommonCullingInputBuffer = Gfx.UseBuffer(MeshCommonCullingInputBuffer);
-			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryDebugOffsets);
-			Parameters.Input.MeshDrawCommandDataBuffer = Gfx.UseBuffer(DebugMeshDrawCommandDataBuffer);
-			Parameters.Input.MeshDrawVisibilityDataBuffer = Gfx.UseBuffer(DebugMeshDrawVisibilityDataBuffer);
-			Parameters.Output.IndirectDrawIndexedCommands = Gfx.UseBuffer(DebugIndirectDrawIndexedCommands);
-			Parameters.Output.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawDebugCommandBuffer);
+			Parameters.Param.MeshCommonCullingInputBuffer = Gfx.UseBuffer(MeshCommonCullingInputBuffer);
+			Parameters.Param.GeometryOffsets = Gfx.UseBuffer(GeometryDebugOffsets);
+			Parameters.Param.MeshDrawCommandDataBuffer = Gfx.UseBuffer(DebugMeshDrawCommandDataBuffer);
+			Parameters.Param.MeshDrawVisibilityDataBuffer = Gfx.UseBuffer(DebugMeshDrawVisibilityDataBuffer);
+			Parameters.Param.IndirectDrawIndexedCommands = Gfx.UseBuffer(DebugIndirectDrawIndexedCommands);
+			Parameters.Param.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawDebugCommandBuffer);
 
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DebugDrawCount, MeshCommonCullingInput.DebugMeshCount};
 			Gfx.AddPass<generate_all>("Command generation for debug meshes", Parameters, pass_type::compute,
@@ -135,11 +135,11 @@ struct render_debug_system : public entity_system
 		}
 		{
 			shader_parameter<debug_raster> Parameters;
-			Parameters.Input.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
-			Parameters.Input.VertexBuffer = Gfx.UseBuffer(DebugVertexBuffer);
-			Parameters.Input.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawDebugCommandBuffer);
-			Parameters.Input.MeshMaterialsBuffer = Gfx.UseBuffer(MeshDebugMaterialsBuffer);
-			Parameters.Input.GeometryOffsets = Gfx.UseBuffer(GeometryDebugOffsets);
+			Parameters.Param.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
+			Parameters.Param.VertexBuffer = Gfx.UseBuffer(DebugVertexBuffer);
+			Parameters.Param.MeshDrawCommandBuffer = Gfx.UseBuffer(MeshDrawDebugCommandBuffer);
+			Parameters.Param.MeshMaterialsBuffer = Gfx.UseBuffer(MeshDebugMaterialsBuffer);
+			Parameters.Param.GeometryOffsets = Gfx.UseBuffer(GeometryDebugOffsets);
 
 			Gfx.AddPass<debug_raster>("Debug raster", Parameters, pass_type::graphics, 
 			[this, BackBufferIndex = Gfx.BackBufferIndex, GfxColorTarget = Gfx.GfxColorTarget, GfxDepthTarget = Gfx.GfxDepthTarget](command_list* Cmd, void* Parameters)

@@ -402,186 +402,117 @@ SetStencilTarget(texture* StencilAttachment, vec2 Clear)
 void directx12_command_list::
 BindShaderParameters(void* Data)
 {
-	directx12_resource_binder Binder(Gfx, CurrentContext);
+    directx12_resource_binder Binder(Gfx, CurrentContext);
+    void* It = Data;
 
-	void* It = Data;
+    u32 ParamCount = *(u32*)It;
+    It = (void*)((u8*)It + sizeof(u32));
 
-	u32 InputCount = *(u32*)It;
-	u32 OutputCount = 0;
-	u32 StaticStorageCount = 0;
+    size_t ParamOffset = *(size_t*)It;
+    It = (void*)((u8*)It + sizeof(size_t));
 
-	It = (void*)((u8*)It + sizeof(u32));
+    bool HaveStaticStorage = *(bool*)It;
+    It = (void*)((u8*)It + sizeof(bool));
+    void* StaticIt = HaveStaticStorage ? (void*)((u8*)It + ParamOffset) : nullptr;
 
-	size_t InputOffset  = *(size_t*)It;
-	size_t OutputOffset = 0;
-
-	It = (void*)((u8*)It + sizeof(size_t));
-
-	bool HaveOutput = *(bool*)It;
-	It = (void*)((u8*)It + sizeof(bool));
-	if(HaveOutput)
+    auto DX12BindTexture = [&](texture_ref& TextureToBind, const descriptor_param& Parameter, u32 LayoutIdx) 
 	{
-		OutputCount = *(u32*)It;
-		It = (void*)((u8*)It + sizeof(u32));
+        u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
+        Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse, LayoutIdx);
 
-		OutputOffset = *(size_t*)It;
-		It = (void*)((u8*)It + sizeof(size_t));
-	}
+        for (texture* CurrentTexture : TextureToBind.Handle) 
+		{
+            TexturesToCommon.insert(CurrentTexture);
+            AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+        }
+    };
 
-	bool HaveStaticStorage = *(bool*)It;
-	It = (void*)((u8*)It + sizeof(bool));
-	if(HaveStaticStorage)
+    auto DX12BindBuffer = [&](buffer* BufferToBind, const descriptor_param& Parameter) 
 	{
-		StaticStorageCount = *(u32*)It;
-		It = (void*)((u8*)It + sizeof(u32));
-	}
+        Binder.SetStorageBufferView(BufferToBind);
+        BuffersToCommon.insert(BufferToBind);
+        AttachmentBufferBarriers.push_back({BufferToBind, Parameter.AspectMask, Parameter.ShaderToUse});
+    };
 
-	void* StaticIt = (void*)((u8*)It + InputOffset + OutputOffset);
-	for(u32 LayoutIdx = 1; LayoutIdx < CurrentContext->ParameterLayout.size(); ++LayoutIdx)
+    auto DX12SetRootDescriptors = [&](auto* ContextToBind, auto SetDescriptorTable, auto SetShaderResourceView, auto SetUnorderedAccessView) 
 	{
-		for(u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx)
+        ContextToBind->ResourceBindingIdx = Binder.ResourceBindingIdx;
+        ContextToBind->SamplersBindingIdx = Binder.SamplersBindingIdx;
+
+        std::vector<ID3D12DescriptorHeap*> Heaps;
+        if (ContextToBind->IsResourceHeapInited) Heaps.push_back(ContextToBind->ResourceHeap.Handle.Get());
+        if (ContextToBind->IsSamplersHeapInited) Heaps.push_back(ContextToBind->SamplersHeap.Handle.Get());
+        CommandList->SetDescriptorHeaps(Heaps.size(), Heaps.data());
+
+        for (const auto& BindingDesc : Binder.BindingDescriptions) 
 		{
-			descriptor_param Parameter = CurrentContext->ParameterLayout[LayoutIdx][ParamIdx];
-			if(Parameter.Type == resource_type::buffer)
+            switch (BindingDesc.Type) 
 			{
-				assert(false && "Buffer in static storage. Currently is not available, use buffers in the inputs");
-			}
-			else if(Parameter.Type == resource_type::texture_sampler)
-			{
-				texture_ref TextureToBind = *(texture_ref*)StaticIt;
+                case dx12_descriptor_type::shader_resource_table:
+                case dx12_descriptor_type::unordered_access_table:
+                case dx12_descriptor_type::constant_buffer_table:
+                case dx12_descriptor_type::sampler:
+                    (CommandList->*SetDescriptorTable)(BindingDesc.Idx, BindingDesc.TableBegin);
+                    break;
+                case dx12_descriptor_type::shader_resource:
+                    (CommandList->*SetShaderResourceView)(BindingDesc.Idx, BindingDesc.ResourceBegin);
+                    break;
+                case dx12_descriptor_type::unordered_access:
+                    (CommandList->*SetUnorderedAccessView)(BindingDesc.Idx, BindingDesc.ResourceBegin);
+                    break;
+            }
+        }
+    };
 
-				u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
-				Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse, LayoutIdx);
-				for(texture* CurrentTexture : TextureToBind.Handle)
-				{
-					TexturesToCommon.insert(CurrentTexture);
-					AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
-				}
-				StaticIt = (void*)((u8*)StaticIt + sizeof(texture_ref));
-			}
-			else if(Parameter.Type == resource_type::texture_storage)
-			{
-				assert(false && "Storage image in static storage. Check the shader bindings. Could be image sampler or buffer");
-			}
-		}
-	}
-
-	u32 BindingsCount = InputCount + OutputCount;
-	for(u32 ParamIdx = 0; ParamIdx < BindingsCount; ++ParamIdx)
+    if (StaticIt) 
 	{
-		descriptor_param Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
-		if(Parameter.Type == resource_type::buffer)
+        for (u32 LayoutIdx = 1; LayoutIdx < CurrentContext->ParameterLayout.size(); ++LayoutIdx) 
 		{
-			buffer* BufferToBind = *(buffer**)It;
-
-			Binder.SetStorageBufferView(BufferToBind);
-
-			BuffersToCommon.insert(BufferToBind);
-			AttachmentBufferBarriers.push_back({BufferToBind, Parameter.AspectMask, Parameter.ShaderToUse});
-
-			It = (void*)((u8*)It + sizeof(buffer*));
-
-			ParamIdx += BufferToBind->WithCounter;
-			BindingsCount += BufferToBind->WithCounter;
-		}
-		else if(Parameter.Type == resource_type::texture_sampler)
-		{
-			texture_ref TextureToBind = *(texture_ref*)It;
-			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
-			Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
-
-			for(texture* CurrentTexture : TextureToBind.Handle)
+            for (const auto& Parameter : CurrentContext->ParameterLayout[LayoutIdx]) 
 			{
-				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
-			}
+                if (Parameter.Type == resource_type::texture_sampler) 
+				{
+                    DX12BindTexture(*(texture_ref*)StaticIt, Parameter, LayoutIdx);
+                    StaticIt = (void*)((u8*)StaticIt + sizeof(texture_ref));
+                }
+            }
+        }
+    }
 
-			It = (void*)((u8*)It + sizeof(texture_ref));
-		}
-		else if(Parameter.Type == resource_type::texture_storage)
-		{
-			texture_ref TextureToBind = *(texture_ref*)It;
-			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
-			Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
-
-			for(texture* CurrentTexture : TextureToBind.Handle)
-			{
-				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
-			}
-
-			It = (void*)((u8*)It + sizeof(texture_ref));
-		}
-	}
-
-	if(CurrentContext->Type == pass_type::graphics)
+    for (u32 ParamIdx = 0; ParamIdx < ParamCount; ++ParamIdx) 
 	{
-		directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(CurrentContext);
-		ContextToBind->ResourceBindingIdx = Binder.ResourceBindingIdx;
-		ContextToBind->SamplersBindingIdx = Binder.SamplersBindingIdx;
-
-		std::vector<ID3D12DescriptorHeap*> Heaps;
-		if (ContextToBind->IsResourceHeapInited) Heaps.push_back(ContextToBind->ResourceHeap.Handle.Get());
-		if (ContextToBind->IsSamplersHeapInited) Heaps.push_back(ContextToBind->SamplersHeap.Handle.Get());
-		CommandList->SetDescriptorHeaps(Heaps.size(), Heaps.data());
-
-		for(u32 BindingIdx = 0; BindingIdx < Binder.BindingDescriptions.size(); ++BindingIdx)
+        const auto& Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
+        if (Parameter.Type == resource_type::buffer) 
 		{
-			const descriptor_binding& BindingDesc = Binder.BindingDescriptions[BindingIdx];
-			switch(BindingDesc.Type)
-			{
-				case dx12_descriptor_type::shader_resource_table:
-				case dx12_descriptor_type::unordered_access_table:
-				case dx12_descriptor_type::constant_buffer_table:
-				case dx12_descriptor_type::sampler:
-				{
-					CommandList->SetGraphicsRootDescriptorTable(BindingDesc.Idx, BindingDesc.TableBegin);
-				} break;
-				case dx12_descriptor_type::shader_resource:
-				{
-					CommandList->SetGraphicsRootShaderResourceView(BindingDesc.Idx, BindingDesc.ResourceBegin);
-				} break;
-				case dx12_descriptor_type::unordered_access:
-				{
-					CommandList->SetGraphicsRootUnorderedAccessView(BindingDesc.Idx, BindingDesc.ResourceBegin);
-				} break;
-			}
-		}
-	}
-	else if(CurrentContext->Type == pass_type::compute)
+            DX12BindBuffer(*(buffer**)It, Parameter);
+            It = (void*)((u8*)It + sizeof(buffer*));
+            ParamIdx += (*(buffer**)It)->WithCounter;
+        } 
+		else if (Parameter.Type == resource_type::texture_sampler) 
+		{
+            DX12BindTexture(*(texture_ref*)It, Parameter, 0);
+            It = (void*)((u8*)It + sizeof(texture_ref));
+        }
+    }
+
+    if (CurrentContext->Type == pass_type::graphics) 
 	{
-		directx12_compute_context* ContextToBind = static_cast<directx12_compute_context*>(CurrentContext);
-		ContextToBind->ResourceBindingIdx = Binder.ResourceBindingIdx;
-		ContextToBind->SamplersBindingIdx = Binder.SamplersBindingIdx;
-
-		std::vector<ID3D12DescriptorHeap*> Heaps;
-		if (ContextToBind->IsResourceHeapInited) Heaps.push_back(ContextToBind->ResourceHeap.Handle.Get());
-		if (ContextToBind->IsSamplersHeapInited) Heaps.push_back(ContextToBind->SamplersHeap.Handle.Get());
-		CommandList->SetDescriptorHeaps(Heaps.size(), Heaps.data());
-
-		for(u32 BindingIdx = 0; BindingIdx < Binder.BindingDescriptions.size(); ++BindingIdx)
-		{
-			const descriptor_binding& BindingDesc = Binder.BindingDescriptions[BindingIdx];
-			switch(BindingDesc.Type)
-			{
-				case dx12_descriptor_type::shader_resource_table:
-				case dx12_descriptor_type::unordered_access_table:
-				case dx12_descriptor_type::constant_buffer_table:
-				case dx12_descriptor_type::sampler:
-				{
-					CommandList->SetComputeRootDescriptorTable(BindingDesc.Idx, BindingDesc.TableBegin);
-				} break;
-				case dx12_descriptor_type::shader_resource:
-				{
-					CommandList->SetComputeRootShaderResourceView(BindingDesc.Idx, BindingDesc.ResourceBegin);
-				} break;
-				case dx12_descriptor_type::unordered_access:
-				{
-					CommandList->SetComputeRootUnorderedAccessView(BindingDesc.Idx, BindingDesc.ResourceBegin);
-				} break;
-			}
-		}
-	}
+        DX12SetRootDescriptors(
+            static_cast<directx12_render_context*>(CurrentContext),
+            &ID3D12GraphicsCommandList::SetGraphicsRootDescriptorTable,
+            &ID3D12GraphicsCommandList::SetGraphicsRootShaderResourceView,
+            &ID3D12GraphicsCommandList::SetGraphicsRootUnorderedAccessView
+        );
+    } 
+	else if (CurrentContext->Type == pass_type::compute) 
+	{
+        DX12SetRootDescriptors(
+            static_cast<directx12_compute_context*>(CurrentContext),
+            &ID3D12GraphicsCommandList::SetComputeRootDescriptorTable,
+            &ID3D12GraphicsCommandList::SetComputeRootShaderResourceView,
+            &ID3D12GraphicsCommandList::SetComputeRootUnorderedAccessView
+        );
+    }
 }
 
 void directx12_command_list::

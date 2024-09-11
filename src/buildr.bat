@@ -38,6 +38,8 @@ popd
 
 pushd ..\build\
 del *.pdb > NUL 2> NUL
+rem cl %CommonCompFlags% ..\src\introspect.cpp /Fe"generate_reflection" -D_CRT_SECURE_NO_WARNINGS
+
 cl %CommonCompFlags% /I%VulkanInc% /I"..\src" /I"..\src\core\vendor" user32.lib kernel32.lib gdi32.lib shell32.lib d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib ..\libs\dxcompiler.lib vulkan-1.lib glslang.lib HLSL.lib OGLCompiler.lib OSDependent.lib MachineIndependent.lib SPIRV.lib SPIRV-Tools.lib SPIRV-Tools-opt.lib GenericCodeGen.lib glslang-default-resource-limits.lib SPVRemapper.lib spirv-cross-core.lib spirv-cross-cpp.lib spirv-cross-glsl.lib spirv-cross-hlsl.lib ..\libs\assimp-vc143-mt.lib ..\src\main.cpp %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% %VoxelGridSize% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
 popd
 

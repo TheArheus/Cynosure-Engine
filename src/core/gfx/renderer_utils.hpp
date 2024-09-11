@@ -247,83 +247,39 @@ constexpr std::size_t num_aggregate_unique_fields_v
 #pragma pack(1)
 
 template<typename, typename = std::void_t<>>
-struct has_output_type : std::false_type {};
-
-template<typename T>
-struct has_output_type<T, std::void_t<typename T::output_type>> : std::true_type {};
-
-template<typename, typename = std::void_t<>>
 struct has_static_storage_type : std::false_type {};
 
 template<typename T>
 struct has_static_storage_type<T, std::void_t<typename T::static_storage_type>> : std::true_type {};
 
-template<typename T, bool HasOutput, bool HasStaticStorage>
+template<typename T, bool HasStaticStorage>
 struct shader_pass_parameter_type {};
 
 template<typename T>
-struct shader_pass_parameter_type<T, false, false>
+struct shader_pass_parameter_type<T, false>
 {
-    u32 InputCount = num_aggregate_fields_v<typename T::input_type>;
-	size_t InputSize = sizeof(typename T::input_type);
-
-	bool HaveOutput = false;
-	bool HaveStaticStorage = false;
-
-	typename T::input_type Input;
-};
-
-template<typename T>
-struct shader_pass_parameter_type<T, true, false>
-{
-    u32 InputCount = num_aggregate_fields_v<typename T::input_type>;
-	size_t InputSize = sizeof(typename T::input_type);
-
-	bool HaveOutput = true;
-    u32 OutputCount = num_aggregate_fields_v<typename T::output_type>;
-	size_t OutputSize = sizeof(typename T::output_type);
+    u32 ParamCount = num_aggregate_fields_v<typename T::parameter_type>;
+	size_t ParamSize = sizeof(typename T::parameter_type);
 
 	bool HaveStaticStorage = false;
 
-	typename T::input_type Input;
-	typename T::output_type Output;
+	typename T::parameter_type Param;
 };
 
 template<typename T>
-struct shader_pass_parameter_type<T, false, true>
+struct shader_pass_parameter_type<T, true>
 {
-    u32 InputCount = num_aggregate_fields_v<typename T::input_type>;
-	size_t InputSize = sizeof(typename T::input_type);
-
-	bool HaveOutput = false;
+    u32 ParamCount = num_aggregate_fields_v<typename T::parameter_type>;
+	size_t ParamSize = sizeof(typename T::parameter_type);
 
 	bool HaveStaticStorage = true;
-    u32 StaticStorageCount = num_aggregate_fields_v<typename T::static_storage_type>;
 
-	typename T::input_type Input;
-	typename T::static_storage_type StaticStorage;
-};
-
-template<typename T>
-struct shader_pass_parameter_type<T, true, true>
-{
-    u32 InputCount = num_aggregate_fields_v<typename T::input_type>;
-	size_t InputSize = sizeof(typename T::input_type);
-
-	bool HaveOutput = true;
-    u32 OutputCount = num_aggregate_fields_v<typename T::output_type>;
-	size_t OutputSize = sizeof(typename T::output_type);
-
-	bool HaveStaticStorage = true;
-    u32 StaticStorageCount = num_aggregate_fields_v<typename T::static_storage_type>;
-	
-	typename T::input_type Input;
-	typename T::output_type Output;
+	typename T::parameter_type Param;
 	typename T::static_storage_type StaticStorage;
 };
 
 template<typename context_type>
-using shader_parameter = shader_pass_parameter_type<context_type, has_output_type<context_type>::value, has_static_storage_type<context_type>::value>;
+using shader_parameter = shader_pass_parameter_type<context_type, has_static_storage_type<context_type>::value>;
 
 #pragma pack(pop)
 
@@ -679,3 +635,5 @@ struct texture
 	std::vector<u32> CurrentLayout;
 	std::vector<barrier_state> CurrentState;
 };
+
+#include "engine_meta.hpp"

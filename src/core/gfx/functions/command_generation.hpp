@@ -2,18 +2,24 @@
 
 struct frustum_culling : public shader_compute_view_context
 {
-	struct input_type
+	struct parameter_type
 	{
 		buffer_ref MeshCommonCullingInputBuffer;
 		buffer_ref GeometryOffsets;
 		buffer_ref MeshDrawCommandDataBuffer;
 		buffer_ref MeshDrawVisibilityDataBuffer;
-	};
-
-	struct output_type
-	{
 		buffer_ref IndirectDrawIndexedCommands;
 		buffer_ref MeshDrawCommandBuffer;
+	};
+
+	introspect() struct parameters
+	{
+		mesh_comp_culling_common_input MeshCommonCullingData;
+		mesh::offset GeometryOffsets;
+		mesh_draw_command MeshDrawCommandData;
+		u32 MeshDrawVisibilityData;
+		indirect_draw_indexed_command IndirectDrawIndexedCommands; // TODO: With counter
+		mesh_draw_command MeshDrawCommands;
 	};
 
 	frustum_culling()
@@ -25,17 +31,22 @@ struct frustum_culling : public shader_compute_view_context
 
 struct occlusion_culling : public shader_compute_view_context 
 {
-	struct input_type
+	struct parameter_type
 	{
 		buffer_ref  MeshCommonCullingInputBuffer;
 		buffer_ref  GeometryOffsets;
 		buffer_ref  MeshDrawCommandDataBuffer;
 		texture_ref DepthPyramid;
+		buffer_ref  MeshDrawVisibilityDataBuffer;
 	};
 
-	struct output_type
+	introspect() struct parameters
 	{
-		buffer_ref MeshDrawVisibilityDataBuffer;
+		mesh_comp_culling_common_input MeshCommonCullingData;
+		mesh::offset GeometryOffsets;
+		mesh_draw_command MeshDrawCommandData;
+		texture_ref DepthPyramid;
+		u32 MeshDrawVisibilityData;
 	};
 
 public:
@@ -47,18 +58,24 @@ public:
 
 struct generate_all : public shader_compute_view_context
 {
-	struct input_type
+	struct parameter_type
 	{
 		buffer_ref MeshCommonCullingInputBuffer;
 		buffer_ref GeometryOffsets;
 		buffer_ref MeshDrawCommandDataBuffer;
 		buffer_ref MeshDrawVisibilityDataBuffer;
-	};
-
-	struct output_type
-	{
 		buffer_ref IndirectDrawIndexedCommands;
 		buffer_ref MeshDrawCommandBuffer;
+	};
+
+	introspect() struct parameters
+	{
+		mesh_comp_culling_common_input MeshCommonCullingData;
+		mesh::offset GeometryOffsets;
+		mesh_draw_command MeshDrawCommandDataBuffer;
+		u32 MeshDrawVisibilityDataBuffer;
+		indirect_draw_indexed_command IndirectDrawIndexedCommands; // TODO: With counter
+		mesh_draw_command MeshDrawCommandBuffer;
 	};
 
 	generate_all()

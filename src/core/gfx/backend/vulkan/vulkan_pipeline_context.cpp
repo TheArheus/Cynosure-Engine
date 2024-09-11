@@ -23,36 +23,17 @@ AppendStaticStorage(general_context* ContextToUse, void* Data)
 
 	void* It = Data;
 
-	u32 InputCount = *(u32*)It;
-	u32 OutputCount = 0;
-	u32 StaticStorageCount = 0;
-
+	u32 ParamCount = *(u32*)It;
 	It = (void*)((u8*)It + sizeof(u32));
-	size_t InputOffset  = *(size_t*)It;
-	size_t OutputOffset = 0;
 
+	size_t ParamOffset  = *(size_t*)It;
 	It = (void*)((u8*)It + sizeof(size_t));
 
-	bool HaveOutput = *(bool*)It;
-	It = (void*)((u8*)It + sizeof(bool));
-	if(HaveOutput)
-	{
-		OutputCount = *(u32*)It;
-		It = (void*)((u8*)It + sizeof(u32));
-
-		OutputOffset = *(size_t*)It;
-		It = (void*)((u8*)It + sizeof(size_t));
-	}
-
+	u32 StaticStorageCount = 0;
 	bool HaveStaticStorage = *(bool*)It;
 	It = (void*)((u8*)It + sizeof(bool));
-	if(HaveStaticStorage)
-	{
-		StaticStorageCount = *(u32*)It;
-		It = (void*)((u8*)It + sizeof(u32));
-	}
 
-	It = (void*)((u8*)It + InputOffset + OutputOffset);
+	It = (void*)((u8*)It + ParamOffset);
 	for(u32 LayoutIdx = 1; LayoutIdx < ContextToUse->ParameterLayout.size(); ++LayoutIdx)
 	{
 		for(u32 ParamIdx = 0; ParamIdx < ContextToUse->ParameterLayout[LayoutIdx].size(); ++ParamIdx)
@@ -579,38 +560,17 @@ BindShaderParameters(void* Data)
 
 	void* It = Data;
 
-	u32 InputCount = *(u32*)It;
-	u32 OutputCount = 0;
-	u32 StaticStorageCount = 0;
-
+	u32 ParamCount = *(u32*)It;
 	It = (void*)((u8*)It + sizeof(u32));
 
-	size_t InputOffset  = *(size_t*)It;
-	size_t OutputOffset = 0;
-
+	size_t ParamOffset  = *(size_t*)It;
 	It = (void*)((u8*)It + sizeof(size_t));
 
-	bool HaveOutput = *(bool*)It;
-	It = (void*)((u8*)It + sizeof(bool));
-	if(HaveOutput)
-	{
-		OutputCount = *(u32*)It;
-		It = (void*)((u8*)It + sizeof(u32));
-
-		OutputOffset = *(size_t*)It;
-		It = (void*)((u8*)It + sizeof(size_t));
-	}
-
+	u32 StaticStorageCount = 0;
 	bool HaveStaticStorage = *(bool*)It;
 	It = (void*)((u8*)It + sizeof(bool));
-	if(HaveStaticStorage)
-	{
-		StaticStorageCount = *(u32*)It;
-		It = (void*)((u8*)It + sizeof(u32));
-	}
 
-	u32 BindingsCount = InputCount + OutputCount;
-	for(u32 ParamIdx = 0; ParamIdx < BindingsCount; ++ParamIdx)
+	for(u32 ParamIdx = 0; ParamIdx < ParamCount; ++ParamIdx)
 	{
 		descriptor_param Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
 		if(Parameter.Type == resource_type::buffer)
@@ -625,7 +585,7 @@ BindShaderParameters(void* Data)
 			It = (void*)((u8*)It + sizeof(buffer*));
 
 			ParamIdx += BufferToBind->WithCounter;
-			BindingsCount += BufferToBind->WithCounter;
+			ParamCount += BufferToBind->WithCounter;
 		}
 		else if(Parameter.Type == resource_type::texture_sampler)
 		{

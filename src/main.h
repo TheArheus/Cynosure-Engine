@@ -25,6 +25,50 @@
 #include <imgui/imgui_tables.cpp>
 #include <imgui/imgui_widgets.cpp>
 
+#include "reflection.hpp"
+
+struct draw_indexed_indirect_command
+{
+    u32 IndexCount;
+    u32 InstanceCount;
+    u32 FirstIndex;
+    s32 VertexOffset;
+    u32 FirstInstance;
+};
+
+struct indirect_draw_indexed_command
+{
+	u32 DrawID;
+	draw_indexed_indirect_command DrawArg;
+};
+
+struct indirect_command_generation_input
+{
+	u32 DrawCount;
+	u32 MeshCount;
+};
+
+struct point_shadow_input
+{
+	mat4  LightMat;
+	vec4  LightPos;
+	float FarZ;
+};
+
+struct mesh_comp_culling_common_input
+{
+	mat4  Proj;
+	mat4  View;
+	plane CullingPlanes[6];
+	u32   FrustrumCullingEnabled;
+	u32   OcclusionCullingEnabled;
+	float NearZ;
+	u32   DrawCount;
+	u32   MeshCount;
+	u32   DebugDrawCount;
+	u32   DebugMeshCount;
+};
+
 class window;
 #include "core/gfx/common.hpp"
 #include "core/gfx/renderer_utils.hpp"
@@ -64,39 +108,6 @@ u32 PreviousPowerOfTwo(u32 x)
     x = x | (x >> 16);
     return x - (x >> 1);
 }
-
-struct indirect_draw_indexed_command
-{
-	u32 DrawID;
-	VkDrawIndexedIndirectCommand VkDrawArg; // 5
-};
-
-struct indirect_command_generation_input
-{
-	u32 DrawCount;
-	u32 MeshCount;
-};
-
-struct point_shadow_input
-{
-	mat4  LightMat;
-	vec4  LightPos;
-	float FarZ;
-};
-
-struct mesh_comp_culling_common_input
-{
-	mat4  Proj;
-	mat4  View;
-	plane CullingPlanes[6];
-	u32   FrustrumCullingEnabled;
-	u32   OcclusionCullingEnabled;
-	float NearZ;
-	u32   DrawCount;
-	u32   MeshCount;
-	u32   DebugDrawCount;
-	u32   DebugMeshCount;
-};
 
 #include "core/gfx/backend/vulkan/vulkan_command_queue.cpp"
 #include "core/gfx/backend/vulkan/vulkan_pipeline_context.cpp"

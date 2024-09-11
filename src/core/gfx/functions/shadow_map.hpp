@@ -2,7 +2,14 @@
 
 struct mesh_shadow : public shader_graphics_view_context
 {
-	struct input_type
+	struct parameter_type
+	{
+		buffer_ref VertexBuffer;
+		buffer_ref CommandBuffer;
+		buffer_ref GeometryOffsets;
+	};
+
+	introspect() struct parameters
 	{
 		buffer_ref VertexBuffer;
 		buffer_ref CommandBuffer;
@@ -28,10 +35,19 @@ struct mesh_shadow : public shader_graphics_view_context
 	}
 };
 
+// TODO: Do this the right way
 template<u32 FaceIdx>
 struct point_shadow : public shader_graphics_view_context
 {
-	struct input_type
+	struct parameter_type
+	{
+		buffer_ref VertexBuffer;
+		buffer_ref CommandBuffer;
+		buffer_ref GeometryOffsets;
+	};
+
+	// introspect()
+	struct parameters
 	{
 		buffer_ref VertexBuffer;
 		buffer_ref CommandBuffer;
@@ -60,7 +76,14 @@ struct point_shadow : public shader_graphics_view_context
 
 struct depth_prepass : public shader_graphics_view_context
 {
-	struct input_type
+	struct parameter_type
+	{
+		buffer_ref VertexBuffer;
+		buffer_ref CommandBuffer;
+		buffer_ref GeometryOffsets;
+	};
+
+	introspect() struct parameters
 	{
 		buffer_ref VertexBuffer;
 		buffer_ref CommandBuffer;

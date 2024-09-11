@@ -2,17 +2,23 @@
 
 struct ssao : public shader_compute_view_context
 {
-	struct input_type
+	struct parameter_type
 	{
 		buffer_ref WorldUpdateBuffer;
 		buffer_ref RandomSamplesBuffer;
 		texture_ref NoiseTexture;
 		texture_ref DepthTarget;
 		texture_ref GBuffer;
+		texture_ref Output;
 	};
 
-	struct output_type
+	introspect() struct parameters
 	{
+		global_world_data WorldUpdate;
+		vec4 RandomSamples[64];
+		texture_ref NoiseTexture;
+		texture_ref DepthTarget;
+		texture_ref GBuffer;
 		texture_ref Output;
 	};
 

@@ -311,6 +311,9 @@ AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Ex
 	NewPass->Name = Name;
 	NewPass->Type = Type;
 	NewPass->HaveStaticStorage = has_static_storage_type<context_type>::value;
+	
+	meta_descriptor* ReflectionData = reflect<context_type>::Get();
+
 	NewPass->Parameters = PushStructConstruct(param_type);
 	*((param_type*)NewPass->Parameters) = Parameters;
 

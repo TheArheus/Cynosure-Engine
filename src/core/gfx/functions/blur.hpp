@@ -2,13 +2,15 @@
 
 struct blur : public shader_compute_view_context
 {
-	struct input_type
+	struct parameter_type
 	{
 		texture_ref Input;
+		texture_ref Output;
 	};
 
-	struct output_type
+	introspect() struct parameters
 	{
+		texture_ref Input;
 		texture_ref Output;
 	};
 
