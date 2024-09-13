@@ -36,7 +36,7 @@ struct mesh_shadow : public shader_graphics_view_context
 };
 
 // TODO: Do this the right way
-template<u32 FaceIdx>
+template<u32 FaceIdx = 0>
 struct point_shadow : public shader_graphics_view_context
 {
 	struct parameter_type
@@ -46,8 +46,7 @@ struct point_shadow : public shader_graphics_view_context
 		buffer_ref GeometryOffsets;
 	};
 
-	// introspect()
-	struct parameters
+	introspect() struct parameters
 	{
 		buffer_ref VertexBuffer;
 		buffer_ref CommandBuffer;

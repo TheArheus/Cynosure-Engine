@@ -12,6 +12,7 @@ struct struct_name
 {
 	std::string Template;
 	std::string Name;
+	bool WithTemplate;
 };
 
 struct template_args
@@ -41,7 +42,6 @@ std::set<std::pair<std::pair<std::string, std::string>, std::pair<bool, template
 std::set<std::string> EnumNames;
 std::vector<struct_name> StructHierarchy;
 bool IsIntrospactable = false;
-bool WithTemplate = false;
 
 struct meta_struct
 {
@@ -430,14 +430,65 @@ ParseMember(tokenizer* Tokenizer, token StructTypeToken, token MemberTypeToken)
 				if(!IsIntrospactable) break;
 
 				std::string FullMemberTypeName;
-				std::string FullStructTypeName;
-				for (size_t i = 0; i < StructHierarchy.size(); ++i)
-				{
-					FullStructTypeName += StructHierarchy[i].Name;
+				std::string FullStructTypeName = StructHierarchy[0].Name;
 
-					if (i < StructHierarchy.size() - 1)
+				if(StructHierarchy[0].WithTemplate)
+				{
+					FullStructTypeName += "<";
+
+					tokenizer TemplateTokenizer = {};
+					TemplateTokenizer.At = (char*)ParsedTemplateArgs.TemplateArgs.c_str();
+
+					bool TemplateParsing = true;
+					std::vector<std::string> DefaultValues;
+					while(TemplateParsing)
 					{
-						FullStructTypeName += "::";
+						token TemplToken = GetToken(&TemplateTokenizer);
+						switch(TemplToken.Type)
+						{
+							case Token_EndOfStream:
+							{
+								TemplateParsing = false;
+							} break;
+
+							case Token_Unknown:
+							{
+							} break;
+
+							// TODO: Better numeric token handling
+							case Token_Identifier:
+							{
+								if(TokenEquals(TemplToken, "float"))
+								{
+									DefaultValues.push_back("0.0f");
+								}
+								else if(TokenEquals(TemplToken, "double"))
+								{
+									DefaultValues.push_back("0.0");
+								}
+								else if(TokenEquals(TemplToken, "u32"))
+								{
+									DefaultValues.push_back("0");
+								}
+							} break;
+						}
+					}
+
+					for(int i = 0; i < DefaultValues.size(); i++)
+					{
+						FullStructTypeName += DefaultValues[i];
+						if (i < DefaultValues.size() - 1) {
+							FullStructTypeName += ", ";
+						}
+					}
+					FullStructTypeName += ">";
+				}
+
+				if (StructHierarchy.size() > 1)
+				{
+					for (size_t i = 1; i < StructHierarchy.size(); ++i)
+					{
+						FullStructTypeName += ("::" + StructHierarchy[i].Name);
 					}
 				}
 				std::string MemberTypeName(MemberTypeToken.Text, MemberTypeToken.TextLength);
@@ -469,10 +520,10 @@ ParseMember(tokenizer* Tokenizer, token StructTypeToken, token MemberTypeToken)
 }
 
 static void
-ParseStruct(tokenizer* Tokenizer)
+ParseStruct(tokenizer* Tokenizer, bool WithTemplate = false)
 {
     token NameToken = GetToken(Tokenizer);
-	StructHierarchy.push_back({TemplatePrefix, std::string(NameToken.Text, NameToken.TextLength)});
+	StructHierarchy.push_back({WithTemplate ? TemplatePrefix : "", std::string(NameToken.Text, NameToken.TextLength), WithTemplate});
 
 	token LookaheadToken = GetToken(Tokenizer);
     if (LookaheadToken.Type == Token_Colon)
@@ -598,7 +649,6 @@ int main(int ArgCount, char** Args)
                     }
 					else if(TokenEquals(Token, "template"))
 					{
-						WithTemplate = true;
 						Token = GetToken(&Tokenizer);
 						TemplatePrefix += "template";
 
@@ -615,11 +665,11 @@ int main(int ArgCount, char** Args)
 
 						if(TokenEquals(Token, "struct"))
 						{
-							ParseStruct(&Tokenizer);
+							ParseStruct(&Tokenizer, true);
 						}
 
-						TemplatePrefix.clear();
-						WithTemplate = false;
+						TemplatePrefix = "";
+						ParsedTemplateArgs = {};
 					}
                 } break;
                         

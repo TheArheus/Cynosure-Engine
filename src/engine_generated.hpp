@@ -126,6 +126,12 @@ member_definition MembersOf__mesh_shadow__parameters[] =
    {0, MetaType__buffer_ref, "buffer_ref", sizeof(buffer_ref), offsetof(mesh_shadow::parameters, CommandBuffer)},
    {0, MetaType__buffer_ref, "buffer_ref", sizeof(buffer_ref), offsetof(mesh_shadow::parameters, GeometryOffsets)},
 };
+member_definition MembersOf__point_shadow__parameters[] =
+{
+   {0, MetaType__buffer_ref, "buffer_ref", sizeof(buffer_ref), offsetof(point_shadow<0>::parameters, VertexBuffer)},
+   {0, MetaType__buffer_ref, "buffer_ref", sizeof(buffer_ref), offsetof(point_shadow<0>::parameters, CommandBuffer)},
+   {0, MetaType__buffer_ref, "buffer_ref", sizeof(buffer_ref), offsetof(point_shadow<0>::parameters, GeometryOffsets)},
+};
 member_definition MembersOf__depth_prepass__parameters[] =
 {
    {0, MetaType__buffer_ref, "buffer_ref", sizeof(buffer_ref), offsetof(depth_prepass::parameters, VertexBuffer)},
@@ -247,6 +253,15 @@ struct reflect<occlusion_culling>
         static meta_descriptor* Get()
         {
                 static meta_descriptor Meta{MembersOf__occlusion_culling__parameters, sizeof(MembersOf__occlusion_culling__parameters)/sizeof(MembersOf__occlusion_culling__parameters[0])};
+                return &Meta;
+        }
+};
+template<u32 FaceIdx>
+struct reflect<point_shadow<FaceIdx>>
+{
+        static meta_descriptor* Get()
+        {
+                static meta_descriptor Meta{MembersOf__point_shadow__parameters, sizeof(MembersOf__point_shadow__parameters)/sizeof(MembersOf__point_shadow__parameters[0])};
                 return &Meta;
         }
 };
