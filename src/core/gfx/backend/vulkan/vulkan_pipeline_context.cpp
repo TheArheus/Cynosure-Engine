@@ -46,7 +46,7 @@ AppendStaticStorage(general_context* ContextToUse, void* Data)
 			else if(Parameter.Type == resource_type::texture_sampler)
 			{
 				texture_ref TextureToBind = *(texture_ref*)It;
-				SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex, LayoutIdx);
+				SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex, LayoutIdx);
 				It = (void*)((u8*)It + sizeof(texture_ref));
 			}
 			else if(Parameter.Type == resource_type::texture_storage)
@@ -312,6 +312,7 @@ CreateResource(renderer_backend* Backend)
 void vulkan_command_list::
 DestroyObject()
 {
+	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	if(AcquireSemaphore)
 	{
 		vkDestroySemaphore(Device, AcquireSemaphore, nullptr);
@@ -321,6 +322,11 @@ DestroyObject()
 	{
 		vkDestroySemaphore(Device, ReleaseSemaphore, nullptr);
 		ReleaseSemaphore = 0;
+	}
+	if(CommandList)
+	{
+		CommandQueue->ExecuteAndRemove(&CommandList);
+		CommandList = nullptr;
 	}
 }
 
@@ -337,22 +343,15 @@ Begin()
 	CommandQueue->Reset(&CommandList);
 
 	SetImageBarriers({
-						{Gfx->NullTexture1D, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, PSF_Compute}, 
-						{Gfx->NullTexture2D, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, PSF_Compute}, 
-						{Gfx->NullTexture3D, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, PSF_Compute},
-						{Gfx->NullTextureCube, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, PSF_Compute}});
+						{Gfx->NullTexture1D, AF_ShaderRead, barrier_state::shader_read, SUBRESOURCES_ALL, PSF_Compute}, 
+						{Gfx->NullTexture2D, AF_ShaderRead, barrier_state::shader_read, SUBRESOURCES_ALL, PSF_Compute}, 
+						{Gfx->NullTexture3D, AF_ShaderRead, barrier_state::shader_read, SUBRESOURCES_ALL, PSF_Compute},
+						{Gfx->NullTextureCube, AF_ShaderRead, barrier_state::shader_read, SUBRESOURCES_ALL, PSF_Compute}});
 
 	TexturesToCommon.insert(Gfx->NullTexture1D);
 	TexturesToCommon.insert(Gfx->NullTexture2D);
 	TexturesToCommon.insert(Gfx->NullTexture3D);
 	TexturesToCommon.insert(Gfx->NullTextureCube);
-}
-
-void vulkan_command_list::
-End()
-{
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	CommandQueue->Execute(&CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 }
 
 void vulkan_command_list::
@@ -362,10 +361,64 @@ DeviceWaitIdle()
 }
 
 void vulkan_command_list::
+PlaceEndOfFrameBarriers()
+{
+	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
+	std::vector<VkImageMemoryBarrier> ImageEndRenderBarriers = 
+	{
+		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], GetVKAccessMask(AF_TransferWrite, PSF_Transfer), 0, GetVKLayout(barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+	};
+
+	for(u32 Idx = 0; Idx < BuffersToCommon.size(); ++Idx)
+	{
+#if USE_BOTTOM_OF_PIPE_BARRIERS
+		buffer* Resource = *std::next(BuffersToCommon.begin(), Idx);
+		AttachmentBufferBarriers.push_back({Resource, AF_ShaderRead, PSF_BottomOfPipe});
+#else
+		vulkan_buffer* Resource = static_cast<vulkan_buffer*>(*std::next(BuffersToCommon.begin(), Idx));
+		Resource->CurrentLayout = 0;
+		Resource->PrevShader = PSF_BottomOfPipe;
+#endif
+	}
+
+	for(u32 Idx = 0; Idx < TexturesToCommon.size(); ++Idx)
+	{
+#if USE_BOTTOM_OF_PIPE_BARRIERS
+		texture* Resource = *std::next(TexturesToCommon.begin(), Idx);
+		AttachmentImageBarriers.push_back({Resource, AF_ShaderRead, barrier_state::shader_read, SUBRESOURCES_ALL, PSF_BottomOfPipe});
+#else
+		vulkan_texture* Resource = static_cast<vulkan_texture*>(*std::next(TexturesToCommon.begin(), Idx));
+		std::fill(Resource->CurrentLayout.begin(), Resource->CurrentLayout.end(), 0);
+		std::fill(Resource->CurrentState.begin(), Resource->CurrentState.end(), barrier_state::undefined);
+		Resource->PrevShader = PSF_BottomOfPipe;
+#endif
+	}
+
+	ImageBarrier(CommandList, GetVKPipelineStage(PSF_Transfer), GetVKPipelineStage(PSF_BottomOfPipe), ImageEndRenderBarriers);
+#if USE_BOTTOM_OF_PIPE_BARRIERS
+	SetImageBarriers(AttachmentImageBarriers);
+	SetBufferBarriers(AttachmentBufferBarriers);
+#endif
+
+	BuffersToCommon.clear();
+	TexturesToCommon.clear();
+	AttachmentImageBarriers.clear();
+	AttachmentBufferBarriers.clear();
+	RenderingAttachmentInfos.clear();
+}
+
+void vulkan_command_list::
+End()
+{
+	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
+	CommandQueue->Execute(&CommandList);
+}
+
+void vulkan_command_list::
 EndOneTime()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	CommandQueue->ExecuteAndRemove(&CommandList, &ReleaseSemaphore, &AcquireSemaphore);
+	CommandQueue->ExecuteAndRemove(&CommandList);
 }
 
 void vulkan_command_list::
@@ -394,48 +447,7 @@ void vulkan_command_list::
 Present()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-
-	std::vector<VkImageMemoryBarrier> ImageEndRenderBarriers = 
-	{
-		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], GetVKAccessMask(AF_TransferWrite, PSF_Transfer), 0, GetVKLayout(barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-	};
-
-	for(u32 Idx = 0; Idx < BuffersToCommon.size(); ++Idx)
-	{
-#if USE_BOTTOM_OF_PIPE_BARRIERS
-		buffer* Resource = *std::next(BuffersToCommon.begin(), Idx);
-		AttachmentBufferBarriers.push_back({Resource, AF_ShaderRead, PSF_BottomOfPipe});
-#else
-		vulkan_buffer* Resource = static_cast<vulkan_buffer*>(*std::next(BuffersToCommon.begin(), Idx));
-		Resource->CurrentLayout = 0;
-		Resource->PrevShader = PSF_BottomOfPipe;
-#endif
-	}
-
-	for(u32 Idx = 0; Idx < TexturesToCommon.size(); ++Idx)
-	{
-#if USE_BOTTOM_OF_PIPE_BARRIERS
-		texture* Resource = *std::next(TexturesToCommon.begin(), Idx);
-		AttachmentImageBarriers.push_back({Resource, AF_ShaderRead, barrier_state::shader_read, TEXTURE_MIPS_ALL, PSF_BottomOfPipe});
-#else
-		vulkan_texture* Resource = static_cast<vulkan_texture*>(*std::next(TexturesToCommon.begin(), Idx));
-		std::fill(Resource->CurrentLayout.begin(), Resource->CurrentLayout.end(), 0);
-		std::fill(Resource->CurrentState.begin(), Resource->CurrentState.end(), barrier_state::undefined);
-		Resource->PrevShader = PSF_BottomOfPipe;
-#endif
-	}
-
-	ImageBarrier(CommandList, GetVKPipelineStage(PSF_Transfer), GetVKPipelineStage(PSF_BottomOfPipe), ImageEndRenderBarriers);
-#if USE_BOTTOM_OF_PIPE_BARRIERS
-	SetImageBarriers(AttachmentImageBarriers);
-	SetBufferBarriers(AttachmentBufferBarriers);
-#endif
-
-	BuffersToCommon.clear();
-	TexturesToCommon.clear();
-	AttachmentImageBarriers.clear();
-	AttachmentBufferBarriers.clear();
-	RenderingAttachmentInfos.clear();
+	PlaceEndOfFrameBarriers();
 	CommandQueue->Execute(&CommandList, &ReleaseSemaphore, &AcquireSemaphore);
 
 	VkPresentInfoKHR PresentInfo = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
@@ -448,6 +460,90 @@ Present()
 }
 
 void vulkan_command_list::
+Update(buffer* BufferToUpdate, void* Data)
+{
+	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToUpdate);
+	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
+
+	void* CpuPtr;
+	vkMapMemory(Device, Buffer->TempMemory, 0, Buffer->Size, 0, &CpuPtr);
+	memcpy(CpuPtr, Data, Buffer->Size);
+	vkUnmapMemory(Device, Buffer->TempMemory);
+
+	VkBufferCopy Region = {0, 0, VkDeviceSize(Buffer->Size)};
+	vkCmdCopyBuffer(CommandList, Buffer->Temp, Buffer->Handle, 1, &Region);
+}
+
+void vulkan_command_list::
+UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
+{
+	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToUpdate);
+
+	if(UpdateByteSize == 0) return;
+	assert(UpdateByteSize <= Buffer->Size);
+
+	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
+
+	void* CpuPtr;
+	vkMapMemory(Device, Buffer->TempMemory, 0, UpdateByteSize, 0, &CpuPtr);
+	memcpy(CpuPtr, Data, UpdateByteSize);
+	vkUnmapMemory(Device, Buffer->TempMemory);
+
+	VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
+	vkCmdCopyBuffer(CommandList, Buffer->Temp, Buffer->Handle, 1, &Region);
+}
+
+void vulkan_command_list::
+ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
+{
+	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToRead);
+
+	if (UpdateByteSize == 0) return;
+	assert(UpdateByteSize <= Buffer->Size);
+
+	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
+
+	VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
+	vkCmdCopyBuffer(CommandList, Buffer->Handle, Buffer->Temp, 1, &Region);
+
+	void* CpuPtr;
+	vkMapMemory(Device, Buffer->TempMemory, 0, Buffer->Size, 0, &CpuPtr);
+	memcpy(Data, CpuPtr, UpdateByteSize);
+	vkUnmapMemory(Device, Buffer->TempMemory);
+}
+
+void vulkan_command_list::
+Update(texture* TextureToUpdate, void* Data)
+{
+	vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureToUpdate);
+	SetImageBarriers({{TextureToUpdate, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
+
+	void* CpuPtr;
+	vkMapMemory(Device, Texture->TempMemory, 0, Texture->Size, 0, &CpuPtr);
+	memcpy(CpuPtr, Data, Texture->Size);
+	vkUnmapMemory(Device, Texture->TempMemory);
+
+	VkBufferImageCopy Region = {};
+	Region.bufferOffset = 0;
+	Region.bufferRowLength = 0;
+	Region.bufferImageHeight = 0;
+	Region.imageSubresource.aspectMask = Texture->Aspect;
+	Region.imageSubresource.mipLevel = 0;
+	Region.imageSubresource.baseArrayLayer = 0;
+	Region.imageSubresource.layerCount = Texture->Info.Layers;
+	Region.imageOffset = {0, 0, 0};
+	Region.imageExtent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
+	vkCmdCopyBufferToImage(CommandList, Texture->Temp, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
+}
+
+void vulkan_command_list::
+ReadBack(texture* TextureToRead, void* Data)
+{
+	vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureToRead);
+	//SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
+}
+
+void vulkan_command_list::
 SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 {
 	assert(CurrentContext->Type == pass_type::graphics);
@@ -457,7 +553,7 @@ SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 	VkRenderingAttachmentInfoKHR* ColorInfo = PushArray(VkRenderingAttachmentInfoKHR, ColorTargets.size());
 	for(u32 AttachmentIdx = 0; AttachmentIdx < ColorTargets.size(); ++AttachmentIdx)
 	{
-		AttachmentImageBarriers.push_back({ColorTargets[AttachmentIdx], AF_ColorAttachmentWrite, barrier_state::color_attachment, TEXTURE_MIPS_ALL, PSF_ColorAttachment});
+		AttachmentImageBarriers.push_back({ColorTargets[AttachmentIdx], AF_ColorAttachmentWrite, barrier_state::color_attachment, SUBRESOURCES_ALL, PSF_ColorAttachment});
 		TexturesToCommon.insert(ColorTargets[AttachmentIdx]);
 
 		vulkan_texture* Attachment = static_cast<vulkan_texture*>(ColorTargets[AttachmentIdx]);
@@ -485,7 +581,7 @@ SetDepthTarget(texture* Target, vec2 Clear)
 {
 	assert(CurrentContext->Type == pass_type::graphics);
 
-	AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, TEXTURE_MIPS_ALL, PSF_EarlyFragment});
+	AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, PSF_EarlyFragment});
 	TexturesToCommon.insert(Target);
 
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
@@ -512,7 +608,7 @@ SetStencilTarget(texture* Target, vec2 Clear)
 {
 	assert(CurrentContext->Type == pass_type::graphics);
 
-	AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, TEXTURE_MIPS_ALL, PSF_EarlyFragment});
+	AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, PSF_EarlyFragment});
 	TexturesToCommon.insert(Target);
 
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
@@ -590,7 +686,7 @@ BindShaderParameters(void* Data)
 		else if(Parameter.Type == resource_type::texture_sampler)
 		{
 			texture_ref TextureToBind = *(texture_ref*)It;
-			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
+			u32 MipToUse = TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex;
 			Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
 
 			for(texture* CurrentTexture : TextureToBind.Handle)
@@ -604,7 +700,7 @@ BindShaderParameters(void* Data)
 		else if(Parameter.Type == resource_type::texture_storage)
 		{
 			texture_ref TextureToBind = *(texture_ref*)It;
-			u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
+			u32 MipToUse = TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex;
 			Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
 
 			for(texture* CurrentTexture : TextureToBind.Handle)
@@ -638,13 +734,13 @@ BindShaderParameters(void* Data)
 				if(s32(Parameter.Count - TextureToBind.Handle.size()) > 0)
 				{
 					if(Parameter.ImageType == image_type::Texture1D)
-						AttachmentImageBarriers.push_back({Binder.NullTexture1D, Parameter.AspectMask, Parameter.BarrierState, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
+						AttachmentImageBarriers.push_back({Binder.NullTexture1D, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
 					else if(Parameter.ImageType == image_type::Texture2D)
-						AttachmentImageBarriers.push_back({Binder.NullTexture2D, Parameter.AspectMask, Parameter.BarrierState, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
+						AttachmentImageBarriers.push_back({Binder.NullTexture2D, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
 					else if(Parameter.ImageType == image_type::Texture3D)
-						AttachmentImageBarriers.push_back({Binder.NullTexture3D, Parameter.AspectMask, Parameter.BarrierState, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
+						AttachmentImageBarriers.push_back({Binder.NullTexture3D, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
 					else if(Parameter.ImageType == image_type::TextureCube)
-						AttachmentImageBarriers.push_back({Binder.NullTextureCube, Parameter.AspectMask, Parameter.BarrierState, TEXTURE_MIPS_ALL, Parameter.ShaderToUse});
+						AttachmentImageBarriers.push_back({Binder.NullTextureCube, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
 				}
 				It = (void*)((u8*)It + sizeof(texture_ref));
 			}
@@ -902,7 +998,7 @@ FillBuffer(buffer* Buffer, u32 Value)
 void vulkan_command_list::
 FillTexture(texture* Texture, vec4 Value)
 {
-	SetImageBarriers({{Texture, AF_TransferWrite, barrier_state::transfer_dst, TEXTURE_MIPS_ALL, PSF_Transfer}});
+	SetImageBarriers({{Texture, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
 
 	VkClearColorValue ClearColor = {};
 	ClearColor.float32[0] = Value.x;
@@ -926,8 +1022,8 @@ CopyImage(texture* Dst, texture* Src)
 	vulkan_texture* SrcTexture = static_cast<vulkan_texture*>(Src);
 	vulkan_texture* DstTexture = static_cast<vulkan_texture*>(Dst);
 
-	SetImageBarriers({{SrcTexture, AF_TransferWrite, barrier_state::transfer_src, TEXTURE_MIPS_ALL, PSF_Transfer}, 
-					  {DstTexture, AF_TransferWrite, barrier_state::transfer_dst, TEXTURE_MIPS_ALL, PSF_Transfer}});
+	SetImageBarriers({{SrcTexture, AF_TransferWrite, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}, 
+					  {DstTexture, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
 
 	VkImageCopy ImageCopyRegion = {};
 	ImageCopyRegion.srcSubresource.aspectMask = SrcTexture->Aspect;
@@ -1017,7 +1113,7 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.image = Texture->Handle;
 		Barrier.subresourceRange.aspectMask = Texture->Aspect;
-		if(MipToUse == TEXTURE_MIPS_ALL)
+		if(MipToUse == SUBRESOURCES_ALL)
 		{
 			bool AreAllSubresourcesInSameState = true;
 			for(u32 MipIdx = 1; MipIdx < Texture->Info.MipLevels; ++MipIdx)
@@ -1197,6 +1293,15 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 			auto Parameter = ShaderRootLayout[LayoutIdx][BindingIdx];
 			DescriptorsSizes[LayoutIdx] += Parameter.descriptorCount;
 			Parameters[LayoutIdx].push_back(Parameter);
+
+			if(LayoutIdx == 0)
+			{
+				ParamCount++;
+			}
+			else
+			{
+				StaticStorageCount++;
+			}
 
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
@@ -1468,6 +1573,15 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 			auto Parameter = ShaderRootLayout[LayoutIdx][BindingIdx];
 			DescriptorsSizes[LayoutIdx] += Parameter.descriptorCount;
 			Parameters[LayoutIdx].push_back(Parameter);
+
+			if(LayoutIdx == 0)
+			{
+				ParamCount++;
+			}
+			else
+			{
+				StaticStorageCount++;
+			}
 
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)

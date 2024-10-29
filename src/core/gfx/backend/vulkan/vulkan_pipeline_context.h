@@ -38,8 +38,16 @@ struct vulkan_command_list : public command_list
 	void End() override;
 
 	void DeviceWaitIdle() override;
+	void PlaceEndOfFrameBarriers();
 
 	void EndOneTime() override;
+
+	void Update(buffer* BufferToUpdate, void* Data) override;
+	void UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize) override;
+	void ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize) override;
+
+	void Update(texture* TextureToUpdate, void* Data) override;
+	void ReadBack(texture* TextureToRead, void* Data) override;
 
 	void SetGraphicsPipelineState(render_context* Context) override;
 	void SetComputePipelineState(compute_context* Context) override;

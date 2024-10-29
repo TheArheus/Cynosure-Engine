@@ -65,9 +65,9 @@ public:
 
 
 // TODO: implement data for memory footprint visualization
+// TODO: Least Frequently Used Cache
 class global_memory_allocator
 {
-
 public:
 	global_memory_allocator()
 	{

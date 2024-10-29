@@ -3,6 +3,7 @@
 // TODO: make UpdateSize() function to do a resource recreation if update size is bigger than current one()
 struct vulkan_buffer : public buffer
 {
+	friend vulkan_command_list;
 	vulkan_buffer() = default;
 	~vulkan_buffer() override = default;
 
@@ -20,6 +21,7 @@ struct vulkan_buffer : public buffer
 
 	void Update(renderer_backend* Backend, void* Data) override
 	{
+#if 0
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		CommandQueue->Reset();
@@ -47,10 +49,17 @@ struct vulkan_buffer : public buffer
 		CommandQueue->ExecuteAndRemove(&CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
+#else
+		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->Update(this, Data);
+		Cmd->EndOneTime();
+#endif
 	}
 
 	void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
 	{
+#if 0
 		if(UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
 
@@ -81,41 +90,17 @@ struct vulkan_buffer : public buffer
 		CommandQueue->ExecuteAndRemove(&CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
-	}
-
-	void Update(void* Data, command_list* GlobalPipeline) override
-	{
-		vulkan_command_list* PipelineContext = static_cast<vulkan_command_list*>(GlobalPipeline);
-		GlobalPipeline->SetBufferBarriers({{this, AF_TransferWrite, PSF_Transfer}});
-
-		void* CpuPtr;
-		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
-		vkUnmapMemory(Device, TempMemory);
-
-		VkBufferCopy Region = {0, 0, VkDeviceSize(Size)};
-		vkCmdCopyBuffer(PipelineContext->CommandList, Temp, Handle, 1, &Region);
-	}
-
-	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override
-	{
-		if(UpdateByteSize == 0) return;
-		assert(UpdateByteSize <= Size);
-
-		vulkan_command_list* PipelineContext = static_cast<vulkan_command_list*>(GlobalPipeline);
-		GlobalPipeline->SetBufferBarriers({{this, AF_TransferWrite, PSF_Transfer}});
-
-		void* CpuPtr;
-		vkMapMemory(Device, TempMemory, 0, UpdateByteSize, 0, &CpuPtr);
-		memcpy(CpuPtr, Data, UpdateByteSize);
-		vkUnmapMemory(Device, TempMemory);
-
-		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-		vkCmdCopyBuffer(PipelineContext->CommandList, Temp, Handle, 1, &Region);
+#else
+		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->UpdateSize(this, Data, UpdateByteSize);
+		Cmd->EndOneTime();
+#endif
 	}
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
 	{
+#if 0
 		if (UpdateByteSize == 0) return;
 		assert(UpdateByteSize <= Size);
 
@@ -146,23 +131,27 @@ struct vulkan_buffer : public buffer
 		vkUnmapMemory(Device, TempMemory);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
+#else
+		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->ReadBackSize(this, Data, UpdateByteSize);
+		Cmd->EndOneTime();
+#endif
 	}
 
-	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override
+	void Update(void* Data, command_list* Cmd) override
 	{
-		if (UpdateByteSize == 0) return;
-		assert(UpdateByteSize <= Size);
+		Cmd->Update(this, Data);
+	}
 
-		vulkan_command_list* PipelineContext = static_cast<vulkan_command_list*>(GlobalPipeline);
-		GlobalPipeline->SetBufferBarriers({{this, AF_TransferRead, PSF_Transfer}});
+	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* Cmd) override
+	{
+		Cmd->UpdateSize(this, Data, UpdateByteSize);
+	}
 
-		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-		vkCmdCopyBuffer(PipelineContext->CommandList, Handle, Temp, 1, &Region);
-
-		void* CpuPtr;
-		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
-		memcpy(Data, CpuPtr, UpdateByteSize);
-		vkUnmapMemory(Device, TempMemory);
+	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* Cmd) override
+	{
+		Cmd->ReadBackSize(this, Data, UpdateByteSize);
 	}
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) override
@@ -283,13 +272,53 @@ private:
 	VkDeviceMemory TempMemory;
 };
 
+struct vulkan_texture_sampler : public texture_sampler
+{
+	vulkan_texture_sampler() = default;
+	vulkan_texture_sampler(renderer_backend* Backend, u32 MipLevels = 1, const utils::texture::sampler_info& SamplerInfo = {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear})
+	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		Device = Gfx->Device;
+
+		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
+		ReductionMode.reductionMode = GetVKSamplerReductionMode(SamplerInfo.ReductionMode);
+
+		VkSamplerCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+		CreateInfo.pNext = &ReductionMode;
+		CreateInfo.minFilter = GetVKFilter(SamplerInfo.MinFilter);
+		CreateInfo.magFilter = GetVKFilter(SamplerInfo.MagFilter);
+		CreateInfo.mipmapMode = GetVKMipmapMode(SamplerInfo.MipmapMode);
+		CreateInfo.addressModeU = CreateInfo.addressModeV = CreateInfo.addressModeW = GetVKSamplerAddressMode(SamplerInfo.AddressMode);
+		CreateInfo.borderColor = GetVKBorderColor(SamplerInfo.BorderColor);
+		CreateInfo.compareEnable = false;
+		CreateInfo.compareOp = VK_COMPARE_OP_NEVER;
+		CreateInfo.maxLod = MipLevels;
+
+		VK_CHECK(vkCreateSampler(Device, &CreateInfo, nullptr, &SamplerHandle));
+	}
+
+	void DestroyObject()
+	{
+		vkDestroySampler(Device, SamplerHandle, nullptr);
+		SamplerHandle = 0;
+	}
+	~vulkan_texture_sampler()
+	{
+		DestroyObject();
+	}
+
+	VkDevice Device;
+	VkSampler SamplerHandle;
+};
+
 // TODO: Better image view handling
 struct vulkan_texture : public texture
 {
+	friend vulkan_command_list;
 	vulkan_texture() = default;
 	~vulkan_texture() override = default;
 
-	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear, barrier_state::undefined})
+	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 
@@ -303,24 +332,25 @@ struct vulkan_texture : public texture
 			DestroyStagingResource();
 
 		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
-		ReductionMode.reductionMode = GetVKSamplerReductionMode(Info.ReductionMode);
+		ReductionMode.reductionMode = GetVKSamplerReductionMode(Info.SamplerInfo.ReductionMode);
 
 		VkSamplerCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
 		CreateInfo.pNext = &ReductionMode;
-		CreateInfo.minFilter = GetVKFilter(Info.MinFilter);
-		CreateInfo.magFilter = GetVKFilter(Info.MagFilter);
-		CreateInfo.mipmapMode = GetVKMipmapMode(Info.MipmapMode);
-		CreateInfo.addressModeU = CreateInfo.addressModeV = CreateInfo.addressModeW = GetVKSamplerAddressMode(Info.AddressMode);
-		CreateInfo.borderColor = GetVKBorderColor(Info.BorderColor);
+		CreateInfo.minFilter = GetVKFilter(Info.SamplerInfo.MinFilter);
+		CreateInfo.magFilter = GetVKFilter(Info.SamplerInfo.MagFilter);
+		CreateInfo.mipmapMode = GetVKMipmapMode(Info.SamplerInfo.MipmapMode);
+		CreateInfo.addressModeU = CreateInfo.addressModeV = CreateInfo.addressModeW = GetVKSamplerAddressMode(Info.SamplerInfo.AddressMode);
+		CreateInfo.borderColor = GetVKBorderColor(Info.SamplerInfo.BorderColor);
 		CreateInfo.compareEnable = false;
 		CreateInfo.compareOp = VK_COMPARE_OP_NEVER;
 		CreateInfo.maxLod = Info.MipLevels;
 
-		VK_CHECK(vkCreateSampler(Gfx->Device, &CreateInfo, nullptr, &SamplerHandle));
+		VK_CHECK(vkCreateSampler(Device, &CreateInfo, nullptr, &SamplerHandle));
 	}
 
 	void Update(renderer_backend* Backend, void* Data) override
 	{
+#if 0
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		CommandQueue->Reset();
@@ -345,34 +375,25 @@ struct vulkan_texture : public texture
 		CommandQueue->ExecuteAndRemove(&CommandList);
 
 		VK_CHECK(vkDeviceWaitIdle(Device));
-	}
-
-	void Update(void* Data, command_list* GlobalPipeline) override
-	{
-		vulkan_command_list* PipelineContext = static_cast<vulkan_command_list*>(GlobalPipeline);
-		GlobalPipeline->SetImageBarriers({{this, AF_TransferWrite, barrier_state::transfer_dst, TEXTURE_MIPS_ALL, PSF_Transfer}});
-
-		void* CpuPtr;
-		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
-		vkUnmapMemory(Device, TempMemory);
-
-		VkBufferImageCopy Region = {};
-		Region.bufferOffset = 0;
-		Region.bufferRowLength = 0;
-		Region.bufferImageHeight = 0;
-		Region.imageSubresource.aspectMask = Aspect;
-		Region.imageSubresource.mipLevel = 0;
-		Region.imageSubresource.baseArrayLayer = 0;
-		Region.imageSubresource.layerCount = Info.Layers;
-		Region.imageOffset = {0, 0, 0};
-		Region.imageExtent = {u32(Width), u32(Height), u32(Depth)};
-		vkCmdCopyBufferToImage(PipelineContext->CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
+#else
+		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->Update(this, Data);
+		Cmd->EndOneTime();
+#endif
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override
 	{
-		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->ReadBack(this, Data);
+		Cmd->EndOneTime();
+	}
+
+	void Update(void* Data, command_list* Cmd) override
+	{
+		Cmd->Update(this, Data);
 	}
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
@@ -467,7 +488,7 @@ struct vulkan_texture : public texture
 		ViewCreateInfo.image = Handle;
 		ViewCreateInfo.subresourceRange.aspectMask = Aspect;
 		ViewCreateInfo.subresourceRange.layerCount = Info.Layers;
-		ViewCreateInfo.subresourceRange.levelCount = 1;//InputData.MipLevel;
+		ViewCreateInfo.subresourceRange.levelCount = 1;
 
 		if(InputData.Usage & image_flags::TF_CubeMap)
 		{
@@ -535,11 +556,9 @@ struct vulkan_texture : public texture
 			vkDestroyImageView(Device, View, nullptr);
 		}
 		vkDestroyImage(Device, Handle, nullptr);
-		vkDestroySampler(Device, SamplerHandle, nullptr);
 
 		Memory = 0;
 		Handle = 0;
-		SamplerHandle = 0;
 		Views.clear();
 	}
 
@@ -554,10 +573,10 @@ struct vulkan_texture : public texture
 
 	VkImage Handle;
 	VkDeviceMemory Memory;
-	VkSampler SamplerHandle;
 	VkImageAspectFlags Aspect;
 	std::vector<VkImageView> Views;
 
+	VkSampler SamplerHandle;
 	VmaAllocation Allocation;
 
 private:
@@ -576,7 +595,7 @@ CreateResource(renderer_backend* Backend)
 
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 	VmaAllocatorCreateInfo AllocatorInfo = {};
-	AllocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2;
+	AllocatorInfo.vulkanApiVersion = Gfx->HighestUsedVulkanVersion;
 	AllocatorInfo.instance = Gfx->Instance;
 	AllocatorInfo.physicalDevice = Gfx->PhysicalDevice;
 	AllocatorInfo.device = Gfx->Device;
@@ -588,6 +607,7 @@ buffer* vulkan_memory_heap::
 PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags)
 {
 	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, DataSize, Count, Flags);
+	u64 Hash = std::hash<buffer>()(*Buffer);
 	return Buffer;
 }
 
@@ -595,6 +615,7 @@ buffer* vulkan_memory_heap::
 PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags)
 {
 	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, Data, DataSize, Count, Flags);
+	u64 Hash = std::hash<buffer>()(*Buffer);
 	return Buffer;
 }
 
@@ -602,6 +623,7 @@ texture* vulkan_memory_heap::
 PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 {
 	texture* Texture = new vulkan_texture(Backend, this, DebugName, nullptr, Width, Height, Depth, InputData);
+	u64 Hash = std::hash<texture>()(*Texture);
 	return  Texture;
 }
 
@@ -609,5 +631,6 @@ texture* vulkan_memory_heap::
 PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 {
 	texture* Texture = new vulkan_texture(Backend, this, DebugName, Data, Width, Height, Depth, InputData);
+	u64 Hash = std::hash<texture>()(*Texture);
 	return  Texture;
 }

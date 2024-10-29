@@ -17,6 +17,9 @@ public:
 	texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
 	texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
 
+	void AllocateBuffer();
+	void AllocateTexture();
+
 	VmaAllocator Handle;
 };
 

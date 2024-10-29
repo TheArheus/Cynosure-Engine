@@ -10,9 +10,21 @@
 #include <D3D12MemAlloc.cpp>
 #endif
 
-#include <random>
-#include <string_view>
 
+// TODO: Implement render graph resource management
+// there are several resource types:
+//		Buffer:
+//			1) The buffer initialized with data type(only for the upload?) // data type
+//			2) The buffer initialized with array data type // buffer reference
+//			3) Empty buffer // buffer reference
+//		Texture:
+//			1) Without loading the initial data // texture reference
+//			2) And initialized with some kind of a texture // texture reference
+//		Think about resource life time:
+//			I guess, textures could live all the time. 
+//			Buffers could live all the time only if they were empty created. If they were created via data type, then they could live only one game cycle?
+//		Basically, there will be 2 types of lifecycle resources: transient(per render-pass or per-frame) and persistent(throughout of the program)
+//		Garbage Collector-like system for those resources(transient to be destroyed if several frames wasn't used and persistent to be destroyed at the end of the program)
 
 // TODO: Sky
 // TODO: Image Based Lighting
@@ -34,8 +46,8 @@
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
 	window Window(1280, 720, "3D Renderer");
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 	scene_manager SceneManager;
 
 	double TargetFrameRate = 1.0 / 60.0 * 1000.0; // Frames Per Milliseconds

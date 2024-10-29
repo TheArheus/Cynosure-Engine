@@ -17,6 +17,7 @@ struct directx12_buffer : public buffer
 
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
+#if 0
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_fence Fence(Gfx->Device.Get());
 
@@ -37,10 +38,17 @@ struct directx12_buffer : public buffer
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
+#else
+		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->Update(this, Data);
+		Cmd->EndOneTime();
+#endif
 	}
 
 	void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
 	{
+#if 0
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_fence Fence(Gfx->Device.Get());
 		assert(UpdateByteSize <= Size);
@@ -62,39 +70,17 @@ struct directx12_buffer : public buffer
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
-	}
-
-	void Update(void* Data, command_list* GlobalPipeline) override 
-	{
-		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
-		GlobalPipeline->SetBufferBarriers({{this, AF_TransferWrite, PSF_Transfer}});
-
-		void* CpuPtr;
-		TempHandle->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
-		TempHandle->Unmap(0, 0);
-
-		PipelineContext->CommandList->CopyResource(Handle.Get(), TempHandle.Get());
-	}
-
-	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override 
-	{
-		if(UpdateByteSize == 0) return;
-		assert(UpdateByteSize <= Size);
-
-		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
-		GlobalPipeline->SetBufferBarriers({{this, AF_TransferWrite, PSF_Transfer}});
-
-		void* CpuPtr;
-		TempHandle->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, UpdateByteSize);
-		TempHandle->Unmap(0, 0);
-
-		PipelineContext->CommandList->CopyBufferRegion(Handle.Get(), 0, TempHandle.Get(), 0, UpdateByteSize);
+#else
+		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->UpdateSize(this, Data, UpdateByteSize);
+		Cmd->EndOneTime();
+#endif
 	}
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
 	{
+#if 0
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_fence Fence(Gfx->Device.Get());
 
@@ -115,19 +101,27 @@ struct directx12_buffer : public buffer
 		TempHandle->Map(0, nullptr, &CpuPtr);
 		memcpy(Data, CpuPtr, UpdateByteSize);
 		TempHandle->Unmap(0, 0);
+#else
+		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->ReadBackSize(this, Data, UpdateByteSize);
+		Cmd->EndOneTime();
+#endif
 	}
 
-	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* GlobalPipeline) override 
+	void Update(void* Data, command_list* Cmd) override 
 	{
-		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
-		GlobalPipeline->SetBufferBarriers({{this, AF_TransferRead, PSF_Transfer}});
+		Cmd->Update(this, Data);
+	}
 
-		PipelineContext->CommandList->CopyBufferRegion(TempHandle.Get(), 0, Handle.Get(), 0, UpdateByteSize);
+	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* Cmd) override 
+	{
+		Cmd->UpdateSize(this, Data, UpdateByteSize);
+	}
 
-		void* CpuPtr;
-		TempHandle->Map(0, nullptr, &CpuPtr);
-		memcpy(Data, CpuPtr, UpdateByteSize);
-		TempHandle->Unmap(0, 0);
+	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* Cmd) override 
+	{
+		Cmd->ReadBackSize(this, Data, UpdateByteSize);
 	}
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage) override 
@@ -223,9 +217,53 @@ struct directx12_buffer : public buffer
 	ComPtr<D3D12MA::Allocation> Allocation;
 };
 
+struct directx12_texture_sampler : public texture_sampler
+{
+	directx12_texture_sampler() = default;
+	directx12_texture_sampler(renderer_backend* Backend, u32 MipLevels = 1, const utils::texture::sampler_info& SamplerInfo = {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear})
+	{
+		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
+		Device = Gfx->Device.Get();
+
+        D3D12_SAMPLER_DESC SamplerDesc = {};
+        SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(SamplerInfo.AddressMode);
+        SamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(SamplerInfo.MinFilter), GetDXFilter(SamplerInfo.MagFilter), GetDXMipmapMode(SamplerInfo.MipmapMode), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(SamplerInfo.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
+        SamplerDesc.MaxLOD = MipLevels;
+
+        switch(SamplerInfo.BorderColor)
+		{
+			case border_color::black_transparent:
+				SamplerDesc.BorderColor[0] = 0.0f;
+				SamplerDesc.BorderColor[1] = 0.0f;
+				SamplerDesc.BorderColor[2] = 0.0f;
+				SamplerDesc.BorderColor[3] = 0.0f;
+				break;
+			case border_color::black_opaque:
+				SamplerDesc.BorderColor[0] = 0.0f;
+				SamplerDesc.BorderColor[1] = 0.0f;
+				SamplerDesc.BorderColor[2] = 0.0f;
+				SamplerDesc.BorderColor[3] = 1.0f;
+				break;
+			case border_color::white_opaque:
+				SamplerDesc.BorderColor[0] = 1.0f;
+				SamplerDesc.BorderColor[1] = 1.0f;
+				SamplerDesc.BorderColor[2] = 1.0f;
+				SamplerDesc.BorderColor[3] = 1.0f;
+				break;
+		};
+
+		Sampler = Gfx->SamplersHeap.GetNextCpuHandle();
+        Gfx->Device->CreateSampler(&SamplerDesc, Sampler);
+	}
+
+	ID3D12Device6* Device;
+	D3D12_CPU_DESCRIPTOR_HANDLE Sampler = {};
+};
+
 struct directx12_texture : public texture
 {
-	directx12_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear, barrier_state::undefined})
+	directx12_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		Device = Gfx->Device.Get();
@@ -240,12 +278,12 @@ struct directx12_texture : public texture
 			DestroyStagingResource();
 
         D3D12_SAMPLER_DESC SamplerDesc = {};
-        SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(InputData.AddressMode);
+        SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(Info.SamplerInfo.AddressMode);
         SamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(Info.MinFilter), GetDXFilter(Info.MagFilter), GetDXMipmapMode(Info.MipmapMode), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(Info.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
-        SamplerDesc.MaxLOD = InputData.MipLevels;
+        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(Info.SamplerInfo.MinFilter), GetDXFilter(Info.SamplerInfo.MagFilter), GetDXMipmapMode(Info.SamplerInfo.MipmapMode), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(Info.SamplerInfo.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
+        SamplerDesc.MaxLOD = Info.MipLevels;
 
-        switch(InputData.BorderColor)
+        switch(Info.SamplerInfo.BorderColor)
 		{
 			case border_color::black_transparent:
 				SamplerDesc.BorderColor[0] = 0.0f;
@@ -275,6 +313,7 @@ struct directx12_texture : public texture
 
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
+#if 0
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_fence Fence(Gfx->Device.Get());
 
@@ -328,54 +367,22 @@ struct directx12_texture : public texture
 
 		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 		Fence.Flush(Gfx->CommandQueue);
+#else
+		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->Update(this, Data);
+		Cmd->EndOneTime();
+#endif
 	}
 
-	void Update(void* Data, command_list* GlobalPipeline) override 
+	void Update(void* Data, command_list* Cmd) override 
 	{
-		directx12_command_list* PipelineContext = static_cast<directx12_command_list*>(GlobalPipeline);
-		GlobalPipeline->SetImageBarriers({{this, AF_TransferWrite, barrier_state::transfer_dst, TEXTURE_MIPS_ALL, PSF_Transfer}});
-
-		D3D12_SUBRESOURCE_FOOTPRINT SubresourceDesc = {};
-		SubresourceDesc.Format   = GetDXFormat(Info.Format);
-		SubresourceDesc.Width    = Width;
-		SubresourceDesc.Height   = Height;
-		SubresourceDesc.Depth    = Depth;
-		SubresourceDesc.RowPitch = AlignUp(Width * GetPixelSize(Info.Format), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-
-		void* CpuPtr;
-		TempHandle->Map(0, nullptr, &CpuPtr);
-
-		for (u32 z = 0; z < Depth;  z++)
-		{
-			for (u32 y = 0; y < Height; y++)
-			{
-			  u8* Dst = (u8*)(CpuPtr) + y * SubresourceDesc.RowPitch + z * Height * SubresourceDesc.RowPitch;
-			  u8* Src = (u8*)(Data)   + y * Width * GetPixelSize(Info.Format) + z * Width * Height * GetPixelSize(Info.Format);
-			  memcpy(Dst, Src, GetPixelSize(Info.Format) * Width);
-			}
-		}
-
-		TempHandle->Unmap(0, 0);
-
-		D3D12_PLACED_SUBRESOURCE_FOOTPRINT TextureFootprint = {};
-		TextureFootprint.Footprint = SubresourceDesc;
-
-		D3D12_TEXTURE_COPY_LOCATION SrcCopyLocation = {};
-		SrcCopyLocation.pResource = TempHandle.Get();
-		SrcCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-		SrcCopyLocation.PlacedFootprint = TextureFootprint;
-
-		D3D12_TEXTURE_COPY_LOCATION DstCopyLocation = {};
-		DstCopyLocation.pResource = Handle.Get();
-		DstCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-		DstCopyLocation.SubresourceIndex = 0;
-
-		PipelineContext->CommandList->CopyTextureRegion(&DstCopyLocation, 0, 0, 0, 
-														&SrcCopyLocation, nullptr);
+		Cmd->Update(this, Data);
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override 
 	{
+#if 1
 		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_fence Fence(Gfx->Device.Get());
 
@@ -398,6 +405,12 @@ struct directx12_texture : public texture
 		TempHandle->Map(0, nullptr, &CpuPtr);
 		memcpy(Data, CpuPtr, Width * Height * Depth * GetPixelSize(Info.Format));
 		TempHandle->Unmap(0, 0);
+#else
+		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->ReadBack(this, Data);
+		Cmd->EndOneTime();
+#endif
 	}
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override 

@@ -8,6 +8,7 @@ struct shader_pass
 	bool HaveStaticStorage;
 };
 
+
 class global_graphics_context
 {
 	global_graphics_context(const global_graphics_context&) = delete;
@@ -15,6 +16,8 @@ class global_graphics_context
 
 	using setup_func = std::function<void()>;
 	using execute_func = std::function<void(command_list*, void*)>;
+
+	void ParseShaderParam(meta_descriptor* Descriptor, void* Parameters);
 
 public:
 	global_graphics_context() = default;
@@ -52,7 +55,7 @@ public:
 	texture_ref UseTextureArray(std::vector<texture*> ArrayOfTextures)
 	{
 		texture_ref NewRef;
-		NewRef.SubresourceIndex = TEXTURE_MIPS_ALL;
+		NewRef.SubresourceIndex = SUBRESOURCES_ALL;
 		NewRef.Handle = ArrayOfTextures;
 		return NewRef;
 	}
@@ -61,7 +64,7 @@ public:
 	texture_ref UseTexture(texture* Texture)
 	{
 		texture_ref NewRef;
-		NewRef.SubresourceIndex = TEXTURE_MIPS_ALL;
+		NewRef.SubresourceIndex = SUBRESOURCES_ALL;
 		NewRef.Handle.push_back(Texture);
 		return NewRef;
 	}
@@ -198,6 +201,7 @@ public:
 		}
 	}
 
+	general_context* GetOrCreateContext(shader_pass* Pass);
 	void SetContext(shader_pass* Pass, command_list* Context);
 
 	template<typename context_type, typename param_type>
@@ -210,6 +214,7 @@ public:
 
 	renderer_backend* Backend;
 	backend_type BackendType;
+	memory_heap* GlobalHeap;
 
 	std::unordered_map<std::type_index, general_context*> ContextMap;
 	std::unordered_map<std::type_index, shader_view_context*> GeneralShaderViewMap;

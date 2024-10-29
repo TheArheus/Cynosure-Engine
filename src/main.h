@@ -1,7 +1,8 @@
 // TODO: clean this file(and make better project architecture)
 // 
 
-#define TEXTURE_MIPS_ALL ~0u
+#define SUBRESOURCES_ALL ~0u
+#define introspect(...)
 
 #define  AMD_EXTENSIONS
 #define  NV_EXTENSIONS
@@ -25,7 +26,6 @@
 #include <imgui/imgui_tables.cpp>
 #include <imgui/imgui_widgets.cpp>
 
-#include "reflection.hpp"
 
 struct draw_indexed_indirect_command
 {

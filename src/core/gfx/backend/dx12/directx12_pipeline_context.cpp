@@ -145,28 +145,213 @@ Begin()
 }
 
 void directx12_command_list::
-End()
+PlaceEndOfFrameBarriers()
 {
-	BuffersToCommon.clear();
-	TexturesToCommon.clear();
-	Gfx->CommandQueue->Execute(CommandList);
-
-	HRESULT DeviceResult = Gfx->Device->GetDeviceRemovedReason();
-	if(!SUCCEEDED(DeviceResult))
+	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers;
+	if(Gfx->SwapchainCurrentState[BackBufferIndex] != D3D12_RESOURCE_STATE_COMMON)
 	{
-		printf("Device removed reason: %#08x\n", DeviceResult);
+		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[BackBufferIndex].Get(), Gfx->SwapchainCurrentState[BackBufferIndex], D3D12_RESOURCE_STATE_COMMON));
+		Gfx->SwapchainCurrentState[BackBufferIndex] = D3D12_RESOURCE_STATE_COMMON;
 	}
 
+#ifdef CE_DEBUG
+	// TODO: This will be needed only when PIX capture will be acquired
+	{
+		for(u32 Idx = 0; Idx < BuffersToCommon.size(); ++Idx)
+		{
+			directx12_buffer* Resource = static_cast<directx12_buffer*>(*std::next(BuffersToCommon.begin(), Idx));
+
+			if(GetDXBufferLayout(Resource->CurrentLayout, Resource->PrevShader) == D3D12_RESOURCE_STATE_COMMON) continue;
+			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXBufferLayout(Resource->CurrentLayout, Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
+
+			Resource->CurrentLayout = 0;
+			Resource->PrevShader = 0;
+		}
+
+		for(u32 Idx = 0; Idx < TexturesToCommon.size(); ++Idx)
+		{
+			directx12_texture* Resource = static_cast<directx12_texture*>(*std::next(TexturesToCommon.begin(), Idx));
+
+			if(GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader) == D3D12_RESOURCE_STATE_COMMON) continue;
+
+			bool AreAllSubresourcesInSameState = true;
+			for(u32 MipIdx = 1; MipIdx < Resource->Info.MipLevels; ++MipIdx)
+			{
+				if(Resource->CurrentLayout[0] != Resource->CurrentLayout[MipIdx])
+					AreAllSubresourcesInSameState = false;
+			}
+
+			if(AreAllSubresourcesInSameState)
+			{
+				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
+			}
+			else
+			{
+				for(u32 MipIdx = 0; MipIdx < Resource->Info.MipLevels; ++MipIdx)
+				{
+					Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[MipIdx], Resource->CurrentLayout[MipIdx], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON, MipIdx));
+				}
+			}
+
+			std::fill(Resource->CurrentLayout.begin(), Resource->CurrentLayout.end(), 0);
+			std::fill(Resource->CurrentState.begin(), Resource->CurrentState.end(), barrier_state::general);
+			Resource->PrevShader = 0;
+		}
+	}
+#endif
+	if(Barriers.size())
+		CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
+
+	BuffersToCommon.clear();
+	TexturesToCommon.clear();
+}
+
+void directx12_command_list::
+End()
+{
+	PlaceEndOfFrameBarriers();
+	Gfx->CommandQueue->Execute(CommandList);
 	Fence.Flush(Gfx->CommandQueue);
 }
 
 void directx12_command_list::
 EndOneTime()
 {
-	BuffersToCommon.clear();
-	TexturesToCommon.clear();
-	Gfx->CommandQueue->Execute(CommandList);
+	PlaceEndOfFrameBarriers();
+	Gfx->CommandQueue->ExecuteAndRemove(CommandList);
 	Fence.Flush(Gfx->CommandQueue);
+}
+
+void directx12_command_list::
+Present()
+{
+	PlaceEndOfFrameBarriers();
+	Gfx->CommandQueue->Execute(CommandList);
+
+	HRESULT DeviceResult = Gfx->Device->GetDeviceRemovedReason();
+	if(!SUCCEEDED(DeviceResult))
+	{
+		printf("Device removed reason: %#08x\n", DeviceResult);
+
+		ComPtr<ID3D12DeviceRemovedExtendedData1> pDred;
+		Gfx->Device->QueryInterface(IID_PPV_ARGS(&pDred));
+		D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 DredAutoBreadcrumbsOutput;
+		D3D12_DRED_PAGE_FAULT_OUTPUT1 DredPageFaultOutput;
+		pDred->GetAutoBreadcrumbsOutput1(&DredAutoBreadcrumbsOutput);
+		pDred->GetPageFaultAllocationOutput1(&DredPageFaultOutput);
+
+		int fin = 5;
+	}
+
+	Fence.Flush(Gfx->CommandQueue);
+
+	Gfx->SwapChain->Present(0, 0);
+	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
+}
+
+void directx12_command_list::
+Update(buffer* BufferToUpdate, void* Data)
+{
+	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToUpdate);
+	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
+
+	void* CpuPtr = nullptr;
+	Buffer->TempHandle->Map(0, nullptr, &CpuPtr);
+	memcpy(CpuPtr, Data, Buffer->Size);
+	Buffer->TempHandle->Unmap(0, 0);
+
+	CommandList->CopyResource(Buffer->Handle.Get(), Buffer->TempHandle.Get());
+}
+
+void directx12_command_list::
+UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
+{
+	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToUpdate);
+
+	if(UpdateByteSize == 0) return;
+	assert(UpdateByteSize <= Buffer->Size);
+
+	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
+
+	void* CpuPtr = nullptr;
+	Buffer->TempHandle->Map(0, nullptr, &CpuPtr);
+	memcpy(CpuPtr, Data, UpdateByteSize);
+	Buffer->TempHandle->Unmap(0, 0);
+
+	CommandList->CopyBufferRegion(Buffer->Handle.Get(), 0, Buffer->TempHandle.Get(), 0, UpdateByteSize);
+}
+
+void directx12_command_list::
+ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
+{
+	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
+	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
+
+	CommandList->CopyBufferRegion(Buffer->TempHandle.Get(), 0, Buffer->Handle.Get(), 0, UpdateByteSize);
+
+	void* CpuPtr = nullptr;
+	Buffer->TempHandle->Map(0, nullptr, &CpuPtr);
+	memcpy(Data, CpuPtr, UpdateByteSize);
+	Buffer->TempHandle->Unmap(0, 0);
+}
+
+void directx12_command_list::
+Update(texture* TextureToUpdate, void* Data)
+{
+	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToUpdate);
+	SetImageBarriers({{TextureToUpdate, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
+
+	D3D12_SUBRESOURCE_FOOTPRINT SubresourceDesc = {};
+	SubresourceDesc.Format   = GetDXFormat(Texture->Info.Format);
+	SubresourceDesc.Width    = Texture->Width;
+	SubresourceDesc.Height   = Texture->Height;
+	SubresourceDesc.Depth    = Texture->Depth;
+	SubresourceDesc.RowPitch = AlignUp(Texture->Width * GetPixelSize(Texture->Info.Format), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+
+	void* CpuPtr = nullptr;
+	Texture->TempHandle->Map(0, nullptr, &CpuPtr);
+
+	for (u32 z = 0; z < Texture->Depth;  z++)
+	{
+		for (u32 y = 0; y < Texture->Height; y++)
+		{
+		  u8* Dst = (u8*)(CpuPtr) + y * SubresourceDesc.RowPitch + z * Texture->Height * SubresourceDesc.RowPitch;
+		  u8* Src = (u8*)(Data)   + y * Texture->Width * GetPixelSize(Texture->Info.Format) + z * Texture->Width * Texture->Height * GetPixelSize(Texture->Info.Format);
+		  memcpy(Dst, Src, GetPixelSize(Texture->Info.Format) * Texture->Width);
+		}
+	}
+
+	Texture->TempHandle->Unmap(0, 0);
+
+	D3D12_PLACED_SUBRESOURCE_FOOTPRINT TextureFootprint = {};
+	TextureFootprint.Footprint = SubresourceDesc;
+
+	D3D12_TEXTURE_COPY_LOCATION SrcCopyLocation = {};
+	SrcCopyLocation.pResource = Texture->TempHandle.Get();
+	SrcCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+	SrcCopyLocation.PlacedFootprint = TextureFootprint;
+
+	D3D12_TEXTURE_COPY_LOCATION DstCopyLocation = {};
+	DstCopyLocation.pResource = Texture->Handle.Get();
+	DstCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+	DstCopyLocation.SubresourceIndex = 0;
+
+	CommandList->CopyTextureRegion(&DstCopyLocation, 0, 0, 0, 
+								   &SrcCopyLocation, nullptr);
+}
+
+void directx12_command_list::
+ReadBack(texture* TextureToRead, void* Data)
+{
+	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToRead);
+	SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
+
+	CommandList->CopyResource(Texture->TempHandle.Get(), Texture->Handle.Get());
+
+	void* CpuPtr = nullptr;
+	Texture->TempHandle->Map(0, nullptr, &CpuPtr);
+	memcpy(Data, CpuPtr, Texture->Width * Texture->Height * Texture->Depth * GetPixelSize(Texture->Info.Format));
+	Texture->TempHandle->Unmap(0, 0);
 }
 
 void directx12_command_list::
@@ -243,88 +428,6 @@ EmplaceColorTarget(texture* RenderTexture)
 }
 
 void directx12_command_list::
-Present()
-{
-	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers = 
-	{
-		CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[BackBufferIndex].Get(), Gfx->SwapchainCurrentState[BackBufferIndex], D3D12_RESOURCE_STATE_COMMON)
-	};
-	Gfx->SwapchainCurrentState[BackBufferIndex] = D3D12_RESOURCE_STATE_COMMON;
-
-#ifdef CE_DEBUG
-	// TODO: This will be needed only when PIX capture will be acquired
-	{
-		for(u32 Idx = 0; Idx < BuffersToCommon.size(); ++Idx)
-		{
-			directx12_buffer* Resource = static_cast<directx12_buffer*>(*std::next(BuffersToCommon.begin(), Idx));
-
-			if(GetDXBufferLayout(Resource->CurrentLayout, Resource->PrevShader) == D3D12_RESOURCE_STATE_COMMON) continue;
-			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXBufferLayout(Resource->CurrentLayout, Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
-
-			Resource->CurrentLayout = 0;
-			Resource->PrevShader = 0;
-		}
-
-		for(u32 Idx = 0; Idx < TexturesToCommon.size(); ++Idx)
-		{
-			directx12_texture* Resource = static_cast<directx12_texture*>(*std::next(TexturesToCommon.begin(), Idx));
-
-			if(GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader) == D3D12_RESOURCE_STATE_COMMON) continue;
-
-			bool AreAllSubresourcesInSameState = true;
-			for(u32 MipIdx = 1; MipIdx < Resource->Info.MipLevels; ++MipIdx)
-			{
-				if(Resource->CurrentLayout[0] != Resource->CurrentLayout[MipIdx])
-					AreAllSubresourcesInSameState = false;
-			}
-
-			if(AreAllSubresourcesInSameState)
-			{
-				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
-			}
-			else
-			{
-				for(u32 MipIdx = 0; MipIdx < Resource->Info.MipLevels; ++MipIdx)
-				{
-					Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[MipIdx], Resource->CurrentLayout[MipIdx], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON, MipIdx));
-				}
-			}
-
-			std::fill(Resource->CurrentLayout.begin(), Resource->CurrentLayout.end(), 0);
-			std::fill(Resource->CurrentState.begin(), Resource->CurrentState.end(), barrier_state::general);
-			Resource->PrevShader = 0;
-		}
-	}
-#endif
-	if(Barriers.size())
-		CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
-
-	BuffersToCommon.clear();
-	TexturesToCommon.clear();
-	Gfx->CommandQueue->Execute(CommandList);
-
-	HRESULT DeviceResult = Gfx->Device->GetDeviceRemovedReason();
-	if(!SUCCEEDED(DeviceResult))
-	{
-		printf("Device removed reason: %#08x\n", DeviceResult);
-
-		ComPtr<ID3D12DeviceRemovedExtendedData1> pDred;
-		Gfx->Device->QueryInterface(IID_PPV_ARGS(&pDred));
-		D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 DredAutoBreadcrumbsOutput;
-		D3D12_DRED_PAGE_FAULT_OUTPUT1 DredPageFaultOutput;
-		pDred->GetAutoBreadcrumbsOutput1(&DredAutoBreadcrumbsOutput);
-		pDred->GetPageFaultAllocationOutput1(&DredPageFaultOutput);
-
-		int fin = 5;
-	}
-
-	Fence.Flush(Gfx->CommandQueue);
-
-	Gfx->SwapChain->Present(0, 0);
-	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
-}
-
-void directx12_command_list::
 SetColorTarget(const std::vector<texture*>& ColorAttachments, vec4 Clear)
 {
 	assert(CurrentContext->Type == pass_type::graphics);
@@ -348,7 +451,7 @@ SetColorTarget(const std::vector<texture*>& ColorAttachments, vec4 Clear)
 		{
 			texture* ColorTarget = ColorAttachments[i];
 			directx12_texture* Attachment = static_cast<directx12_texture*>(ColorTarget);
-			SetImageBarriers({{ColorTarget, AF_ColorAttachmentWrite, barrier_state::color_attachment, TEXTURE_MIPS_ALL, PSF_ColorAttachment}});
+			SetImageBarriers({{ColorTarget, AF_ColorAttachmentWrite, barrier_state::color_attachment, SUBRESOURCES_ALL, PSF_ColorAttachment}});
 			TexturesToCommon.insert(Attachment);
 			ColorTargets.push_back(Attachment->RenderTargetViews[0]);
 			if(Context->LoadOp == load_op::clear)
@@ -368,7 +471,7 @@ SetDepthTarget(texture* DepthAttachment, vec2 Clear)
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
 
 	directx12_texture* Attachment = static_cast<directx12_texture*>(DepthAttachment);
-	SetImageBarriers({{DepthAttachment, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, TEXTURE_MIPS_ALL, PSF_EarlyFragment}});
+	SetImageBarriers({{DepthAttachment, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, PSF_EarlyFragment}});
 	TexturesToCommon.insert(Attachment);
 
 	DepthStencilTarget = Attachment->DepthStencilViews[0];
@@ -417,7 +520,7 @@ BindShaderParameters(void* Data)
 
     auto DX12BindTexture = [&](texture_ref& TextureToBind, const descriptor_param& Parameter, u32 LayoutIdx) 
 	{
-        u32 MipToUse = TextureToBind.SubresourceIndex == TEXTURE_MIPS_ALL ? 0 : TextureToBind.SubresourceIndex;
+        u32 MipToUse = TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex;
         Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse, LayoutIdx);
 
         for (texture* CurrentTexture : TextureToBind.Handle) 
@@ -484,9 +587,10 @@ BindShaderParameters(void* Data)
         const auto& Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
         if (Parameter.Type == resource_type::buffer) 
 		{
-            DX12BindBuffer(*(buffer**)It, Parameter);
+			buffer* BufferToBind = *(buffer**)It;
+            DX12BindBuffer(BufferToBind, Parameter);
+            ParamIdx += BufferToBind->WithCounter;
             It = (void*)((u8*)It + sizeof(buffer*));
-            ParamIdx += (*(buffer**)It)->WithCounter;
         } 
 		else if (Parameter.Type == resource_type::texture_sampler) 
 		{
@@ -650,7 +754,7 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 		Texture->PrevShader = TextureNextShader;
 
 		u32 MipToUse = std::get<3>(Data);
-		if(MipToUse == TEXTURE_MIPS_ALL)
+		if(MipToUse == SUBRESOURCES_ALL)
 		{
 			bool AreAllSubresourcesInSameState = true;
 			for(u32 MipIdx = 1; MipIdx < Texture->Info.MipLevels; ++MipIdx)
@@ -815,6 +919,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
 			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
+			StaticStorageCount++;
 			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
 				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];
@@ -836,6 +941,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
 			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
+			ParamCount++;
 			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
 				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];
@@ -970,6 +1076,7 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
 			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
+			StaticStorageCount++;
 			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
 				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];
@@ -992,6 +1099,8 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
 			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
+			ParamCount++;
+
 			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
 				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];

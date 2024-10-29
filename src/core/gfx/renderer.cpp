@@ -32,7 +32,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
 	TextureInputData.MipLevels = GetImageMipLevels(VOXEL_SIZE, VOXEL_SIZE);
-	TextureInputData.AddressMode = sampler_address_mode::clamp_to_border;
+	TextureInputData.SamplerInfo.AddressMode = sampler_address_mode::clamp_to_border;
 	TextureInputData.UseStagingBuffer = true;
 	VoxelGridTarget   = PushTexture("VoxelGridTarget", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
 
@@ -42,7 +42,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.UseStagingBuffer = false;
 	HdrColorTarget = PushTexture("HdrColorTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TextureInputData.MipLevels = 6;
-	TextureInputData.AddressMode = sampler_address_mode::clamp_to_border;
+	TextureInputData.SamplerInfo.AddressMode = sampler_address_mode::clamp_to_border;
 	BrightTarget   = PushTexture("BrightTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TempBrTarget   = PushTexture("TempBrTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 
@@ -170,10 +170,10 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Format    = image_format::R32_SFLOAT;
 	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc | image_flags::TF_ColorTexture;
 	TextureInputData.MipLevels = GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height));
-	TextureInputData.ReductionMode = sampler_reduction_mode::max;
-	TextureInputData.MinFilter = filter::nearest;
-	TextureInputData.MagFilter = filter::nearest;
-	TextureInputData.MipmapMode = mipmap_mode::nearest;
+	TextureInputData.SamplerInfo.ReductionMode = sampler_reduction_mode::max;
+	TextureInputData.SamplerInfo.MinFilter = filter::nearest;
+	TextureInputData.SamplerInfo.MagFilter = filter::nearest;
+	TextureInputData.SamplerInfo.MipmapMode = mipmap_mode::nearest;
 	DepthPyramid = PushTexture("DepthPyramid", PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height), 1, TextureInputData);
 
 	GBuffer.resize(GBUFFER_COUNT);
@@ -183,7 +183,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Layers    = 1;
 	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc;
 	TextureInputData.Format    = image_format::R16G16B16A16_SNORM;
-	GBuffer[0] = PushTexture("GBuffer_VertexNormals",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Vertex   Normals
+	GBuffer[0] = PushTexture("GBuffer_VertexNormals",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData);   // Vertex   Normals
 	GBuffer[1] = PushTexture("GBuffer_FragmentNormals",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Fragment Normals
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	GBuffer[2] = PushTexture("GBuffer_Diffuse",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Diffuse Color
@@ -265,42 +265,53 @@ operator=(global_graphics_context&& Oth) noexcept
 	return *this;
 }
 
+general_context* global_graphics_context::
+GetOrCreateContext(shader_pass* Pass)
+{
+    std::type_index ContextType = PassToContext.at(Pass);
+    
+    if (auto it = ContextMap.find(ContextType); it != ContextMap.end())
+    {
+        return it->second;
+    }
+
+    shader_view_context* ContextView = GeneralShaderViewMap[ContextType];
+    general_context* NewContext = nullptr;
+
+    if (Pass->Type == pass_type::graphics)
+    {
+        auto* GraphicsContextView = static_cast<shader_graphics_view_context*>(ContextView);
+        NewContext = CreateRenderContext(
+            GraphicsContextView->LoadOp,
+            GraphicsContextView->StoreOp,
+            GraphicsContextView->Shaders,
+            GraphicsContextView->SetupAttachmentDescription(),
+            GraphicsContextView->SetupPipelineState(),
+            GraphicsContextView->Defines
+        );
+    }
+    else if (Pass->Type == pass_type::compute)
+    {
+        auto* ComputeContextView = static_cast<shader_compute_view_context*>(ContextView);
+        NewContext = CreateComputeContext(ComputeContextView->Shader, ComputeContextView->Defines);
+    }
+
+    ContextMap[ContextType] = NewContext;
+    return NewContext;
+}
+
 void global_graphics_context::
 SetContext(shader_pass* Pass, command_list* Context)
 {
-	std::type_index ContextType = PassToContext.at(Pass);
-	shader_view_context* ContextView = GeneralShaderViewMap[ContextType];
-
-	auto FindIt = ContextMap.find(ContextType);
-
-	if(FindIt != ContextMap.end())
-	{
-		CurrentContext = FindIt->second;
-		if(Pass->Type == pass_type::graphics)
-		{
-			Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
-		}
-		else if(Pass->Type == pass_type::compute)
-		{
-			Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
-		}
-	}
-	else
-	{
-		if(Pass->Type == pass_type::graphics)
-		{
-			shader_graphics_view_context* NewContextView = static_cast<shader_graphics_view_context*>(ContextView);
-			CurrentContext = CreateRenderContext(NewContextView->LoadOp, NewContextView->StoreOp, NewContextView->Shaders, NewContextView->SetupAttachmentDescription(), NewContextView->SetupPipelineState(), NewContextView->Defines);
-			Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
-		}
-		else if(Pass->Type == pass_type::compute)
-		{
-			shader_compute_view_context* NewContextView = static_cast<shader_compute_view_context*>(ContextView);
-			CurrentContext = CreateComputeContext(NewContextView->Shader, NewContextView->Defines);
-			Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
-		}
-		ContextMap[ContextType] = CurrentContext;
-	}
+    CurrentContext = GetOrCreateContext(Pass);
+    if (Pass->Type == pass_type::graphics)
+    {
+        Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
+    }
+    else if (Pass->Type == pass_type::compute)
+    {
+        Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
+    }
 }
 
 template<typename context_type, typename param_type>
@@ -313,6 +324,7 @@ AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Ex
 	NewPass->HaveStaticStorage = has_static_storage_type<context_type>::value;
 	
 	meta_descriptor* ReflectionData = reflect<context_type>::Get();
+	ParseShaderParam(ReflectionData, (void*)&Parameters);
 
 	NewPass->Parameters = PushStructConstruct(param_type);
 	*((param_type*)NewPass->Parameters) = Parameters;
@@ -353,6 +365,26 @@ AddTransferPass(std::string Name, execute_func Exec)
 	return NewPass;
 }
 
+void global_graphics_context::
+ParseShaderParam(meta_descriptor* Descriptor, void* Parameters)
+{
+	void* ParametersToParse = Parameters;
+	for(int ParamIdx = 0; ParamIdx < Descriptor->Size; ParamIdx++)
+	{
+		member_definition* Member = Descriptor->Name + ParamIdx;
+		void* Data = (void*)((uptr)Parameters + Member->Offset);
+		if(Member->Type == meta_type::buffer_ref)
+		{
+		}
+		else if(Member->Type == meta_type::texture_ref)
+		{
+		}
+		else
+		{
+		}
+	}
+}
+
 // TODO: Prepass and postpass barriers (postpass barrier is for when the resource is not fully in the same state, for example, after mip generation etc)
 // TODO: Command parallelization maybe
 void global_graphics_context::
@@ -363,30 +395,7 @@ Compile()
 	{
 		if(Pass->Type == pass_type::transfer) continue;
 
-		std::type_index ContextType = PassToContext.at(Pass);
-		shader_view_context* ContextView = GeneralShaderViewMap[ContextType];
-
-		auto FindIt = ContextMap.find(ContextType);
-
-		general_context* UseContext = nullptr;
-		if(FindIt != ContextMap.end())
-		{
-			UseContext = FindIt->second;
-		}
-		else
-		{
-			if(Pass->Type == pass_type::graphics)
-			{
-				shader_graphics_view_context* NewContextView = static_cast<shader_graphics_view_context*>(ContextView);
-				UseContext = CreateRenderContext(NewContextView->LoadOp, NewContextView->StoreOp, NewContextView->Shaders, NewContextView->SetupAttachmentDescription(), NewContextView->SetupPipelineState(), NewContextView->Defines);
-			}
-			else if(Pass->Type == pass_type::compute)
-			{
-				shader_compute_view_context* NewContextView = static_cast<shader_compute_view_context*>(ContextView);
-				UseContext = CreateComputeContext(NewContextView->Shader, NewContextView->Defines);
-			}
-			ContextMap[ContextType] = UseContext;
-		}
+		general_context* UseContext = GetOrCreateContext(Pass);
 
 		if(Pass->HaveStaticStorage)
 		{

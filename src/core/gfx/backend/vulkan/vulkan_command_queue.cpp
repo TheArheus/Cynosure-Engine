@@ -20,10 +20,10 @@ DestroyObject()
 		Idx < CommandLists.size();
 		++Idx)
 	{
-		VkCommandBuffer* CommandList = CommandLists[Idx];
-		Execute(CommandList, ReleaseSemaphore, AcquireSemaphore);
-		CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), CommandList), CommandLists.end());
+		Execute(CommandLists[Idx], ReleaseSemaphore, AcquireSemaphore);
 	}
+	vkFreeCommandBuffers(Device, CommandAlloc, CommandLists.size(), CommandList);
+	CommandLists.clear();
 #endif
 	if(CommandAlloc)
 	{
@@ -138,6 +138,7 @@ void vulkan_command_queue::
 ExecuteAndRemove(VkCommandBuffer* CommandList)
 {
 	Execute(CommandList);
+	vkFreeCommandBuffers(Device, CommandAlloc, 1, CommandList);
 	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
 }
 
@@ -145,5 +146,6 @@ void vulkan_command_queue::
 ExecuteAndRemove(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
 {
 	Execute(CommandList, ReleaseSemaphore, AcquireSemaphore);
+	vkFreeCommandBuffers(Device, CommandAlloc, 1, CommandList);
 	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
 }

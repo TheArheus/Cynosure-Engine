@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <memory.h>
 
+// TODO: maybe move to the llvm
+
 struct struct_name
 {
 	std::string Template;
@@ -20,7 +22,7 @@ struct template_args
 	std::string TemplateArgs;
 	std::string ArgumentPass;
 
-    struct Hash
+    struct hash
     {
         std::size_t operator()(const template_args& Oth) const
         {
@@ -493,12 +495,31 @@ ParseMember(tokenizer* Tokenizer, token StructTypeToken, token MemberTypeToken)
 				}
 				std::string MemberTypeName(MemberTypeToken.Text, MemberTypeToken.TextLength);
 				size_t pos = 0;
-				while ((pos = MemberTypeName.find("::", pos)) != std::string::npos) {
+				while ((pos = MemberTypeName.find("::", pos)) != std::string::npos)
+				{
 					MemberTypeName.replace(pos, 2, "__");
 				}
 				FullMemberTypeName += MemberTypeName;
+				if(FullMemberTypeName == "vec2")
+					FullMemberTypeName = "v2_float";
+				else if(FullMemberTypeName == "vec3")
+					FullMemberTypeName = "v3_float";
+				else if(FullMemberTypeName == "vec4")
+					FullMemberTypeName = "v4_float";
+				else if(FullMemberTypeName == "ivec2") 
+					FullMemberTypeName = "v2_i32";
+				else if(FullMemberTypeName == "ivec3") 
+					FullMemberTypeName = "v3_i32";
+				else if(FullMemberTypeName == "ivec4") 
+					FullMemberTypeName = "v4_i32";
+				else if(FullMemberTypeName == "uvec2") 
+					FullMemberTypeName = "v2_u32";
+				else if(FullMemberTypeName == "uvec3") 
+					FullMemberTypeName = "v3_u32";
+				else if(FullMemberTypeName == "uvec4") 
+					FullMemberTypeName = "v4_u32";
 
-                printf("   {%s, MetaType__%.*s, \"%.*s\", sizeof(%.*s), offsetof(%.*s, %.*s)},\n",
+                printf("   {%s, meta_type::%.*s, \"%.*s\", sizeof(%.*s), offsetof(%.*s, %.*s)},\n",
                        IsPointer ? "MetaMemberFlag_IsPointer" : "0",
                        FullMemberTypeName.length(), FullMemberTypeName.c_str(),
                        MemberTypeToken.TextLength, MemberTypeToken.Text,
@@ -506,7 +527,7 @@ ParseMember(tokenizer* Tokenizer, token StructTypeToken, token MemberTypeToken)
                        FullStructTypeName.length(), FullStructTypeName.c_str(),
                        Token.TextLength, Token.Text);                
 
-				EnumNames.insert("MetaType__" + FullMemberTypeName);
+				EnumNames.insert(FullMemberTypeName);
             } break;
 
             case Token_Semicolon:
@@ -687,10 +708,31 @@ int main(int ArgCount, char** Args)
 		const bool& IsWithTemplate   = TypeArrayName.second.first;
 		const template_args& Templ   = TypeArrayName.second.second;
 
+#if 0
+		if(TypeName == "vec2")
+			TypeName = "v2<float>";
+		else if(TypeName == "vec3")
+			TypeName = "v3<float>";
+		else if(TypeName == "vec4")
+			TypeName = "v4<float>";
+		else if(TypeName == "ivec2") 
+			TypeName = "v2<int32_t>";
+		else if(TypeName == "ivec3") 
+			TypeName = "v3<int32_t>";
+		else if(TypeName == "ivec4") 
+			TypeName = "v4<int32_t>";
+		else if(TypeName == "uvec2") 
+			TypeName = "v2<uint32_t>";
+		else if(TypeName == "uvec3") 
+			TypeName = "v3<uint32_t>";
+		else if(TypeName == "uvec4") 
+			TypeName = "v4<uint32_t>";
+#endif
+
 		printf("template<%.*s>\nstruct reflect<%.*s>\n{\n\tstatic meta_descriptor* Get()\n\t{\n\t\tstatic meta_descriptor Meta{%.*s, sizeof(%.*s)/sizeof(%.*s[0])};\n\t\treturn &Meta;\n\t}\n};\n", Templ.TemplateArgs.length(), Templ.TemplateArgs.c_str(), (TypeName + Templ.ArgumentPass).length(), (TypeName + Templ.ArgumentPass).c_str(), ArrayName.length(), ArrayName.c_str(), ArrayName.length(), ArrayName.c_str(), ArrayName.length(), ArrayName.c_str());
 	}
 
-	printf("enum meta_type\n{\n");
+	printf("enum class meta_type\n{\n");
 	for (const auto& MemberName : EnumNames) 
 	{
 		printf("\t%s,\n", MemberName.c_str());

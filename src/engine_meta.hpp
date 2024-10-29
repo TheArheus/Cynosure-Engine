@@ -1,19 +1,19 @@
 #pragma once
 
 // NOTE: this enum is also generated
-enum meta_type
+enum class meta_type
 {
-        MetaType__buffer_ref,
-        MetaType__global_world_data,
-        MetaType__indirect_draw_indexed_command,
-        MetaType__light_source,
-        MetaType__mesh__offset,
-        MetaType__mesh_comp_culling_common_input,
-        MetaType__mesh_draw_command,
-        MetaType__texture_ref,
-        MetaType__u32,
-        MetaType__vec2,
-        MetaType__vec4,
+        buffer_ref,
+        global_world_data,
+        indirect_draw_indexed_command,
+        light_source,
+        mesh__offset,
+        mesh_comp_culling_common_input,
+        mesh_draw_command,
+        texture_ref,
+        u32,
+        v2_float,
+        v4_float,
 };
 
 struct member_definition
