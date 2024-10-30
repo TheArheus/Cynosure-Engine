@@ -540,7 +540,25 @@ void vulkan_command_list::
 ReadBack(texture* TextureToRead, void* Data)
 {
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureToRead);
-	//SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
+	SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
+
+	VkBufferImageCopy Region = {};
+	Region.bufferOffset = 0;
+	Region.bufferRowLength = 0;
+	Region.bufferImageHeight = 0;
+	Region.imageSubresource.aspectMask = Texture->Aspect;
+	Region.imageSubresource.mipLevel = 0;
+	Region.imageSubresource.baseArrayLayer = 0;
+	Region.imageSubresource.layerCount = Texture->Info.Layers;
+	Region.imageOffset = {0, 0, 0};
+	Region.imageExtent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
+
+	vkCmdCopyImageToBuffer(CommandList, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Texture->Temp, 1, &Region);
+
+	void* CpuPtr;
+	vkMapMemory(Device, Texture->TempMemory, 0, Texture->Size, 0, &CpuPtr);
+	memcpy(Data, CpuPtr, Texture->Size);
+	vkUnmapMemory(Device, Texture->TempMemory);
 }
 
 void vulkan_command_list::
@@ -678,10 +696,10 @@ BindShaderParameters(void* Data)
 			BuffersToCommon.insert(BufferToBind);
 			AttachmentBufferBarriers.push_back({BufferToBind, Parameter.AspectMask, Parameter.ShaderToUse});
 
-			It = (void*)((u8*)It + sizeof(buffer*));
-
 			ParamIdx += BufferToBind->WithCounter;
 			ParamCount += BufferToBind->WithCounter;
+
+			It = (void*)((u8*)It + sizeof(buffer*));
 		}
 		else if(Parameter.Type == resource_type::texture_sampler)
 		{

@@ -172,8 +172,6 @@ PlaceEndOfFrameBarriers()
 		{
 			directx12_texture* Resource = static_cast<directx12_texture*>(*std::next(TexturesToCommon.begin(), Idx));
 
-			if(GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader) == D3D12_RESOURCE_STATE_COMMON) continue;
-
 			bool AreAllSubresourcesInSameState = true;
 			for(u32 MipIdx = 1; MipIdx < Resource->Info.MipLevels; ++MipIdx)
 			{
@@ -183,12 +181,15 @@ PlaceEndOfFrameBarriers()
 
 			if(AreAllSubresourcesInSameState)
 			{
+				if(GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader) != D3D12_RESOURCE_STATE_COMMON)
 				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
+
 			}
 			else
 			{
 				for(u32 MipIdx = 0; MipIdx < Resource->Info.MipLevels; ++MipIdx)
 				{
+					if(GetDXImageLayout(Resource->CurrentState[MipIdx], Resource->CurrentLayout[MipIdx], Resource->PrevShader) != D3D12_RESOURCE_STATE_COMMON)
 					Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[MipIdx], Resource->CurrentLayout[MipIdx], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON, MipIdx));
 				}
 			}
@@ -199,8 +200,13 @@ PlaceEndOfFrameBarriers()
 		}
 	}
 #endif
+#if 0
 	if(Barriers.size())
 		CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
+#else
+	for(int i = 0; i < Barriers.size(); i++)
+		CommandList->ResourceBarrier(1, &Barriers[i]);
+#endif
 
 	BuffersToCommon.clear();
 	TexturesToCommon.clear();
@@ -518,10 +524,22 @@ BindShaderParameters(void* Data)
     It = (void*)((u8*)It + sizeof(bool));
     void* StaticIt = HaveStaticStorage ? (void*)((u8*)It + ParamOffset) : nullptr;
 
-    auto DX12BindTexture = [&](texture_ref& TextureToBind, const descriptor_param& Parameter, u32 LayoutIdx) 
+    auto DX12BindImageSampler = [&](texture_ref& TextureToBind, const descriptor_param& Parameter, u32 LayoutIdx) 
 	{
         u32 MipToUse = TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex;
         Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse, LayoutIdx);
+
+        for (texture* CurrentTexture : TextureToBind.Handle) 
+		{
+            TexturesToCommon.insert(CurrentTexture);
+            AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+        }
+    };
+
+    auto DX12BindStorageTexture = [&](texture_ref& TextureToBind, const descriptor_param& Parameter, u32 LayoutIdx) 
+	{
+        u32 MipToUse = TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex;
+        Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse, LayoutIdx);
 
         for (texture* CurrentTexture : TextureToBind.Handle) 
 		{
@@ -573,11 +591,19 @@ BindShaderParameters(void* Data)
 		{
             for (const auto& Parameter : CurrentContext->ParameterLayout[LayoutIdx]) 
 			{
-                if (Parameter.Type == resource_type::texture_sampler) 
+				if(Parameter.Type == resource_type::buffer)
 				{
-                    DX12BindTexture(*(texture_ref*)StaticIt, Parameter, LayoutIdx);
+					assert(false && "Buffer in static storage. Currently is not available, use buffers in the inputs");
+				}
+				else if (Parameter.Type == resource_type::texture_sampler) 
+				{
+                    DX12BindImageSampler(*(texture_ref*)StaticIt, Parameter, LayoutIdx);
                     StaticIt = (void*)((u8*)StaticIt + sizeof(texture_ref));
                 }
+				else if(Parameter.Type == resource_type::texture_storage)
+				{
+					assert(false && "Storage image in static storage. Check the shader bindings. Could be image sampler or buffer");
+				}
             }
         }
     }
@@ -589,12 +615,20 @@ BindShaderParameters(void* Data)
 		{
 			buffer* BufferToBind = *(buffer**)It;
             DX12BindBuffer(BufferToBind, Parameter);
-            ParamIdx += BufferToBind->WithCounter;
+
             It = (void*)((u8*)It + sizeof(buffer*));
+
+            ParamIdx += BufferToBind->WithCounter;
+			ParamCount += BufferToBind->WithCounter;
         } 
-		else if (Parameter.Type == resource_type::texture_sampler) 
+		else if (Parameter.Type == resource_type::texture_sampler)
 		{
-            DX12BindTexture(*(texture_ref*)It, Parameter, 0);
+            DX12BindImageSampler(*(texture_ref*)It, Parameter, 0);
+            It = (void*)((u8*)It + sizeof(texture_ref));
+        }
+		else if (Parameter.Type == resource_type::texture_storage)
+		{
+            DX12BindStorageTexture(*(texture_ref*)It, Parameter, 0);
             It = (void*)((u8*)It + sizeof(texture_ref));
         }
     }
@@ -723,7 +757,7 @@ SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData)
 			if(Buffer->WithCounter)
 				TransitionBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Buffer->CounterHandle.Get(), CurrState, NextState));
 		}
-		else if(Buffer->Usage & image_flags::TF_Storage)
+		else if(Buffer->Usage & RF_StorageBuffer)
 		{
 			UavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Buffer->Handle.Get()));
 			if(Buffer->WithCounter)
@@ -770,7 +804,7 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 
 				if(CurrState != NextState)
 					TransitionBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), CurrState, NextState, MipToUse));
-				else if(Texture->Info.Usage & image_flags::TF_Storage)
+				else if(Texture->Info.Usage & TF_Storage)
 					UavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Texture->Handle.Get()));
 			}
 			else
@@ -782,7 +816,7 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 
 					if(CurrState != NextState)
 						TransitionBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), CurrState, NextState, MipIdx));
-					else if(Texture->Info.Usage & image_flags::TF_Storage)
+					else if(Texture->Info.Usage & TF_Storage)
 						UavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Texture->Handle.Get()));
 				}
 			}
@@ -797,7 +831,7 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 
 			if(CurrState != NextState)
 				TransitionBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), CurrState, NextState, MipToUse));
-			else if(Texture->Info.Usage & image_flags::TF_Storage)
+			else if(Texture->Info.Usage & TF_Storage)
 				UavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Texture->Handle.Get()));
 
 			Texture->CurrentLayout[MipToUse] = ResourceLayoutNext;

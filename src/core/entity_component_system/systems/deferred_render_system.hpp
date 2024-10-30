@@ -143,25 +143,25 @@ struct deferred_raster_system : public entity_system
 		MeshCommonCullingInput.MeshCount = Geometries.MeshCount;
 
 		// TODO: Move resource management into renderer_backend class
-		MeshMaterialsBuffer = Window.Gfx.PushBuffer("MeshMaterialsBuffer", Materials.data(), sizeof(mesh::material), Materials.size(), resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		LightSourcesBuffer = Window.Gfx.PushBuffer("LightSourcesBuffer", sizeof(light_source), LIGHT_SOURCES_MAX_COUNT, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshMaterialsBuffer = Window.Gfx.PushBuffer("MeshMaterialsBuffer", Materials.data(), sizeof(mesh::material), Materials.size(), RF_StorageBuffer | RF_CopyDst);
+		LightSourcesBuffer = Window.Gfx.PushBuffer("LightSourcesBuffer", sizeof(light_source), LIGHT_SOURCES_MAX_COUNT, RF_StorageBuffer | RF_CopyDst);
 
-		VertexBuffer = Window.Gfx.PushBuffer("VertexBuffer", Geometries.Vertices.data(), sizeof(vertex), Geometries.Vertices.size(), resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		IndexBuffer = Window.Gfx.PushBuffer("IndexBuffer", Geometries.VertexIndices.data(), sizeof(u32), Geometries.VertexIndices.size(), resource_flags::RF_IndexBuffer | resource_flags::RF_CopyDst);
+		VertexBuffer = Window.Gfx.PushBuffer("VertexBuffer", Geometries.Vertices.data(), sizeof(vertex), Geometries.Vertices.size(), RF_StorageBuffer | RF_CopyDst);
+		IndexBuffer = Window.Gfx.PushBuffer("IndexBuffer", Geometries.VertexIndices.data(), sizeof(u32), Geometries.VertexIndices.size(), RF_IndexBuffer | RF_CopyDst);
 
-		GeometryOffsets = Window.Gfx.PushBuffer("GeometryOffsets", Geometries.Offsets.data(), sizeof(mesh::offset), Geometries.Offsets.size(), resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		MeshDrawCommandDataBuffer = Window.Gfx.PushBuffer("MeshDrawCommandDataBuffer", StaticMeshInstances.data(), sizeof(mesh_draw_command), StaticMeshInstances.size(), resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst);
-		MeshDrawVisibilityDataBuffer = Window.Gfx.PushBuffer("MeshDrawVisibilityDataBuffer", StaticMeshVisibility.data(), sizeof(u32), StaticMeshVisibility.size(), resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
-		IndirectDrawIndexedCommands = Window.Gfx.PushBuffer("IndirectDrawIndexedCommands", sizeof(indirect_draw_indexed_command), StaticMeshInstances.size(), resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst | resource_flags::RF_WithCounter);
+		GeometryOffsets = Window.Gfx.PushBuffer("GeometryOffsets", Geometries.Offsets.data(), sizeof(mesh::offset), Geometries.Offsets.size(), RF_StorageBuffer | RF_CopyDst);
+		MeshDrawCommandDataBuffer = Window.Gfx.PushBuffer("MeshDrawCommandDataBuffer", StaticMeshInstances.data(), sizeof(mesh_draw_command), StaticMeshInstances.size(), RF_IndirectBuffer | RF_CopyDst);
+		MeshDrawVisibilityDataBuffer = Window.Gfx.PushBuffer("MeshDrawVisibilityDataBuffer", StaticMeshVisibility.data(), sizeof(u32), StaticMeshVisibility.size(), RF_IndirectBuffer | RF_StorageBuffer | RF_CopySrc | RF_CopyDst);
+		IndirectDrawIndexedCommands = Window.Gfx.PushBuffer("IndirectDrawIndexedCommands", sizeof(indirect_draw_indexed_command), StaticMeshInstances.size(), RF_IndirectBuffer | RF_StorageBuffer | RF_CopyDst | RF_WithCounter);
 
 		MeshDrawCommandBuffer = Window.Gfx.PushBuffer("MeshDrawCommandBuffer", sizeof(mesh_draw_command), StaticMeshInstances.size(), resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
 
-		MeshDrawShadowVisibilityDataBuffer = Window.Gfx.PushBuffer("MeshDrawShadowVisibilityDataBuffer", StaticMeshVisibility.data(), sizeof(u32), StaticMeshVisibility.size(), resource_flags::RF_IndirectBuffer | resource_flags::RF_CopySrc | resource_flags::RF_CopyDst);
-		ShadowIndirectDrawIndexedCommands = Window.Gfx.PushBuffer("ShadowIndirectDrawIndexedCommands", sizeof(indirect_draw_indexed_command), StaticMeshInstances.size(), resource_flags::RF_IndirectBuffer | resource_flags::RF_CopyDst | resource_flags::RF_WithCounter);
-		MeshDrawShadowCommandBuffer = Window.Gfx.PushBuffer("MeshDrawShadowCommandBuffer", sizeof(mesh_draw_command), StaticMeshInstances.size(), resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		MeshDrawShadowVisibilityDataBuffer = Window.Gfx.PushBuffer("MeshDrawShadowVisibilityDataBuffer", StaticMeshVisibility.data(), sizeof(u32), StaticMeshVisibility.size(), RF_IndirectBuffer | RF_CopySrc | RF_CopyDst);
+		ShadowIndirectDrawIndexedCommands = Window.Gfx.PushBuffer("ShadowIndirectDrawIndexedCommands", sizeof(indirect_draw_indexed_command), StaticMeshInstances.size(), RF_IndirectBuffer | RF_StorageBuffer | RF_CopyDst | RF_WithCounter);
+		MeshDrawShadowCommandBuffer = Window.Gfx.PushBuffer("MeshDrawShadowCommandBuffer", sizeof(mesh_draw_command), StaticMeshInstances.size(), RF_StorageBuffer | RF_CopyDst);
 
-		WorldUpdateBuffer = Window.Gfx.PushBuffer("WorldUpdateBuffer", sizeof(global_world_data), 1, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
-		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer("MeshCommonCullingInputBuffer", sizeof(mesh_comp_culling_common_input), 1, resource_flags::RF_StorageBuffer | resource_flags::RF_CopyDst);
+		WorldUpdateBuffer = Window.Gfx.PushBuffer("WorldUpdateBuffer", sizeof(global_world_data), 1, RF_StorageBuffer | RF_CopyDst);
+		MeshCommonCullingInputBuffer = Window.Gfx.PushBuffer("MeshCommonCullingInputBuffer", sizeof(mesh_comp_culling_common_input), 1, RF_StorageBuffer | RF_CopyDst);
 	}
 
 	// TODO: Move out all render commands. There will be only a geometry render command generation I guess

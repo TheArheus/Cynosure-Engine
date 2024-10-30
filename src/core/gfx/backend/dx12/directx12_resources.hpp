@@ -17,96 +17,26 @@ struct directx12_buffer : public buffer
 
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
-#if 0
-		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-		directx12_fence Fence(Gfx->Device.Get());
-
-		void* CpuPtr;
-		TempHandle->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
-		TempHandle->Unmap(0, 0);
-
-		ID3D12GraphicsCommandList* CommandList = Gfx->CommandQueue->AllocateCommandList();
-		Gfx->CommandQueue->Reset();
-		CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
-
-		CommandList->CopyResource(Handle.Get(), TempHandle.Get());
-
-		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
-		CommandList->ResourceBarrier(1, &BarrierData);
-		CurrentLayout = 0;
-
-		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
-		Fence.Flush(Gfx->CommandQueue);
-#else
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->Update(this, Data);
 		Cmd->EndOneTime();
-#endif
 	}
 
 	void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
 	{
-#if 0
-		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-		directx12_fence Fence(Gfx->Device.Get());
-		assert(UpdateByteSize <= Size);
-
-		void* CpuPtr;
-		TempHandle->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, UpdateByteSize);
-		TempHandle->Unmap(0, 0);
-
-		ID3D12GraphicsCommandList* CommandList = Gfx->CommandQueue->AllocateCommandList();
-		Gfx->CommandQueue->Reset();
-		CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
-
-		CommandList->CopyBufferRegion(Handle.Get(), 0, TempHandle.Get(), 0, UpdateByteSize);
-
-		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
-		CommandList->ResourceBarrier(1, &BarrierData);
-		CurrentLayout = 0;
-
-		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
-		Fence.Flush(Gfx->CommandQueue);
-#else
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->UpdateSize(this, Data, UpdateByteSize);
 		Cmd->EndOneTime();
-#endif
 	}
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
 	{
-#if 0
-		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-		directx12_fence Fence(Gfx->Device.Get());
-
-		ID3D12GraphicsCommandList* CommandList = Gfx->CommandQueue->AllocateCommandList();
-		Gfx->CommandQueue->Reset();
-		CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
-
-		CommandList->CopyBufferRegion(TempHandle.Get(), 0, Handle.Get(), 0, UpdateByteSize);
-
-		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
-		CommandList->ResourceBarrier(1, &BarrierData);
-		CurrentLayout = 0;
-
-		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
-		Fence.Flush(Gfx->CommandQueue);
-
-		void* CpuPtr;
-		TempHandle->Map(0, nullptr, &CpuPtr);
-		memcpy(Data, CpuPtr, UpdateByteSize);
-		TempHandle->Unmap(0, 0);
-#else
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->ReadBackSize(this, Data, UpdateByteSize);
 		Cmd->EndOneTime();
-#endif
 	}
 
 	void Update(void* Data, command_list* Cmd) override 
@@ -136,7 +66,7 @@ struct directx12_buffer : public buffer
 		CounterOffset = NewSize * Count;
 
 		D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE;
-		if(Usage & image_flags::TF_Storage)
+		if(Usage & RF_StorageBuffer)
 			Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
 		CD3DX12_RESOURCE_DESC CounterResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(u32), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
@@ -186,18 +116,18 @@ struct directx12_buffer : public buffer
 			UavDesc.Buffer.Flags                     = D3D12_BUFFER_UAV_FLAG_RAW;
 			UavDesc.Buffer.NumElements               = static_cast<u32>(CounterOffset / 4);
 
-			if(Usage & image_flags::TF_Storage)
+			if(Usage & RF_StorageBuffer)
 			{
 				UnorderedAccessView = Gfx->ResourcesHeap.GetNextCpuHandle();
 				Gfx->Device->CreateUnorderedAccessView(Handle.Get(), nullptr, &UavDesc, UnorderedAccessView);
-			}
 
-			if(WithCounter)
-			{
-				UavDesc.Format                     = DXGI_FORMAT_R32_TYPELESS;
-				UavDesc.Buffer.NumElements         = 1;
-				CounterUnorderedAccessView = Gfx->ResourcesHeap.GetNextCpuHandle();
-				Gfx->Device->CreateUnorderedAccessView(CounterHandle.Get(), nullptr, &UavDesc, CounterUnorderedAccessView);
+				if(WithCounter)
+				{
+					UavDesc.Format                     = DXGI_FORMAT_R32_TYPELESS;
+					UavDesc.Buffer.NumElements         = 1;
+					CounterUnorderedAccessView = Gfx->ResourcesHeap.GetNextCpuHandle();
+					Gfx->Device->CreateUnorderedAccessView(CounterHandle.Get(), nullptr, &UavDesc, CounterUnorderedAccessView);
+				}
 			}
 		}
 	}
@@ -313,104 +243,23 @@ struct directx12_texture : public texture
 
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
-#if 0
-		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-		directx12_fence Fence(Gfx->Device.Get());
-
-		ID3D12GraphicsCommandList* CommandList = Gfx->CommandQueue->AllocateCommandList();
-		Gfx->CommandQueue->Reset();
-		CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
-
-		D3D12_SUBRESOURCE_FOOTPRINT SubresourceDesc = {};
-		SubresourceDesc.Format   = GetDXFormat(Info.Format);
-		SubresourceDesc.Width    = Width;
-		SubresourceDesc.Height   = Height;
-		SubresourceDesc.Depth    = Depth;
-		SubresourceDesc.RowPitch = AlignUp(Width * GetPixelSize(Info.Format), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-
-		void* CpuPtr;
-		TempHandle->Map(0, nullptr, &CpuPtr);
-
-		for (u32 z = 0; z < Depth;  z++)
-		{
-			for (u32 y = 0; y < Height; y++)
-			{
-			  u8* Dst = (u8*)(CpuPtr) + y * SubresourceDesc.RowPitch + z * Height * SubresourceDesc.RowPitch;
-			  u8* Src = (u8*)(Data)   + y * Width * GetPixelSize(Info.Format) + z * Width * Height * GetPixelSize(Info.Format);
-			  memcpy(Dst, Src, GetPixelSize(Info.Format) * Width);
-			}
-		}
-
-		TempHandle->Unmap(0, 0);
-
-		D3D12_PLACED_SUBRESOURCE_FOOTPRINT TextureFootprint = {};
-		TextureFootprint.Footprint = SubresourceDesc;
-
-		D3D12_TEXTURE_COPY_LOCATION SrcCopyLocation = {};
-		SrcCopyLocation.pResource = TempHandle.Get();
-		SrcCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-		SrcCopyLocation.PlacedFootprint = TextureFootprint;
-
-		D3D12_TEXTURE_COPY_LOCATION DstCopyLocation = {};
-		DstCopyLocation.pResource = Handle.Get();
-		DstCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-		DstCopyLocation.SubresourceIndex = 0;
-
-		CommandList->CopyTextureRegion(&DstCopyLocation, 0, 0, 0, 
-									   &SrcCopyLocation, nullptr);
-
-		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
-		CommandList->ResourceBarrier(1, &BarrierData);
-
-		std::fill(CurrentLayout.begin(), CurrentLayout.end(), 0);
-		std::fill(CurrentState.begin(), CurrentState.end(), barrier_state::general);
-
-		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
-		Fence.Flush(Gfx->CommandQueue);
-#else
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->Update(this, Data);
 		Cmd->EndOneTime();
-#endif
+	}
+
+	void ReadBack(renderer_backend* Backend, void* Data) override 
+	{
+		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->ReadBack(this, Data);
+		Cmd->EndOneTime();
 	}
 
 	void Update(void* Data, command_list* Cmd) override 
 	{
 		Cmd->Update(this, Data);
-	}
-
-	void ReadBack(renderer_backend* Backend, void* Data) override 
-	{
-#if 1
-		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-		directx12_fence Fence(Gfx->Device.Get());
-
-		ID3D12GraphicsCommandList* CommandList = Gfx->CommandQueue->AllocateCommandList();
-		Gfx->CommandQueue->Reset();
-		CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
-
-		CommandList->CopyResource(TempHandle.Get(), Handle.Get());
-
-		auto BarrierData = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
-		CommandList->ResourceBarrier(1, &BarrierData);
-
-		std::fill(CurrentLayout.begin(), CurrentLayout.end(), 0);
-		std::fill(CurrentState.begin(), CurrentState.end(), barrier_state::general);
-
-		Gfx->CommandQueue->ExecuteAndRemove(CommandList);
-		Fence.Flush(Gfx->CommandQueue);
-
-		void* CpuPtr;
-		TempHandle->Map(0, nullptr, &CpuPtr);
-		memcpy(Data, CpuPtr, Width * Height * Depth * GetPixelSize(Info.Format));
-		TempHandle->Unmap(0, 0);
-#else
-		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
-		Cmd->Begin();
-		Cmd->ReadBack(this, Data);
-		Cmd->EndOneTime();
-#endif
 	}
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override 

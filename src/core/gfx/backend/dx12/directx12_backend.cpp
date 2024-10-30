@@ -157,9 +157,9 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	}
 }
 
-dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool NonWritable)
+dx12_descriptor_type GetDXSpvDescriptorType(const std::vector<op_info>& ShaderInfo, const op_info& Var, image_type& ImageType, u32 StorageClass, bool NonWritable)
 {
-	switch(OpCode)
+	switch(Var.OpCode)
 	{
 		case SpvOpTypeStruct:
 		{
@@ -170,6 +170,13 @@ dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool N
 		} break;
 		case SpvOpTypeImage:
 		{
+			switch(Var.Dimensionality)
+			{
+				case spv::Dim1D: ImageType = image_type::Texture1D; break;
+				case spv::Dim2D: ImageType = image_type::Texture2D; break;
+				case spv::Dim3D: ImageType = image_type::Texture3D; break;
+				case spv::DimCube: ImageType = image_type::TextureCube; break;
+			}
 			return dx12_descriptor_type::image;
 		} break;
 		case SpvOpTypeSampler:
@@ -178,6 +185,14 @@ dx12_descriptor_type GetDXSpvDescriptorType(u32 OpCode, u32 StorageClass, bool N
 		} break;
 		case SpvOpTypeSampledImage:
 		{
+			const op_info& TextureInfo = ShaderInfo[Var.TypeId[0]];
+			switch(TextureInfo.Dimensionality)
+			{
+				case spv::Dim1D: ImageType = image_type::Texture1D; break;
+				case spv::Dim2D: ImageType = image_type::Texture2D; break;
+				case spv::Dim3D: ImageType = image_type::Texture3D; break;
+				case spv::DimCube: ImageType = image_type::TextureCube; break;
+			}
 			return dx12_descriptor_type::combined_image_sampler;
 		} break;
 	}
@@ -365,6 +380,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 		CompiledShaders[Path].LocalSizeZ = LocalSizeZ ? *LocalSizeZ : 0;
 
 		std::map<u32, std::map<u32, u32>> ShaderToUse;
+		std::map<u32, std::map<u32, u32>> ParameterOffsets;
 		for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
 		{
 			const op_info& Var = ShaderInfo[VariableIdx];
@@ -382,7 +398,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 				u32 Size = ~0u;
 				u32 StorageClass = Var.StorageClass;
+				bool NonWritable = false;
 				dx12_descriptor_type DescriptorType;
+				image_type& ImageType = ParameterLayout[Var.Set][Var.Binding].ImageType;
 				if(VariableType.OpCode == SpvOpTypePointer)
 				{
 					const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
@@ -393,30 +411,57 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 						const op_info& SizeInfo  = ShaderInfo[PointerType.SizeId];
 
 						Size = SizeInfo.Constant;
+						NonWritable = ArrayInfo.NonWritable;
 
-						DescriptorType = GetDXSpvDescriptorType(ArrayInfo.OpCode, StorageClass, ArrayInfo.NonWritable);
+						DescriptorType = GetDXSpvDescriptorType(ShaderInfo, ArrayInfo, ImageType, StorageClass, NonWritable);
 					}
 					else if(PointerType.OpCode == SpvOpTypeRuntimeArray)
 					{
 						const op_info& ArrayInfo = ShaderInfo[PointerType.TypeId[0]];
 
-						DescriptorType = GetDXSpvDescriptorType(ArrayInfo.OpCode, StorageClass, ArrayInfo.NonWritable);
+						NonWritable = ArrayInfo.NonWritable;
+
+						DescriptorType = GetDXSpvDescriptorType(ShaderInfo, ArrayInfo, ImageType, StorageClass, NonWritable);
 					}
 					else
 					{
-						DescriptorType = GetDXSpvDescriptorType(PointerType.OpCode, StorageClass, PointerType.NonWritable);
+						NonWritable = PointerType.NonWritable;
+						DescriptorType = GetDXSpvDescriptorType(ShaderInfo, PointerType, ImageType, StorageClass, NonWritable);
 					}
 				}
 				else
 				{
-					DescriptorType = GetDXSpvDescriptorType(VariableType.OpCode, StorageClass, VariableType.NonWritable);
+					NonWritable = VariableType.NonWritable;
+					DescriptorType = GetDXSpvDescriptorType(ShaderInfo, VariableType, ImageType, StorageClass, NonWritable);
 				}
 
-				if((DescriptorType == dx12_descriptor_type::image || DescriptorType == dx12_descriptor_type::sampler || DescriptorType == dx12_descriptor_type::combined_image_sampler) && Size == ~0u)
+				if(DescriptorType == dx12_descriptor_type::shader_resource || 
+				   DescriptorType == dx12_descriptor_type::unordered_access || 
+				   DescriptorType == dx12_descriptor_type::constant_buffer)
+				{
+					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::buffer;
+				}
+				else if(DescriptorType == dx12_descriptor_type::image)
+				{
+					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::texture_storage;
+				}
+				else if(DescriptorType == dx12_descriptor_type::sampler)
+				{
+					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
+				}
+				else if(DescriptorType == dx12_descriptor_type::combined_image_sampler)
+				{
+					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
+				}
+
+				if((DescriptorType == dx12_descriptor_type::image || 
+					DescriptorType == dx12_descriptor_type::sampler || 
+					DescriptorType == dx12_descriptor_type::combined_image_sampler) && Size == ~0u)
 					Size = 1;
 
 				if(Size != ~0u)
 				{
+					ParameterOffsets[Var.Set][Var.Binding] = Size;
 					D3D12_DESCRIPTOR_RANGE* ParameterRange = new D3D12_DESCRIPTOR_RANGE;
 					switch(DescriptorType)
 					{
@@ -429,6 +474,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
+
+						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					case dx12_descriptor_type::image:
 					case dx12_descriptor_type::unordered_access:
@@ -440,6 +488,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
+
+						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::general;
+						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
 					} break;
 					case dx12_descriptor_type::constant_buffer:
 					{
@@ -450,6 +501,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
+
+						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					case dx12_descriptor_type::combined_image_sampler:
 					{
@@ -473,6 +527,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER]     += Size;
+
+						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					case dx12_descriptor_type::sampler:
 					{
@@ -483,6 +540,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER]     += Size;
+
+						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					}
 
@@ -490,29 +550,46 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					Parameter.ParameterType    = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 					Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
 					Parameter.DescriptorTable  = {1, ParameterRange};
+
+					ParameterLayout[Var.Set][Var.Binding].Count = Size;
+					//ParameterLayout[Var.Set][Var.Binding].ImageType = TextureType;
+					ParameterLayout[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 				else
 				{
+					ParameterOffsets[Var.Set][Var.Binding] = 0;
 					D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[Var.Set][Var.Binding][0];
 					switch(DescriptorType)
 					{
 					case dx12_descriptor_type::shader_resource:
 					{
 						Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+
+						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					case dx12_descriptor_type::unordered_access:
 					{
 						Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
+
+						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::general;
+						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
 					} break;
 					case dx12_descriptor_type::constant_buffer:
 					{
 						Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+
+						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					}
 					DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += 1;
 					Parameter.Descriptor.ShaderRegister = Var.Binding;
 					Parameter.Descriptor.RegisterSpace  = Var.Set;
 					Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
+
+					ParameterLayout[Var.Set][Var.Binding].Count = 1;
+					ParameterLayout[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 			}
 		}
@@ -531,37 +608,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 			{
 				spirv_cross::CompilerHLSL Compiler(SpirvCode.data(), SpirvCode.size());
 				auto HlslResources = Compiler.get_shader_resources();
-
-				std::map<u32, std::map<u32, u32>> ParameterOffsets;
-				for (const auto &resource : HlslResources.sampled_images) 
-				{
-					uint32_t Size = Compiler.get_type(resource.type_id).array[0];
-					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
-					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
-					ParameterOffsets[Set][Binding] = Size;
-				}
-
-				for (const auto &resource : HlslResources.storage_images) 
-				{
-					uint32_t Size = Compiler.get_type(resource.type_id).array[0];
-					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
-					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
-					ParameterOffsets[Set][Binding] = Size;
-				}
-
-				for (const auto &resource : HlslResources.uniform_buffers) 
-				{
-					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
-					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
-					ParameterOffsets[Set][Binding] = 0;
-				}
-
-				for (const auto &resource : HlslResources.storage_buffers) 
-				{
-					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
-					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
-					ParameterOffsets[Set][Binding] = 0;
-				}
 
 				for (auto &SetBinding : NewBindings)
 				{
@@ -614,36 +660,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
 					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
-
-					auto TypeInfo = Compiler.get_type(resource.type_id);
-
-					image_type TextureType = image_type::Texture2D;
-					switch(TypeInfo.image.dim)
-					{
-						case spv::Dim1D: TextureType = image_type::Texture1D; break;
-						case spv::Dim2D: TextureType = image_type::Texture2D; break;
-						case spv::Dim3D: TextureType = image_type::Texture3D; break;
-						case spv::DimCube: TextureType = image_type::TextureCube; break;
-					}
-
-					resource_type ImageType = resource_type::buffer;
-					if (TypeInfo.basetype == spirv_cross::SPIRType::Image)
-					{
-						ImageType = resource_type::texture_storage;
-					}
-					else if (TypeInfo.basetype == spirv_cross::SPIRType::Sampler)
-					{
-						ImageType = resource_type::texture_sampler;
-					}
-					else if (TypeInfo.basetype == spirv_cross::SPIRType::SampledImage)
-					{
-						ImageType = resource_type::texture_sampler;
-					}
-
-					ParameterLayout[Set][Binding].Type = ImageType;
-					ParameterLayout[Set][Binding].Count = TypeInfo.array.empty() ? 1 : TypeInfo.array[0];
-					ParameterLayout[Set][Binding].ImageType = TextureType;
-					ParameterLayout[Set][Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 
 				for (const auto &resource : HlslResources.storage_images) 
@@ -651,36 +667,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
 					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
-
-					auto TypeInfo = Compiler.get_type(resource.type_id);
-
-					image_type TextureType = image_type::Texture2D;
-					switch(TypeInfo.image.dim)
-					{
-						case spv::Dim1D: TextureType = image_type::Texture1D; break;
-						case spv::Dim2D: TextureType = image_type::Texture2D; break;
-						case spv::Dim3D: TextureType = image_type::Texture3D; break;
-						case spv::DimCube: TextureType = image_type::TextureCube; break;
-					}
-
-					resource_type ImageType = resource_type::buffer;
-					if (TypeInfo.basetype == spirv_cross::SPIRType::Image)
-					{
-						ImageType = resource_type::texture_storage;
-					}
-					else if (TypeInfo.basetype == spirv_cross::SPIRType::Sampler)
-					{
-						ImageType = resource_type::texture_sampler;
-					}
-					else if (TypeInfo.basetype == spirv_cross::SPIRType::SampledImage)
-					{
-						ImageType = resource_type::texture_sampler;
-					}
-
-					ParameterLayout[Set][Binding].Type = ImageType;
-					ParameterLayout[Set][Binding].Count = TypeInfo.array.empty() ? 1 : TypeInfo.array[0];
-					ParameterLayout[Set][Binding].ImageType = TextureType;
-					ParameterLayout[Set][Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 
 				for (const auto &resource : HlslResources.storage_buffers) 
@@ -688,9 +674,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					uint32_t Set = Compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 					uint32_t Binding = Compiler.get_decoration(resource.id, spv::DecorationBinding);
 					Compiler.set_decoration(resource.id, spv::DecorationBinding, NewBindings[Set][Binding]);
-					ParameterLayout[Set][Binding].Type = resource_type::buffer;
-					ParameterLayout[Set][Binding].Count = 1;
-					ParameterLayout[Set][Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 
 				spirv_cross::CompilerGLSL::Options    CommonOptions;

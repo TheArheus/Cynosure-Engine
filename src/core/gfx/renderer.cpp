@@ -11,11 +11,11 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
-	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
+	TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled | TF_CopySrc;
 	GfxColorTarget[0] = PushTexture("ColorTarget0", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	GfxColorTarget[1] = PushTexture("ColorTarget1", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	TextureInputData.Format    = image_format::D32_SFLOAT;
-	TextureInputData.Usage     = image_flags::TF_DepthTexture | image_flags::TF_Sampled;
+	TextureInputData.Usage     = TF_DepthTexture | TF_Sampled;
 	GfxDepthTarget = PushTexture("DepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	DebugCameraViewDepthTarget = PushTexture("DebugCameraViewDepthTarget", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 
@@ -23,14 +23,14 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
-	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
+	TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled | TF_CopySrc;
 	VolumetricLightOut = PushTexture("Volumetric light Result", nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	IndirectLightOut   = PushTexture("Indirect light result"  , nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 	LightColor         = PushTexture("Light color"  , nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 
 	TextureInputData.Type	   = image_type::Texture3D;
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
-	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopySrc;
+	TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled | TF_CopySrc;
 	TextureInputData.MipLevels = GetImageMipLevels(VOXEL_SIZE, VOXEL_SIZE);
 	TextureInputData.SamplerInfo.AddressMode = sampler_address_mode::clamp_to_border;
 	TextureInputData.UseStagingBuffer = true;
@@ -111,7 +111,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	PoissonDisk[61] = vec2(0.789239, -0.419965);
 	PoissonDisk[62] = vec2(-0.545396, 0.538133);
 	PoissonDisk[63] = vec2(-0.178564, -0.596057);
-	PoissonDiskBuffer = PushBuffer("PoissonDiskBuffer", PoissonDisk, sizeof(vec2), 64, resource_flags::RF_StorageBuffer);
+	PoissonDiskBuffer = PushBuffer("PoissonDiskBuffer", PoissonDisk, sizeof(vec2), 64, RF_StorageBuffer);
 
 	const u32 Res = 32;
 	vec4  RandomAngles[Res][Res][Res] = {};
@@ -134,7 +134,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	}
 	TextureInputData = {};
 	TextureInputData.Format    = image_format::R32G32B32A32_SFLOAT;
-	TextureInputData.Usage     = image_flags::TF_Storage | image_flags::TF_Sampled | image_flags::TF_CopyDst | image_flags::TF_ColorTexture;
+	TextureInputData.Usage     = TF_Storage | TF_Sampled | TF_CopyDst | TF_ColorTexture;
 	TextureInputData.Type	   = image_type::Texture3D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
@@ -154,11 +154,11 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 		Scale = Lerp(0.1, Scale, 1.0);
 		RandomSamples[RotIdx] = vec4(Sample * Scale, 0);
 	}
-	RandomSamplesBuffer = PushBuffer("RandomSamplesBuffer", (void*)RandomSamples, sizeof(vec4), 64, resource_flags::RF_StorageBuffer);
+	RandomSamplesBuffer = PushBuffer("RandomSamplesBuffer", (void*)RandomSamples, sizeof(vec4), 64, RF_StorageBuffer);
 
 	GlobalShadow.resize(DEPTH_CASCADES_COUNT);
 	TextureInputData.Format    = image_format::D32_SFLOAT;
-	TextureInputData.Usage     = image_flags::TF_DepthTexture | image_flags::TF_Sampled;
+	TextureInputData.Usage     = TF_DepthTexture | TF_Sampled;
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
@@ -168,7 +168,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	}
 
 	TextureInputData.Format    = image_format::R32_SFLOAT;
-	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc | image_flags::TF_ColorTexture;
+	TextureInputData.Usage     = TF_Sampled | TF_Storage | TF_CopySrc | TF_ColorTexture;
 	TextureInputData.MipLevels = GetImageMipLevels(PreviousPowerOfTwo(Backend->Width), PreviousPowerOfTwo(Backend->Height));
 	TextureInputData.SamplerInfo.ReductionMode = sampler_reduction_mode::max;
 	TextureInputData.SamplerInfo.MinFilter = filter::nearest;
@@ -181,7 +181,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
-	TextureInputData.Usage     = image_flags::TF_ColorAttachment | image_flags::TF_Sampled | image_flags::TF_Storage | image_flags::TF_CopySrc;
+	TextureInputData.Usage     = TF_ColorAttachment | TF_Sampled | TF_Storage | TF_CopySrc;
 	TextureInputData.Format    = image_format::R16G16B16A16_SNORM;
 	GBuffer[0] = PushTexture("GBuffer_VertexNormals",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData);   // Vertex   Normals
 	GBuffer[1] = PushTexture("GBuffer_FragmentNormals",  nullptr, Backend->Width, Backend->Height, 1, TextureInputData); // Fragment Normals
@@ -289,14 +289,15 @@ GetOrCreateContext(shader_pass* Pass)
             GraphicsContextView->SetupPipelineState(),
             GraphicsContextView->Defines
         );
+		ContextMap[ContextType] = NewContext;
     }
     else if (Pass->Type == pass_type::compute)
     {
         auto* ComputeContextView = static_cast<shader_compute_view_context*>(ContextView);
         NewContext = CreateComputeContext(ComputeContextView->Shader, ComputeContextView->Defines);
+		ContextMap[ContextType] = NewContext;
     }
 
-    ContextMap[ContextType] = NewContext;
     return NewContext;
 }
 
