@@ -11,7 +11,8 @@ struct debug_raster : public shader_graphics_view_context
 		buffer_ref GeometryOffsets;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
 		buffer_ref VertexBuffer;
@@ -65,13 +66,19 @@ struct gbuffer_raster : public shader_graphics_view_context
 		texture_ref HeightTextures;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
 		buffer_ref VertexBuffer;
 		buffer_ref MeshDrawCommands;
 		buffer_ref MeshMaterials;
 		buffer_ref GeometryOffsets;
+
+		texture_ref DiffuseTextures;
+		texture_ref NormalTextures;
+		texture_ref SpecularTextures;
+		texture_ref HeightTextures;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -120,13 +127,19 @@ struct voxelization : public shader_graphics_view_context
 		texture_ref HeightTextures;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
 		buffer_ref VertexBuffer;
 		buffer_ref MeshDrawCommands;
 		buffer_ref MeshMaterials;
 		buffer_ref GeometryOffsets;
+
+		texture_ref DiffuseTextures;
+		texture_ref NormalTextures;
+		texture_ref SpecularTextures;
+		texture_ref HeightTextures;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -174,7 +187,8 @@ struct color_pass : public shader_compute_view_context
 		texture_ref PointLightShadows;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
 		light_source LightSources[LIGHT_SOURCES_MAX_COUNT];
@@ -212,7 +226,8 @@ struct voxel_indirect_light_calc : public shader_compute_view_context
 		texture_ref Out;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
 		texture_ref DepthTarget;
@@ -239,7 +254,8 @@ struct volumetric_light_calc : public shader_compute_view_context
 		texture_ref Out;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
 		texture_ref DepthTarget;
@@ -265,7 +281,8 @@ struct textures_combine : public shader_compute_view_context
 		texture_ref Out;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		texture_ref A;
 		texture_ref B;

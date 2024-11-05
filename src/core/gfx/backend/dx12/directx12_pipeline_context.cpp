@@ -200,13 +200,8 @@ PlaceEndOfFrameBarriers()
 		}
 	}
 #endif
-#if 0
 	if(Barriers.size())
 		CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
-#else
-	for(int i = 0; i < Barriers.size(); i++)
-		CommandList->ResourceBarrier(1, &Barriers[i]);
-#endif
 
 	BuffersToCommon.clear();
 	TexturesToCommon.clear();

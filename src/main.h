@@ -4,6 +4,16 @@
 #define SUBRESOURCES_ALL ~0u
 #define introspect(...)
 
+#if defined(__clang__) || defined(__GNUC__)
+	#define shader_input(...) struct __attribute__((annotate("shader-input" #__VA_ARGS__)))
+
+#define shader_param(...) __attribute__((annotate("shader-param;" #__VA_ARGS__)))
+
+#else
+	#define shader_input(...) struct
+	#define shader_param(...)
+#endif
+
 #define  AMD_EXTENSIONS
 #define  NV_EXTENSIONS
 #include <glslang/SPIRV/GlslangToSpv.h>

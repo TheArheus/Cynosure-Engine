@@ -12,8 +12,10 @@ struct ssao : public shader_compute_view_context
 		texture_ref Output;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
+		shader_param(test1, test2, test3) 
 		global_world_data WorldUpdate;
 		vec4 RandomSamples[64];
 		texture_ref NoiseTexture;

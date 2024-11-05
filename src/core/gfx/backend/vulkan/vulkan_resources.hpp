@@ -21,122 +21,26 @@ struct vulkan_buffer : public buffer
 
 	void Update(renderer_backend* Backend, void* Data) override
 	{
-#if 0
-		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
-
-		CommandQueue->Reset();
-		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
-
-		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-		CopyBarrier.buffer = Handle;
-		CopyBarrier.srcAccessMask = 0;
-		CopyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		CopyBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		CopyBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		CopyBarrier.offset = 0;
-		CopyBarrier.size = Size;
-
-		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
-
-		void* CpuPtr;
-		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
-		vkUnmapMemory(Device, TempMemory);
-
-		VkBufferCopy Region = {0, 0, VkDeviceSize(Size)};
-		vkCmdCopyBuffer(CommandList, Temp, Handle, 1, &Region);
-
-		CommandQueue->ExecuteAndRemove(&CommandList);
-
-		VK_CHECK(vkDeviceWaitIdle(Device));
-#else
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->Update(this, Data);
 		Cmd->EndOneTime();
-#endif
 	}
 
 	void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
 	{
-#if 0
-		if(UpdateByteSize == 0) return;
-		assert(UpdateByteSize <= Size);
-
-		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
-
-		CommandQueue->Reset();
-		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
-
-		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-		CopyBarrier.buffer = Handle;
-		CopyBarrier.srcAccessMask = 0;
-		CopyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		CopyBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		CopyBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		CopyBarrier.offset = 0;
-		CopyBarrier.size = UpdateByteSize;
-
-		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
-
-		void* CpuPtr;
-		vkMapMemory(Device, TempMemory, 0, UpdateByteSize, 0, &CpuPtr);
-		memcpy(CpuPtr, Data, UpdateByteSize);
-		vkUnmapMemory(Device, TempMemory);
-
-		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-		vkCmdCopyBuffer(CommandList, Temp, Handle, 1, &Region);
-
-		CommandQueue->ExecuteAndRemove(&CommandList);
-
-		VK_CHECK(vkDeviceWaitIdle(Device));
-#else
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->UpdateSize(this, Data, UpdateByteSize);
 		Cmd->EndOneTime();
-#endif
 	}
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
 	{
-#if 0
-		if (UpdateByteSize == 0) return;
-		assert(UpdateByteSize <= Size);
-
-		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
-
-		CommandQueue->Reset();
-		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
-
-		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-		CopyBarrier.buffer = Temp;
-		CopyBarrier.srcAccessMask = 0;
-		CopyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-		CopyBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		CopyBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		CopyBarrier.offset = 0;
-		CopyBarrier.size = UpdateByteSize;
-
-		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
-
-		VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-		vkCmdCopyBuffer(CommandList, Handle, Temp, 1, &Region);
-
-		CommandQueue->ExecuteAndRemove(&CommandList);
-
-		void* CpuPtr;
-		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
-		memcpy(Data, CpuPtr, UpdateByteSize);
-		vkUnmapMemory(Device, TempMemory);
-
-		VK_CHECK(vkDeviceWaitIdle(Device));
-#else
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->ReadBackSize(this, Data, UpdateByteSize);
 		Cmd->EndOneTime();
-#endif
 	}
 
 	void Update(void* Data, command_list* Cmd) override
@@ -350,37 +254,10 @@ struct vulkan_texture : public texture
 
 	void Update(renderer_backend* Backend, void* Data) override
 	{
-#if 0
-		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
-
-		CommandQueue->Reset();
-		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
-
-		void* CpuPtr;
-		vkMapMemory(Device, TempMemory, 0, Size, 0, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
-		vkUnmapMemory(Device, TempMemory);
-
-		VkImageMemoryBarrier CopyBarrier = CreateImageBarrier(Handle, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &CopyBarrier);
-
-		VkBufferImageCopy Region = {};
-		Region.imageSubresource.aspectMask = Aspect;
-		Region.imageSubresource.mipLevel = 0;
-		Region.imageSubresource.baseArrayLayer = 0;
-		Region.imageSubresource.layerCount = Info.Layers;
-		Region.imageExtent = {u32(Width), u32(Height), u32(Depth)};
-		vkCmdCopyBufferToImage(CommandList, Temp, Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
-
-		CommandQueue->ExecuteAndRemove(&CommandList);
-
-		VK_CHECK(vkDeviceWaitIdle(Device));
-#else
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->Update(this, Data);
 		Cmd->EndOneTime();
-#endif
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override

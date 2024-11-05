@@ -8,7 +8,8 @@ struct blur : public shader_compute_view_context
 		texture_ref Output;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		texture_ref Input;
 		texture_ref Output;

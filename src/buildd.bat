@@ -19,6 +19,8 @@ set GBufferCount=-DGBUFFER_COUNT=5
 set LightSourcesMax=-DLIGHT_SOURCES_MAX_COUNT=256
 set VoxelGridSize=-DVOXEL_SIZE=128
 
+for /f "delims=" %%i in ('python get_llvm_flags_clang.py') do set "llvm_flags=%%i"
+
 if not exist ..\build\ mkdir ..\build\
 if not exist ..\build\scenes\ mkdir ..\build\scenes\
 
@@ -36,9 +38,13 @@ for %%f in ("..\..\src\game_scenes\*.cpp") do (
 )
 popd
 
+:: ..\build\generate.exe --extra-arg-before=-std=c++20 --extra-arg-before=-w --extra-arg-before=-Wall --extra-arg-before=-Wextra --extra-arg-before=-Wno-error --extra-arg-before=-Wno-narrowing --extra-arg-before=-DDEPTH_CASCADES_COUNT=3 --extra-arg-before=-DDEBUG_COLOR_BLEND=0 --extra-arg-before=-DGBUFFER_COUNT=5 --extra-arg-before=-DLIGHT_SOURCES_MAX_COUNT=256 --extra-arg-before=-DVOXEL_SIZE=128 --extra-arg-before=-I"%VULKAN_SDK%\Include" --extra-arg-before=-I"..\src" --extra-arg-before=-I"..\src\core\vendor" main.cpp
+
 pushd ..\build\
 del *.pdb > NUL 2> NUL
 rem cl %CommonCompFlags% ..\src\introspect.cpp /Fe"generate_reflection" -D_CRT_SECURE_NO_WARNINGS
+:: cl /std:c++latest -nologo ..\generate.cpp -MD -Od -FC -Zi version.lib msvcrt.lib clangAPINotes.lib clangEdit.lib clangBasic.lib clangTooling.lib clangFrontendTool.lib clangCodeGen.lib clangARCMigrate.lib clangRewrite.lib clangRewriteFrontend.lib clangASTMatchers.lib clangSerialization.lib clangSema.lib clangStaticAnalyzerFrontend.lib clangStaticAnalyzerCheckers.lib clangStaticAnalyzerCore.lib clangAnalysis.lib clangDriver.lib clangFrontend.lib clangParse.lib clangAST.lib clangLex.lib clangSupport.lib !llvm_flags! /LIBPATH:C:\vcpkg\installed\x64-windows\lib\
+clang++ -fms-runtime-lib=dll ..\generate.cpp -o generate.exe -lversion -lmsvcrt -lclangAPINotes -lclangEdit -lclangBasic -lclangTooling -lclangFrontendTool -lclangCodeGen -lclangARCMigrate -lclangRewrite -lclangRewriteFrontend -lclangASTMatchers -lclangSerialization -lclangSema -lclangStaticAnalyzerFrontend -lclangStaticAnalyzerCheckers -lclangStaticAnalyzerCore -lclangAnalysis -lclangDriver -lclangFrontend -lclangParse -lclangAST -lclangLex -lclangSupport !llvm_flags! -Xlinker /NODEFAULTLIB:libcmt.lib
 
 cl %CommonCompFlags% /I%VulkanInc% /I"..\src" /I"..\src\core\vendor" user32.lib kernel32.lib gdi32.lib shell32.lib d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib ..\libs\dxcompiler.lib vulkan-1.lib glslangd.lib HLSLd.lib OGLCompilerd.lib OSDependentd.lib MachineIndependentd.lib SPIRVd.lib SPIRV-Toolsd.lib SPIRV-Tools-optd.lib GenericCodeGend.lib glslang-default-resource-limitsd.lib SPVRemapperd.lib spirv-cross-cored.lib spirv-cross-cppd.lib spirv-cross-glsld.lib spirv-cross-hlsld.lib ..\libs\assimp-vc143-mt.lib ..\src\main.cpp %PlatformCppFiles% %UseDebugColorBlend% %DepthCascades% %GBufferCount% %LightSourcesMax% %VoxelGridSize% /Fe"Cynosure Engine" /link %CommonLinkFlags% /LIBPATH:%VulkanLib% -PDB:ce_%random%.pdb 
 popd

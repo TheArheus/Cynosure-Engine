@@ -372,7 +372,7 @@ ParseShaderParam(meta_descriptor* Descriptor, void* Parameters)
 	void* ParametersToParse = Parameters;
 	for(int ParamIdx = 0; ParamIdx < Descriptor->Size; ParamIdx++)
 	{
-		member_definition* Member = Descriptor->Name + ParamIdx;
+		member_definition* Member = Descriptor->Data + ParamIdx;
 		void* Data = (void*)((uptr)Parameters + Member->Offset);
 		if(Member->Type == meta_type::buffer_ref)
 		{

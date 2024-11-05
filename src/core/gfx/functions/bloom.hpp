@@ -9,7 +9,8 @@ struct bloom_combine : public shader_compute_view_context
 		texture_ref Output;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		texture_ref A;
 		texture_ref B;
@@ -30,7 +31,8 @@ struct bloom_downsample : public shader_compute_view_context
 		texture_ref Output;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		texture_ref Input;
 		texture_ref Output;
@@ -51,7 +53,8 @@ struct bloom_upsample : public shader_compute_view_context
 		texture_ref Output;
 	};
 
-	introspect() struct parameters
+	introspect()
+	shader_input() parameters
 	{
 		texture_ref A;
 		texture_ref B;
