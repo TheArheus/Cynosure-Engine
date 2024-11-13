@@ -12,10 +12,9 @@ struct ssao : public shader_compute_view_context
 		texture_ref Output;
 	};
 
-	introspect()
+#if 1
 	shader_input() parameters
 	{
-		shader_param(test1, test2, test3) 
 		global_world_data WorldUpdate;
 		vec4 RandomSamples[64];
 		texture_ref NoiseTexture;
@@ -23,6 +22,16 @@ struct ssao : public shader_compute_view_context
 		texture_ref GBuffer;
 		texture_ref Output;
 	};
+#else
+	shader_input_begin(parameters)
+		shader_param_var(global_world_data, WorldUpdate);
+		shader_param_var(vec4, RandomSamples[64]);
+		shader_param_texture(texture_ref, NoiseTexture);
+		shader_param_texture(texture_ref, DepthTarget);
+		shader_param_texture(texture_ref, GBuffer);
+		shader_param_texture(texture_ref, Output);
+	shader_input_end();
+#endif
 
 	ssao()
 	{

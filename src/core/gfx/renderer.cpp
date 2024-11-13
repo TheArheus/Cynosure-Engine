@@ -29,12 +29,20 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	LightColor         = PushTexture("Light color"  , nullptr, Backend->Width, Backend->Height, 1, TextureInputData);
 
 	TextureInputData.Type	   = image_type::Texture3D;
-	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
+	TextureInputData.Format    = image_format::R32_SFLOAT;
 	TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled | TF_CopySrc;
 	TextureInputData.MipLevels = GetImageMipLevels(VOXEL_SIZE, VOXEL_SIZE);
 	TextureInputData.SamplerInfo.AddressMode = sampler_address_mode::clamp_to_border;
 	TextureInputData.UseStagingBuffer = true;
-	VoxelGridTarget   = PushTexture("VoxelGridTarget", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+	VoxelGridTargetR    = PushTexture("VoxelGridTargetR", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+	VoxelGridTargetG    = PushTexture("VoxelGridTargetG", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+	VoxelGridTargetB    = PushTexture("VoxelGridTargetB", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+
+	TextureInputData.MipLevels = 1;
+	VoxelGridNormalX    = PushTexture("VoxelGridNormalX", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+	VoxelGridNormalY    = PushTexture("VoxelGridNormalY", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+	VoxelGridNormalZ    = PushTexture("VoxelGridNormalZ", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+	VoxelGridNormalW    = PushTexture("VoxelGridNormalW", nullptr, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
 
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.Format    = image_format::R11G11B10_SFLOAT;
@@ -113,6 +121,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	PoissonDisk[63] = vec2(-0.178564, -0.596057);
 	PoissonDiskBuffer = PushBuffer("PoissonDiskBuffer", PoissonDisk, sizeof(vec2), 64, RF_StorageBuffer);
 
+	// TODO: Fix those buffers to textures
 	const u32 Res = 32;
 	vec4  RandomAngles[Res][Res][Res] = {};
 	for(u32 x = 0; x < Res; x++)
@@ -138,7 +147,7 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	TextureInputData.Type	   = image_type::Texture3D;
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
-	RandomAnglesTexture = PushTexture("RandomAnglesTexture", (void*)RandomAngles, 32, 32, 32, TextureInputData);
+	RandomAnglesTexture = PushTexture("RandomAnglesTexture", (void*)RandomAngles, Res, Res, Res, TextureInputData);
 	TextureInputData.Format    = image_format::R32G32_SFLOAT;
 	TextureInputData.Type	   = image_type::Texture2D;
 	NoiseTexture = PushTexture("NoiseTexture", (void*)RandomRotations, 4, 4, 1, TextureInputData);
@@ -212,7 +221,16 @@ global_graphics_context(global_graphics_context&& Oth) noexcept :
 {
 	GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
 	GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
-	VoxelGridTarget = std::move(Oth.VoxelGridTarget);
+
+	VoxelGridTargetR = std::move(Oth.VoxelGridTargetR);
+	VoxelGridTargetG = std::move(Oth.VoxelGridTargetG);
+	VoxelGridTargetB = std::move(Oth.VoxelGridTargetB);
+
+	VoxelGridNormalX = std::move(Oth.VoxelGridNormalX);
+	VoxelGridNormalY = std::move(Oth.VoxelGridNormalY);
+	VoxelGridNormalZ = std::move(Oth.VoxelGridNormalZ);
+	VoxelGridNormalW = std::move(Oth.VoxelGridNormalW);
+
 	HdrColorTarget = std::move(Oth.HdrColorTarget);
 	BrightTarget = std::move(Oth.BrightTarget);
 	TempBrTarget = std::move(Oth.TempBrTarget);
@@ -239,7 +257,16 @@ operator=(global_graphics_context&& Oth) noexcept
 		GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
 		GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
 		GfxDepthTarget = std::move(Oth.GfxDepthTarget);
-		VoxelGridTarget = std::move(Oth.VoxelGridTarget);
+
+		VoxelGridTargetR = std::move(Oth.VoxelGridTargetR);
+		VoxelGridTargetG = std::move(Oth.VoxelGridTargetG);
+		VoxelGridTargetB = std::move(Oth.VoxelGridTargetB);
+
+		VoxelGridNormalX = std::move(Oth.VoxelGridNormalX);
+		VoxelGridNormalY = std::move(Oth.VoxelGridNormalY);
+		VoxelGridNormalZ = std::move(Oth.VoxelGridNormalZ);
+		VoxelGridNormalW = std::move(Oth.VoxelGridNormalW);
+
 		HdrColorTarget = std::move(Oth.HdrColorTarget);
 		BrightTarget = std::move(Oth.BrightTarget);
 		TempBrTarget = std::move(Oth.TempBrTarget);

@@ -12,7 +12,6 @@ struct frustum_culling : public shader_compute_view_context
 		buffer_ref MeshDrawCommandBuffer;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		mesh_comp_culling_common_input MeshCommonCullingData;
@@ -41,7 +40,6 @@ struct occlusion_culling : public shader_compute_view_context
 		buffer_ref  MeshDrawVisibilityDataBuffer;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		mesh_comp_culling_common_input MeshCommonCullingData;
@@ -70,7 +68,6 @@ struct generate_all : public shader_compute_view_context
 		buffer_ref MeshDrawCommandBuffer;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		mesh_comp_culling_common_input MeshCommonCullingData;

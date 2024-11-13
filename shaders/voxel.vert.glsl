@@ -108,12 +108,17 @@ layout(location = 1) out vec4 CoordOut;
 layout(location = 2) out vec4 NormOut;
 layout(location = 3) out vec2 TextCoordOut;
 layout(location = 4) out uint MatIdx;
+layout(location = 5) out mat3 TBN;
 
 void main()
 {
 	uint DrawID        = gl_DrawID;
 	uint VertexIndex   = gl_VertexIndex   + Offsets[DrawID].VertexOffset;
 	uint InstanceIndex = gl_InstanceIndex + Offsets[DrawID].InstanceOffset;
+
+	vec3 VoxelGridMin  = WorldUpdate.SceneCenter.xyz - VOXEL_SIZE * WorldUpdate.SceneScale.xyz;
+	vec3 VoxelGridMax  = WorldUpdate.SceneCenter.xyz + VOXEL_SIZE * WorldUpdate.SceneScale.xyz;
+	vec3 VoxelGridSize = VoxelGridMax - VoxelGridMin;
 
 	MatIdx       = MeshDrawCommands[InstanceIndex].MatIdx;
 	CoordOut     = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
@@ -124,10 +129,11 @@ void main()
 	vec3 Normal  = normalize(vec3(NormalX, NormalY, NormalZ) / 127.0 - 1.0);
 	vec3 Tang    = normalize(vec3(In[VertexIndex].Tangent  ));
 	vec3 Bitang  = normalize(vec3(In[VertexIndex].Bitangent));
-	//TBN          = mat3(Tang, Bitang, Normal);
+	TBN          = mat3(Tang, Bitang, Normal);
 
 	NormOut      = vec4(Normal, 0.0);
 	TextCoordOut = In[VertexIndex].TexPos;
 
-	CoordClip    = vec4((CoordOut.xyz - WorldUpdate.SceneCenter.xyz) * WorldUpdate.SceneScale.xyz, 1.0);
+	vec3 PosNormalized = (CoordOut.xyz - VoxelGridMin) / VoxelGridSize;
+	CoordClip    = vec4(PosNormalized * 2.0 - 1.0, 1.0);
 }

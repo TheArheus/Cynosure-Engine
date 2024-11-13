@@ -1,5 +1,44 @@
 #pragma once
 
+struct vulkan_texture_sampler : public texture_sampler
+{
+	vulkan_texture_sampler() = default;
+	vulkan_texture_sampler(renderer_backend* Backend, u32 MipLevels = 1, const utils::texture::sampler_info& SamplerInfo = {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear})
+	{
+		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		Device = Gfx->Device;
+
+		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
+		ReductionMode.reductionMode = GetVKSamplerReductionMode(SamplerInfo.ReductionMode);
+
+		VkSamplerCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+		CreateInfo.pNext = &ReductionMode;
+		CreateInfo.minFilter = GetVKFilter(SamplerInfo.MinFilter);
+		CreateInfo.magFilter = GetVKFilter(SamplerInfo.MagFilter);
+		CreateInfo.mipmapMode = GetVKMipmapMode(SamplerInfo.MipmapMode);
+		CreateInfo.addressModeU = CreateInfo.addressModeV = CreateInfo.addressModeW = GetVKSamplerAddressMode(SamplerInfo.AddressMode);
+		CreateInfo.borderColor = GetVKBorderColor(SamplerInfo.BorderColor);
+		CreateInfo.compareEnable = false;
+		CreateInfo.compareOp = VK_COMPARE_OP_NEVER;
+		CreateInfo.maxLod = MipLevels;
+
+		VK_CHECK(vkCreateSampler(Device, &CreateInfo, nullptr, &SamplerHandle));
+	}
+
+	void DestroyObject()
+	{
+		vkDestroySampler(Device, SamplerHandle, nullptr);
+		SamplerHandle = 0;
+	}
+	~vulkan_texture_sampler()
+	{
+		DestroyObject();
+	}
+
+	VkDevice Device;
+	VkSampler SamplerHandle;
+};
+
 // TODO: make UpdateSize() function to do a resource recreation if update size is bigger than current one()
 struct vulkan_buffer : public buffer
 {
@@ -174,45 +213,6 @@ private:
 	VkDevice Device;
 	VkBuffer Temp;
 	VkDeviceMemory TempMemory;
-};
-
-struct vulkan_texture_sampler : public texture_sampler
-{
-	vulkan_texture_sampler() = default;
-	vulkan_texture_sampler(renderer_backend* Backend, u32 MipLevels = 1, const utils::texture::sampler_info& SamplerInfo = {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear})
-	{
-		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-		Device = Gfx->Device;
-
-		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
-		ReductionMode.reductionMode = GetVKSamplerReductionMode(SamplerInfo.ReductionMode);
-
-		VkSamplerCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
-		CreateInfo.pNext = &ReductionMode;
-		CreateInfo.minFilter = GetVKFilter(SamplerInfo.MinFilter);
-		CreateInfo.magFilter = GetVKFilter(SamplerInfo.MagFilter);
-		CreateInfo.mipmapMode = GetVKMipmapMode(SamplerInfo.MipmapMode);
-		CreateInfo.addressModeU = CreateInfo.addressModeV = CreateInfo.addressModeW = GetVKSamplerAddressMode(SamplerInfo.AddressMode);
-		CreateInfo.borderColor = GetVKBorderColor(SamplerInfo.BorderColor);
-		CreateInfo.compareEnable = false;
-		CreateInfo.compareOp = VK_COMPARE_OP_NEVER;
-		CreateInfo.maxLod = MipLevels;
-
-		VK_CHECK(vkCreateSampler(Device, &CreateInfo, nullptr, &SamplerHandle));
-	}
-
-	void DestroyObject()
-	{
-		vkDestroySampler(Device, SamplerHandle, nullptr);
-		SamplerHandle = 0;
-	}
-	~vulkan_texture_sampler()
-	{
-		DestroyObject();
-	}
-
-	VkDevice Device;
-	VkSampler SamplerHandle;
 };
 
 // TODO: Better image view handling
@@ -485,7 +485,7 @@ PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 C
 {
 	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, DataSize, Count, Flags);
 	u64 Hash = std::hash<buffer>()(*Buffer);
-	return Buffer;
+	return  Buffer;
 }
 
 buffer* vulkan_memory_heap::
@@ -493,7 +493,7 @@ PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 Dat
 {
 	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, Data, DataSize, Count, Flags);
 	u64 Hash = std::hash<buffer>()(*Buffer);
-	return Buffer;
+	return  Buffer;
 }
 
 texture* vulkan_memory_heap::
@@ -501,7 +501,7 @@ PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Hei
 {
 	texture* Texture = new vulkan_texture(Backend, this, DebugName, nullptr, Width, Height, Depth, InputData);
 	u64 Hash = std::hash<texture>()(*Texture);
-	return  Texture;
+	return   Texture;
 }
 
 texture* vulkan_memory_heap::
@@ -509,5 +509,5 @@ PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Wi
 {
 	texture* Texture = new vulkan_texture(Backend, this, DebugName, Data, Width, Height, Depth, InputData);
 	u64 Hash = std::hash<texture>()(*Texture);
-	return  Texture;
+	return   Texture;
 }

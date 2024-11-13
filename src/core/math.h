@@ -935,6 +935,13 @@ Dot(v2<T>&& lhs, v2<T>&& rhs)
 
 template<typename T>
 inline float 
+Distance(v2<T>&& lhs, v2<T>&& rhs)
+{
+	return sqrtf(Dot(lhs, rhs));
+}
+
+template<typename T>
+inline float 
 LengthSq(v2<T>&& v)
 {
 	return Dot(v, v);
@@ -964,6 +971,13 @@ Dot(v3<T>&& lhs, v3<T>&& rhs)
 
 template<typename T>
 inline float 
+Distance(v3<T>&& lhs, v3<T>&& rhs)
+{
+	return sqrtf(Dot(lhs, rhs));
+}
+
+template<typename T>
+inline float 
 LengthSq(v3<T>&& v)
 {
 	return Dot(v, v);
@@ -989,6 +1003,13 @@ inline float
 Dot(v4<T>&& lhs, v4<T>&& rhs)
 {
 	return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
+}
+
+template<typename T>
+inline float 
+Distance(v4<T>&& lhs, v4<T>&& rhs)
+{
+	return sqrtf(Dot(lhs, rhs));
 }
 
 template<typename T>
@@ -1178,6 +1199,12 @@ Dot(const vec2& lhs, const vec2& rhs)
 }
 
 inline float 
+Distance(const vec2& lhs, const vec2& rhs)
+{
+	return sqrtf(Dot(lhs, rhs));
+}
+
+inline float 
 LengthSq(const vec2& v)
 {
 	return Dot(v, v);
@@ -1203,6 +1230,12 @@ Dot(const vec3& lhs, const vec3& rhs)
 }
 
 inline float 
+Distance(const vec3& lhs, const vec3& rhs)
+{
+	return sqrtf(Dot(lhs, rhs));
+}
+
+inline float 
 LengthSq(const vec3& v)
 {
 	return Dot(v, v);
@@ -1225,6 +1258,12 @@ inline float
 Dot(const vec4& lhs, const vec4& rhs)
 {
 	return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
+}
+
+inline float 
+Distance(const vec4& lhs, const vec4& rhs)
+{
+	return sqrtf(Dot(lhs, rhs));
 }
 
 inline float 

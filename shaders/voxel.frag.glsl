@@ -1,6 +1,7 @@
 #version 450
 
 #extension GL_EXT_scalar_block_layout: require
+#extension GL_EXT_shader_atomic_float: require
 
 #define light_type_none 0
 #define light_type_directional 1
@@ -59,7 +60,14 @@ struct material
 layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
 layout(set = 0, binding = 5) readonly buffer b5 { light_source LightSources[LIGHT_SOURCES_MAX_COUNT]; };
-layout(set = 0, binding = 6) uniform writeonly image3D VoxelTexture;
+layout(set = 0, binding = 6 , r32f) uniform image3D VoxelTextureR;
+layout(set = 0, binding = 7 , r32f) uniform image3D VoxelTextureG;
+layout(set = 0, binding = 8 , r32f) uniform image3D VoxelTextureB;
+layout(set = 0, binding = 9 , r32f) uniform image3D VoxelNormalsX;
+layout(set = 0, binding = 10, r32f) uniform image3D VoxelNormalsY;
+layout(set = 0, binding = 11, r32f) uniform image3D VoxelNormalsZ;
+layout(set = 0, binding = 12, r32f) uniform image3D VoxelNormalsW;
+
 layout(set = 1, binding = 0) uniform sampler2D DiffuseSamplers[256];
 layout(set = 2, binding = 0) uniform sampler2D NormalSamplers[256];
 layout(set = 3, binding = 0) uniform sampler2D SpecularSamplers[256];
@@ -69,6 +77,7 @@ layout(location = 0) in vec4 CoordWS;
 layout(location = 1) in vec4 Norm;
 layout(location = 2) in vec2 TextCoord;
 layout(location = 3) in flat uint MatIdx;
+layout(location = 4) in mat3 TBN;
 
 
 vec3 DoDiffuse(vec3 LightCol, vec3 ToLightDir, vec3 Normal)
@@ -138,9 +147,9 @@ void GetPBRColor(inout vec3 DiffuseColor, vec3 Coord, vec3 Normal, vec3 CameraDi
 	DiffuseColor += RadianceAmmount;
 }
 
-bool IsInsideUnitCube(vec3 V)
+bool IsInsideVoxelGrid(vec3 Coord)
 {
-	return abs(V.x) < 1.0 && abs(V.y) < 1.0 && abs(V.z) < 1.0;
+    return all(greaterThanEqual(Coord, vec3(0.0))) && all(lessThan(Coord, vec3(1.0)));
 }
 
 bool IsSaturated(vec3 V)
@@ -151,10 +160,14 @@ bool IsSaturated(vec3 V)
 
 void main()
 {
-	vec3 VoxelSize = imageSize(VoxelTexture);
-	vec3 VoxelPos = (CoordWS.xyz - WorldUpdate.SceneCenter.xyz) * WorldUpdate.SceneScale.xyz;
+	vec3 VoxelSize = imageSize(VoxelTextureR);
+	vec3 VoxelGridMin  = WorldUpdate.SceneCenter.xyz - VoxelSize * WorldUpdate.SceneScale.xyz;
+	vec3 VoxelGridMax  = WorldUpdate.SceneCenter.xyz + VoxelSize * WorldUpdate.SceneScale.xyz;
+	vec3 VoxelGridSize = VoxelGridMax - VoxelGridMin;
 
-	if(!IsInsideUnitCube(VoxelPos)) return;
+	vec3 VoxelPos = (CoordWS.xyz - VoxelGridMin) / VoxelGridSize;
+
+	if(!IsInsideVoxelGrid(VoxelPos)) return;
 
 	vec4 ColDiffuse = MeshMaterials[MatIdx].LightDiffuse;
 	vec4 ColEmmit   = MeshMaterials[MatIdx].LightEmmit;
@@ -198,7 +211,16 @@ void main()
 		}
 	}
 
-	VoxelPos = VoxelPos * 0.5 + 0.5;
 	VoxelPos = VoxelPos * VoxelSize;
-	imageStore(VoxelTexture, ivec3(VoxelPos), vec4(LightDiffuse, 1));
+	imageAtomicAdd(VoxelTextureR, ivec3(VoxelPos), LightDiffuse.r);
+	imageAtomicAdd(VoxelTextureG, ivec3(VoxelPos), LightDiffuse.g);
+	imageAtomicAdd(VoxelTextureB, ivec3(VoxelPos), LightDiffuse.b);
+
+	vec3 OutputNormal = Normal * 0.5 + 0.5;
+	if(MeshMaterials[MatIdx].HasNormalMap)
+		OutputNormal = (TBN * texture(NormalSamplers[NormalMapIdx], TextCoord).rgb) * 0.5 + 0.5;
+	imageAtomicAdd(VoxelNormalsX, ivec3(VoxelPos), OutputNormal.x);
+	imageAtomicAdd(VoxelNormalsY, ivec3(VoxelPos), OutputNormal.y);
+	imageAtomicAdd(VoxelNormalsZ, ivec3(VoxelPos), OutputNormal.z);
+	imageAtomicAdd(VoxelNormalsW, ivec3(VoxelPos), 1.0);
 }

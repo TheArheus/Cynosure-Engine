@@ -378,7 +378,7 @@ void main()
 {
 	vec2 TextureDims = textureSize(GBuffer[0], 0).xy;
 	vec2 TextCoord   = gl_GlobalInvocationID.xy;
-    if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y || TextCoord.x < 0 || TextCoord.y < 0) 
+    if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y)
 	{
         return;
     }
@@ -392,7 +392,7 @@ void main()
 	vec3  CoordWS = WorldPosFromDepth(TextCoord / TextureDims, CurrDepth);
 	vec3  CoordVS = vec3(WorldUpdate.DebugView * vec4(CoordWS, 1.0));
 
-	vec3  Volumetric = texelFetch(VolumetricLightTexture, ivec2(TextCoord), 0).rgb;
+	vec3  Volumetric = vec3(0); //texelFetch(VolumetricLightTexture, ivec2(TextCoord), 0).rgb;
 	uint  Layer = 0;
 	for(uint CascadeIdx = 1;
 		CascadeIdx <= DEPTH_CASCADES_COUNT;

@@ -241,6 +241,7 @@ vulkan_backend(window* Window)
 	Features2.pNext  = &Features11;
 	Features11.pNext = &Features12;
 	Features12.pNext = &Features13;
+	Features13.pNext = &AtomicFeatures;
 
 	vkGetPhysicalDeviceFeatures2(PhysicalDevice, &Features2);
 	VK_CHECK(vkCreateDevice(PhysicalDevice, &DeviceCreateInfo, nullptr, &Device), true);

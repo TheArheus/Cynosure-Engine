@@ -9,7 +9,7 @@ layout(push_constant) uniform pushConstant { vec3 TextureDims; };
 void main()
 {
 	vec3 TextCoord = gl_GlobalInvocationID.xyz;
-    if (TextCoord.x > TextureDims.x || TextCoord.y > TextureDims.y || TextCoord.z > TextureDims.z || TextCoord.x < 0 || TextCoord.y < 0 || TextCoord.z < 0) 
+    if (TextCoord.x > TextureDims.x || TextCoord.y > TextureDims.y || TextCoord.z > TextureDims.z) 
 	{
         return;
     }

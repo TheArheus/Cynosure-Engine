@@ -46,8 +46,8 @@
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
 	window Window(1280, 720, "3D Renderer");
-	//Window.InitVulkanGraphics();
-	Window.InitDirectx12Graphics();
+	Window.InitVulkanGraphics();
+	//Window.InitDirectx12Graphics();
 	scene_manager SceneManager;
 
 	double TargetFrameRate = 1.0 / 60.0 * 1000.0; // Frames Per Milliseconds

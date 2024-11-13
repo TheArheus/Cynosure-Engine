@@ -9,7 +9,6 @@ struct mesh_shadow : public shader_graphics_view_context
 		buffer_ref GeometryOffsets;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		buffer_ref VertexBuffer;
@@ -47,7 +46,6 @@ struct point_shadow : public shader_graphics_view_context
 		buffer_ref GeometryOffsets;
 	};
 
-	introspect()
 	struct parameters
 	{
 		buffer_ref VertexBuffer;
@@ -84,7 +82,6 @@ struct depth_prepass : public shader_graphics_view_context
 		buffer_ref GeometryOffsets;
 	};
 
-	introspect()
 	struct parameters
 	{
 		buffer_ref VertexBuffer;

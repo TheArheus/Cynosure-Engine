@@ -5,6 +5,7 @@ struct gs_input
     float4 NormIn : TEXCOORD2;
     float2 TextCoordIn : TEXCOORD3;
     uint MatIdxIn : TEXCOORD4;
+	float3x3 TBN : TEXCOORD5;
 };
 
 struct gs_output 
@@ -13,6 +14,7 @@ struct gs_output
     float4 NormOut : TEXCOORD1;
     float2 TextCoordOut : TEXCOORD2;
     uint   MatIdxOut : TEXCOORD3;
+	float3x3 TBN : TEXCOORD4;
     float4 CoordOut : SV_POSITION;
 };
 
@@ -51,6 +53,7 @@ void main(triangle gs_input Input[3], inout TriangleStream<gs_output> OutputStre
         Output.NormOut		= Input[i].NormIn;
         Output.TextCoordOut = Input[i].TextCoordIn;
         Output.MatIdxOut	= Input[i].MatIdxIn;
+        Output.TBN			= Input[i].TBN;
 
 		OutputStream.Append(Output);
     }

@@ -11,7 +11,6 @@ struct debug_raster : public shader_graphics_view_context
 		buffer_ref GeometryOffsets;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
@@ -66,7 +65,6 @@ struct gbuffer_raster : public shader_graphics_view_context
 		texture_ref HeightTextures;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
@@ -116,7 +114,13 @@ struct voxelization : public shader_graphics_view_context
 		buffer_ref MeshMaterialsBuffer;
 		buffer_ref GeometryOffsets;
 		buffer_ref LightSources;
-		texture_ref VoxelGrid;
+		texture_ref VoxelGridR;
+		texture_ref VoxelGridG;
+		texture_ref VoxelGridB;
+		texture_ref VoxelGridNormalX;
+		texture_ref VoxelGridNormalY;
+		texture_ref VoxelGridNormalZ;
+		texture_ref VoxelGridNormalW;
 	};
 
 	struct static_storage_type
@@ -127,7 +131,6 @@ struct voxelization : public shader_graphics_view_context
 		texture_ref HeightTextures;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
@@ -135,6 +138,8 @@ struct voxelization : public shader_graphics_view_context
 		buffer_ref MeshDrawCommands;
 		buffer_ref MeshMaterials;
 		buffer_ref GeometryOffsets;
+		buffer_ref LightSources;
+		texture_ref VoxelGrid;
 
 		texture_ref DiffuseTextures;
 		texture_ref NormalTextures;
@@ -154,7 +159,7 @@ struct voxelization : public shader_graphics_view_context
 	voxelization()
 	{
 		Shaders = {"../shaders/voxel.vert.glsl", "../shaders/voxel.geom.glsl", "../shaders/voxel.frag.glsl"};
-		Defines = {{STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}};
+		Defines = {{STRINGIFY(VOXEL_SIZE), std::to_string(VOXEL_SIZE)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}};
 		LoadOp  = load_op::clear;
 		StoreOp = store_op::store;
 	}
@@ -187,7 +192,6 @@ struct color_pass : public shader_compute_view_context
 		texture_ref PointLightShadows;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
@@ -222,11 +226,16 @@ struct voxel_indirect_light_calc : public shader_compute_view_context
 		buffer_ref  WorldUpdateBuffer;
 		texture_ref DepthTarget;
 		texture_ref GBuffer;
-		texture_ref VoxelGrid;
+		texture_ref VoxelGridR;
+		texture_ref VoxelGridG;
+		texture_ref VoxelGridB;
+		texture_ref VoxelGridNormalX;
+		texture_ref VoxelGridNormalY;
+		texture_ref VoxelGridNormalZ;
+		texture_ref VoxelGridNormalW;
 		texture_ref Out;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
@@ -239,7 +248,7 @@ struct voxel_indirect_light_calc : public shader_compute_view_context
 	voxel_indirect_light_calc()
 	{
 		Shader = "../shaders/voxel_indirect_light_calc.comp.glsl";
-		Defines = {{STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}};
+		Defines = {{STRINGIFY(VOXEL_SIZE), std::to_string(VOXEL_SIZE)}, {STRINGIFY(GBUFFER_COUNT), std::to_string(GBUFFER_COUNT)}, {STRINGIFY(LIGHT_SOURCES_MAX_COUNT), std::to_string(LIGHT_SOURCES_MAX_COUNT)}, {STRINGIFY(DEBUG_COLOR_BLEND), std::to_string(DEBUG_COLOR_BLEND)}, {STRINGIFY(DEPTH_CASCADES_COUNT), std::to_string(DEPTH_CASCADES_COUNT)}};
 	}
 };
 
@@ -254,7 +263,6 @@ struct volumetric_light_calc : public shader_compute_view_context
 		texture_ref Out;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		global_world_data WorldUpdate;
@@ -281,7 +289,6 @@ struct textures_combine : public shader_compute_view_context
 		texture_ref Out;
 	};
 
-	introspect()
 	shader_input() parameters
 	{
 		texture_ref A;

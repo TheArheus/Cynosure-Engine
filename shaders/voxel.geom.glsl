@@ -30,16 +30,18 @@ struct global_world_data
 
 layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 
-layout(location = 0) in vec4  CoordClip[];
-layout(location = 1) in vec4  CoordIn[];
-layout(location = 2) in vec4  NormIn[];
-layout(location = 3) in vec2  TextCoordIn[];
-layout(location = 4) in uint  MatIdxIn[];
+layout(location = 0) in vec4 CoordClip[];
+layout(location = 1) in vec4 CoordIn[];
+layout(location = 2) in vec4 NormIn[];
+layout(location = 3) in vec2 TextCoordIn[];
+layout(location = 4) in uint MatIdxIn[];
+layout(location = 5) in mat3 TBNIn[];
 
 layout(location = 0) out vec4 CoordOut;
 layout(location = 1) out vec4 NormOut;
 layout(location = 2) out vec2 TextCoordOut;
 layout(location = 3) out uint MatIdxOut;
+layout(location = 4) out mat3 TBNOut;
 
 void main()
 {
@@ -74,6 +76,7 @@ void main()
 		NormOut      = NormIn[i];
 		TextCoordOut = TextCoordIn[i];
 		MatIdxOut    = MatIdxIn[i];
+		TBNOut       = TBNIn[i];
 
 		EmitVertex();
 	}

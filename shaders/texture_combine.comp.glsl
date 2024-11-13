@@ -12,7 +12,7 @@ void main()
 	vec2 TextCoord = gl_GlobalInvocationID.xy;
 	vec2 TextureDimsA = textureSize(A, 0).xy;
 	vec2 TextureDimsB = textureSize(B, 0).xy;
-    if (TextCoord.x > TextureDimsA.x || TextCoord.y > TextureDimsA.y || TextCoord.x < 0 || TextCoord.y < 0) 
+    if (TextCoord.x > TextureDimsA.x || TextCoord.y > TextureDimsA.y) 
 	{
         return;
     }

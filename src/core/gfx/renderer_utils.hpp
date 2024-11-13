@@ -350,6 +350,10 @@ public:
 
 	virtual void CreateResource(renderer_backend* Backend) = 0;
 
+	//void BeginFrame();
+	//void EndFrame();
+	//void CollectGarbage();
+
 	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags) = 0;
 	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags) = 0;
 
@@ -361,8 +365,12 @@ public:
 	u64 BeginData = 0;
 	u64 Alignment = 0;
 
-	//std::unordered_map<u64, buffer>  Buffers;
-	//std::unordered_map<u64, texture> Textures;
+	std::unordered_map<u64, buffer*>  PersistentBuffers;
+	std::unordered_map<u64, buffer*>  TransientBuffers;
+
+	std::unordered_map<u64, texture*> PersistentTextures;
+	std::unordered_map<u64, texture*> TransientTextures;
+
 	//std::unordered_map<texture, sampler> Samplers;
 };
 
@@ -685,7 +693,7 @@ namespace std
             hash_combine(Result, hash<u32>{}(id.MipLevels));
             hash_combine(Result, hash<u32>{}(id.Layers));
             hash_combine(Result, hash<bool>{}(id.UseStagingBuffer));
-            hash_combine(Result, hash<utils::texture::sampler_info>{}(id.SamplerInfo)); // Do I actually need this for texture hash?
+            //hash_combine(Result, hash<utils::texture::sampler_info>{}(id.SamplerInfo)); // Do I actually need this for texture hash?
             hash_combine(Result, hash<u64>{}(static_cast<u64>(id.InitialState)));
             return Result;
         }
@@ -707,5 +715,4 @@ namespace std
     };
 };
 
-//#include "engine_meta.hpp"
 #include "reflection.gen.cpp"

@@ -19,7 +19,7 @@ float Gaussian(float x, float sigma) {
 void main()
 {
 	vec2 TextCoord = gl_GlobalInvocationID.xy;
-    if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y || TextCoord.x < 0 || TextCoord.y < 0) 
+    if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y)
 	{
         return;
     }

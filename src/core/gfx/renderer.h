@@ -238,7 +238,13 @@ public:
 	texture* GfxDepthTarget;
 	texture* DebugCameraViewDepthTarget;
 
-	texture* VoxelGridTarget;
+	texture* VoxelGridTargetR;
+	texture* VoxelGridTargetG;
+	texture* VoxelGridTargetB;
+	texture* VoxelGridNormalX;
+	texture* VoxelGridNormalY;
+	texture* VoxelGridNormalZ;
+	texture* VoxelGridNormalW;
 	texture* HdrColorTarget;
 	texture* BrightTarget;
 	texture* TempBrTarget;

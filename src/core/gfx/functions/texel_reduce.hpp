@@ -8,7 +8,6 @@ struct texel_reduce_2d : shader_compute_view_context
 		texture_ref Output;
 	};
 	
-	introspect()
 	shader_input() parameters
 	{
 		texture_ref Input;
@@ -29,7 +28,6 @@ struct texel_reduce_3d : shader_compute_view_context
 		texture_ref Output;
 	};
 
-	introspect() 
 	shader_input() parameters
 	{
 		texture_ref Input;

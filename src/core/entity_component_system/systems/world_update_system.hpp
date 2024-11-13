@@ -6,6 +6,7 @@ struct world_update_system : entity_system
 	vec3 ViewDir;
 	vec3 LockedViewPos;
 	vec3 LockedViewDir;
+	vec3 FixedSceneCenter;
 
 	bool IsCameraLocked = false;
 	bool IsDebugColors  = false;
@@ -16,6 +17,7 @@ struct world_update_system : entity_system
 
 		ViewPos = vec3(0);
 		ViewDir = vec3(1, 0, 0);
+		FixedSceneCenter = ViewPos;
 	}
 
 	void SubscribeToEvents(event_bus& Events)
@@ -67,12 +69,20 @@ struct world_update_system : entity_system
 		WorldUpdate.FarZ			= FarZ;
 		WorldUpdate.DebugColors		= IsDebugColors;
 
-		WorldUpdate.SceneScale  = vec4(vec3(1.0 / 8.0), 0.0);
+		WorldUpdate.SceneScale  = vec4(vec3(1.0 / (VOXEL_SIZE / 8.0)), 0.0);
+#if 0
 		WorldUpdate.SceneCenter = vec4(
-				vec3(floorf(WorldUpdate.CameraPos.x / WorldUpdate.SceneScale.x) * WorldUpdate.SceneScale.x,
-					 floorf(WorldUpdate.CameraPos.y / WorldUpdate.SceneScale.y) * WorldUpdate.SceneScale.y,
-					 floorf(WorldUpdate.CameraPos.z / WorldUpdate.SceneScale.z) * WorldUpdate.SceneScale.z), 
+				vec3(floorf(WorldUpdate.CameraPos.x / VOXEL_SIZE) * VOXEL_SIZE,
+					 floorf(WorldUpdate.CameraPos.y / VOXEL_SIZE) * VOXEL_SIZE,
+					 floorf(WorldUpdate.CameraPos.z / VOXEL_SIZE) * VOXEL_SIZE), 
 				0.0);
+#else
+		if(Distance(WorldUpdate.CameraPos.xyz, FixedSceneCenter) > 1.0 / 8.0)
+		{
+			FixedSceneCenter = WorldUpdate.CameraPos.xyz;
+		}
+		WorldUpdate.SceneCenter = vec4(FixedSceneCenter, 0.0);
+#endif
 
 		// TODO: UI
 		MeshCompCullingCommonData.NearZ = NearZ;

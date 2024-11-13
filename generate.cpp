@@ -1,6 +1,7 @@
 #include <clang/AST/AST.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Type.h>
+#include <clang/AST/RecordLayout.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Tooling/CommonOptionsParser.h>
@@ -25,6 +26,7 @@ struct MemberInfo
     std::string MemberName;
     uint32_t BaseTypeSize;
     size_t ArraySize;
+	uint64_t OffsetInBytes;
 };
 
 struct ClassInfo
@@ -45,6 +47,14 @@ public:
         {
             return true;
         }
+
+#if 0
+		SourceManager& SM = Context->getSourceManager();
+		if (!SM.isInMainFile(Declaration->getLocation()))
+		{
+			return true;
+		}
+#endif
 
         bool IsAnnotated = false;
         for (const auto* Attr : Declaration->attrs())
@@ -104,7 +114,6 @@ private:
     {
         QualType QT = Field->getType();
 
-        // Check if it's an array
         if (QT->isConstantArrayType())
         {
             const ConstantArrayType* CAT = Context->getAsConstantArrayType(QT);
@@ -126,6 +135,10 @@ private:
         }
 
         memberInfo.MemberName = Field->getNameAsString();
+
+		const ASTRecordLayout& Layout = Context->getASTRecordLayout(Field->getParent());
+		uint64_t OffsetInBits = Layout.getFieldOffset(Field->getFieldIndex());
+		memberInfo.OffsetInBytes = OffsetInBits / 8;
     }
 
     std::string GetQualifiedName(const CXXRecordDecl* Declaration)
@@ -291,7 +304,8 @@ private:
             {
                 OutputFile << "    {0, meta_type::" << SanitizeName(Member.BaseTypeName) << ", \""
                            << Member.MemberName << "\", sizeof(" << Member.BaseTypeName << "), "
-                           << "offsetof(" << Class.QualifiedName << ", " << Member.MemberName << "), "
+                           //<< "offsetof(" << Class.QualifiedName << ", " << Member.MemberName << "), "
+                           << Member.OffsetInBytes << ", "
                            << Member.ArraySize << "},\n";
             }
             OutputFile << "};\n\n";
