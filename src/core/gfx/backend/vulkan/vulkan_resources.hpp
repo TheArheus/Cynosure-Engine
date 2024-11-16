@@ -44,7 +44,7 @@ struct vulkan_buffer : public buffer
 {
 	friend vulkan_command_list;
 	vulkan_buffer() = default;
-	~vulkan_buffer() override = default;
+	~vulkan_buffer() override { DestroyResource(); }
 
 	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 Flags)
 	{
@@ -99,8 +99,8 @@ struct vulkan_buffer : public buffer
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) override
 	{
+		VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-		vulkan_memory_heap* VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 		WithCounter = Flags & RF_WithCounter;
 		PrevShader = PSF_TopOfPipe;
@@ -193,16 +193,16 @@ struct vulkan_buffer : public buffer
 
 	void DestroyResource() override
 	{
-		vkFreeMemory(Device, Memory    , nullptr);
-		vkFreeMemory(Device, TempMemory, nullptr);
+		vmaDestroyBuffer(VulkanHeap->Handle, Handle, Allocation);
 
-		vkDestroyBuffer(Device, Temp  , nullptr);
-		vkDestroyBuffer(Device, Handle, nullptr);
+		if(TempMemory) vkFreeMemory(Device, TempMemory, nullptr);
+		if(Temp) vkDestroyBuffer(Device, Temp, nullptr);
 
 		TempMemory = 0;
-		Temp = 0;
+		Temp = VK_NULL_HANDLE;
 		Memory = 0;
-		Handle = 0;
+		Handle = VK_NULL_HANDLE;
+		VulkanHeap = nullptr;
 	}
 
 	VkBuffer Handle;
@@ -213,6 +213,7 @@ private:
 	VkDevice Device;
 	VkBuffer Temp;
 	VkDeviceMemory TempMemory;
+	vulkan_memory_heap* VulkanHeap;
 };
 
 // TODO: Better image view handling
@@ -220,7 +221,7 @@ struct vulkan_texture : public texture
 {
 	friend vulkan_command_list;
 	vulkan_texture() = default;
-	~vulkan_texture() override = default;
+	~vulkan_texture() override { DestroyResource(); DestroyStagingResource(); }
 
 	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
@@ -275,8 +276,8 @@ struct vulkan_texture : public texture
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
 	{
+		VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-		vulkan_memory_heap* VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		CurrentLayout.resize(InputData.MipLevels);
@@ -427,25 +428,25 @@ struct vulkan_texture : public texture
 
 	void DestroyResource() override
 	{
-		vkFreeMemory(Device, Memory, nullptr);
+		vmaDestroyImage(VulkanHeap->Handle, Handle, Allocation);
 		for(VkImageView& View : Views)
 		{
 			vkDestroyImageView(Device, View, nullptr);
 		}
-		vkDestroyImage(Device, Handle, nullptr);
 
 		Memory = 0;
-		Handle = 0;
+		Handle = VK_NULL_HANDLE;
 		Views.clear();
+		VulkanHeap = nullptr;
 	}
 
 	void DestroyStagingResource() override
 	{
-		vkFreeMemory(Device, TempMemory, nullptr);
-		vkDestroyBuffer(Device, Temp, nullptr);
+		if(TempMemory) vkFreeMemory(Device, TempMemory, nullptr);
+		if(Temp) vkDestroyBuffer(Device, Temp, nullptr);
 
 		TempMemory = 0;
-		Temp = 0;
+		Temp = VK_NULL_HANDLE;
 	}
 
 	VkImage Handle;
@@ -461,6 +462,7 @@ private:
 	VkBuffer Temp;
 	VkDeviceMemory TempMemory;
 	VkPhysicalDeviceMemoryProperties MemoryProperties;
+	vulkan_memory_heap* VulkanHeap;
 };
 
 void vulkan_memory_heap::

@@ -3,7 +3,6 @@
 #extension GL_EXT_scalar_block_layout: require
 
 #define SAMPLES_COUNT 16
-#define CONE_SAMPLES  6
 #define light_type_none 0
 #define light_type_directional 1
 #define light_type_point 2
@@ -175,7 +174,7 @@ float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, vec2 Rotatio
 		Result += (ObjectDepth + Bias) > ShadowDepth ? 1.0 : 0.0;
 	}
  
-	Result /= (SAMPLES_COUNT);
+	Result /= float(SAMPLES_COUNT);
 	return Result;
 }
  
@@ -236,7 +235,7 @@ float GetPointLightShadow(samplerCube ShadowSampler, vec3 Position, vec3 LightPo
 		Result += (ObjectDepth + Bias) > ShadowDepth ? 1.0 : 0.0;
 	}
  
-	Result /= (SAMPLES_COUNT);
+	Result /= float(SAMPLES_COUNT);
 	return Result;
 }
 
@@ -409,7 +408,7 @@ void main()
 	float Roughness = 0.8;
 	if(CurrDepth == 1.0)
 	{
-#if 0
+#if 1
 		imageStore(ColorTarget, ivec2(gl_GlobalInvocationID.xy), vec4(Volumetric, 1));
 		if(dot(Volumetric, vec3(0.2126, 0.7152, 0.0722)) > 1.0)
 			imageStore(BrightTarget, ivec2(gl_GlobalInvocationID.xy), vec4(Volumetric, 1));

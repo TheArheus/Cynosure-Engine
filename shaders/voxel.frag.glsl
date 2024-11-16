@@ -60,13 +60,8 @@ struct material
 layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 layout(set = 0, binding = 3) readonly buffer b3 { material MeshMaterials[]; };
 layout(set = 0, binding = 5) readonly buffer b5 { light_source LightSources[LIGHT_SOURCES_MAX_COUNT]; };
-layout(set = 0, binding = 6 , r32f) uniform image3D VoxelTextureR;
-layout(set = 0, binding = 7 , r32f) uniform image3D VoxelTextureG;
-layout(set = 0, binding = 8 , r32f) uniform image3D VoxelTextureB;
-layout(set = 0, binding = 9 , r32f) uniform image3D VoxelNormalsX;
-layout(set = 0, binding = 10, r32f) uniform image3D VoxelNormalsY;
-layout(set = 0, binding = 11, r32f) uniform image3D VoxelNormalsZ;
-layout(set = 0, binding = 12, r32f) uniform image3D VoxelNormalsW;
+layout(set = 0, binding = 6) uniform writeonly image3D VoxelTexture;
+layout(set = 0, binding = 7) uniform writeonly image3D VoxelNormals;
 
 layout(set = 1, binding = 0) uniform sampler2D DiffuseSamplers[256];
 layout(set = 2, binding = 0) uniform sampler2D NormalSamplers[256];
@@ -160,7 +155,7 @@ bool IsSaturated(vec3 V)
 
 void main()
 {
-	vec3 VoxelSize = imageSize(VoxelTextureR);
+	vec3 VoxelSize = imageSize(VoxelTexture);
 	vec3 VoxelGridMin  = WorldUpdate.SceneCenter.xyz - VoxelSize * WorldUpdate.SceneScale.xyz;
 	vec3 VoxelGridMax  = WorldUpdate.SceneCenter.xyz + VoxelSize * WorldUpdate.SceneScale.xyz;
 	vec3 VoxelGridSize = VoxelGridMax - VoxelGridMin;
@@ -212,15 +207,11 @@ void main()
 	}
 
 	VoxelPos = VoxelPos * VoxelSize;
-	imageAtomicAdd(VoxelTextureR, ivec3(VoxelPos), LightDiffuse.r);
-	imageAtomicAdd(VoxelTextureG, ivec3(VoxelPos), LightDiffuse.g);
-	imageAtomicAdd(VoxelTextureB, ivec3(VoxelPos), LightDiffuse.b);
+	imageStore(VoxelTexture, ivec3(VoxelPos), vec4(LightDiffuse, 1));
 
 	vec3 OutputNormal = Normal * 0.5 + 0.5;
 	if(MeshMaterials[MatIdx].HasNormalMap)
 		OutputNormal = (TBN * texture(NormalSamplers[NormalMapIdx], TextCoord).rgb) * 0.5 + 0.5;
-	imageAtomicAdd(VoxelNormalsX, ivec3(VoxelPos), OutputNormal.x);
-	imageAtomicAdd(VoxelNormalsY, ivec3(VoxelPos), OutputNormal.y);
-	imageAtomicAdd(VoxelNormalsZ, ivec3(VoxelPos), OutputNormal.z);
-	imageAtomicAdd(VoxelNormalsW, ivec3(VoxelPos), 1.0);
+
+	imageStore(VoxelNormals, ivec3(VoxelPos), vec4(OutputNormal, 1));
 }

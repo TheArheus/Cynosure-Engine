@@ -401,7 +401,26 @@ vulkan_backend(window* Window)
 void vulkan_backend::
 DestroyObject()
 {
-	vkDestroyDescriptorPool(Device, ImGuiPool, nullptr);
+	vkDeviceWaitIdle(Device);
+
+    ImGui_ImplVulkan_DestroyDeviceObjects();
+    ImGui_ImplVulkan_Shutdown();
+
+    if (!Features13.dynamicRendering && ImGuiRenderPass != VK_NULL_HANDLE)
+    {
+        vkDestroyRenderPass(Device, ImGuiRenderPass, nullptr);
+        ImGuiRenderPass = VK_NULL_HANDLE;
+    }
+
+    if (ImGuiPool != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorPool(Device, ImGuiPool, nullptr);
+        ImGuiPool = VK_NULL_HANDLE;
+    }
+
+	delete CommandQueue;
+	delete GlobalHeap;
+
 	vkDestroySwapchainKHR(Device, Swapchain, nullptr);
 	vkDestroyDevice(Device, nullptr);
 	vkDestroySurfaceKHR(Instance, Surface, nullptr);

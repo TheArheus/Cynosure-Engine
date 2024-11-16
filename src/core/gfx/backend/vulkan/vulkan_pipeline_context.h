@@ -25,7 +25,7 @@ struct vulkan_command_list : public command_list
 		CreateResource(Backend);
 	}
 
-	~vulkan_command_list() override = default;
+	~vulkan_command_list() override { DestroyObject(); };
 	
 	void DestroyObject() override;
 

@@ -22,9 +22,9 @@ DestroyObject()
 	{
 		Execute(CommandLists[Idx], ReleaseSemaphore, AcquireSemaphore);
 	}
-	vkFreeCommandBuffers(Device, CommandAlloc, CommandLists.size(), CommandList);
-	CommandLists.clear();
 #endif
+	vkFreeCommandBuffers(Device, CommandAlloc, CommandLists.size(), CommandLists.data());
+	CommandLists.clear();
 	if(CommandAlloc)
 	{
 		vkDestroyCommandPool(Device, CommandAlloc, nullptr);
@@ -140,6 +140,7 @@ ExecuteAndRemove(VkCommandBuffer* CommandList)
 	Execute(CommandList);
 	vkFreeCommandBuffers(Device, CommandAlloc, 1, CommandList);
 	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
+	*CommandList = VK_NULL_HANDLE;
 }
 
 void vulkan_command_queue::
@@ -148,4 +149,5 @@ ExecuteAndRemove(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, Vk
 	Execute(CommandList, ReleaseSemaphore, AcquireSemaphore);
 	vkFreeCommandBuffers(Device, CommandAlloc, 1, CommandList);
 	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
+	*CommandList = VK_NULL_HANDLE;
 }

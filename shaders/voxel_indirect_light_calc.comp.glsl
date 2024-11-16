@@ -1,5 +1,6 @@
 #version 450
 #define CONE_SAMPLES 16
+#define BOUNCE_COUNT 1
 
 #extension GL_EXT_scalar_block_layout: require
 
@@ -37,14 +38,9 @@ struct global_world_data
 layout(set = 0, binding = 0) readonly buffer b0 { global_world_data WorldUpdate; };
 layout(set = 0, binding = 1) uniform sampler2D DepthTarget;
 layout(set = 0, binding = 2) uniform sampler2D GBuffer[GBUFFER_COUNT];
-layout(set = 0, binding = 3) uniform sampler3D VoxelGridR;
-layout(set = 0, binding = 4) uniform sampler3D VoxelGridG;
-layout(set = 0, binding = 5) uniform sampler3D VoxelGridB;
-layout(set = 0, binding = 6) uniform sampler3D VoxelGridNormalX;
-layout(set = 0, binding = 7) uniform sampler3D VoxelGridNormalY;
-layout(set = 0, binding = 8) uniform sampler3D VoxelGridNormalZ;
-layout(set = 0, binding = 9) uniform sampler3D VoxelGridNormalW;
-layout(set = 0, binding = 10) uniform writeonly image2D ColorOutput;
+layout(set = 0, binding = 3) uniform sampler3D VoxelGrid;
+layout(set = 0, binding = 4) uniform sampler3D VoxelNormal;
+layout(set = 0, binding = 5) uniform writeonly image2D ColorOutput;
 
 
 float NormalDistributionGGX(vec3 Normal, vec3 Half, float Roughness)
@@ -95,7 +91,7 @@ vec3 WorldPosFromDepth(vec2 TextCoord, float Depth)
 
 vec3 TangentToWorld(vec3 dir, vec3 normal)
 {
-    vec3 up = abs(normal.y) < 0.999 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+    vec3 up = abs(normal.y) < 0.999 ? vec3(0, 1, 0) : vec3(0, 0, 1);
     vec3 tangent   = normalize(cross(up, normal));
     vec3 bitangent = cross(normal, tangent);
     return tangent * dir.x + bitangent * dir.y + normal * dir.z;
@@ -103,8 +99,8 @@ vec3 TangentToWorld(vec3 dir, vec3 normal)
 
 vec3 HemisphereDirection(float u1, float u2, vec3 normal)
 {
-    float theta = acos(u1); // Polar angle
-    float phi = 2.0 * Pi * u2; // Azimuthal angle
+    float theta = acos(sqrt(1.0 - u1)); // Weighted polar angle
+    float phi = 2.0 * Pi * u2; // Uniform azimuthal angle
 
     vec3 direction;
     direction.x = sin(theta) * cos(phi);
@@ -119,15 +115,23 @@ vec3 HemisphereDirection(float u1, float u2, vec3 normal)
     return tangent * direction.x + bitangent * direction.y + normal * direction.z;
 }
 
-void InitializeCones()
+void InitializeCones(vec3 Normal)
 {
-    for (int i = 0; i < CONE_SAMPLES; i++)
+	float TotalWeight = 0.0;
+
+	for (int i = 0; i < CONE_SAMPLES; i++)
 	{
-        float u1 = float(i) / float(CONE_SAMPLES);
-        float u2 = fract(sin(float(i) * 12.9898) * 43758.5453);
-        DiffuseConeDirections[i] = HemisphereDirection(u1, u2, vec3(0, 1, 0));
-        DiffuseConeWeights[i] = 1.0 / float(CONE_SAMPLES);
-    }
+		float u1 = float(i) / float(CONE_SAMPLES);
+		float u2 = fract(sin(float(i) * 12.9898 + dot(Normal, Normal)) * 43758.5453);
+		DiffuseConeDirections[i] = HemisphereDirection(u1, u2, vec3(0, 1, 0));
+		DiffuseConeWeights[i] = 1.0 / float(CONE_SAMPLES);
+		TotalWeight += DiffuseConeWeights[i];
+	}
+
+	for (int i = 0; i < CONE_SAMPLES; i++)
+	{
+		DiffuseConeWeights[i] /= TotalWeight;
+	}
 }
 
 bool IsInsideVoxelGrid(vec3 Coord)
@@ -135,10 +139,10 @@ bool IsInsideVoxelGrid(vec3 Coord)
     return all(greaterThanEqual(Coord, vec3(0.0))) && all(lessThan(Coord, vec3(1.0)));
 }
 
-vec4 TraceCone(vec3 Coord, vec3 Direction, vec3 Normal, float Angle, int BounceCount)
+vec4 TraceCone(inout vec3 Coord, inout vec3 Direction, inout vec3 Normal, float Angle)
 {
     vec3 VoxelSceneScale = WorldUpdate.SceneScale.xyz;
-    int  MaxConeRadius = int(textureQueryLevels(VoxelGridR) - 1);
+    int  MaxConeRadius = int(textureQueryLevels(VoxelGrid) - 1);
 
 	float VoxelSize = VOXEL_SIZE;
 	vec3  VoxelGridMin = WorldUpdate.SceneCenter.xyz - VoxelSize * VoxelSceneScale;
@@ -152,34 +156,35 @@ vec4 TraceCone(vec3 Coord, vec3 Direction, vec3 Normal, float Angle, int BounceC
     float AccumOcclusion = 0.0;
 
     vec3 StartPos   = Coord + Normal * Distance;
+	vec3 VoxelNorm  = vec3(0, 1, 0);
     while(Distance <= 1.0 && AccumOcclusion < 0.9)
     {
         vec3 ConePosWorld = StartPos + Direction * Distance;
 		vec3 ConePos = (ConePosWorld - VoxelGridMin) / VoxelGridSize;
         if(!IsInsideVoxelGrid(ConePos)) break;
 
-        float Diameter = 2.0 * Aperture * 1e-2; //Distance;
-        int Mip = int(floor(log2(Diameter * VoxelsPerWorldUnit)));
-            Mip = clamp(int(floor(Mip)), 0, MaxConeRadius);
+        float Diameter = 2.0 * Aperture * Distance;
+        float LogDiameter = log2(Diameter * VoxelsPerWorldUnit);
 
-		float SampleAccumCount = textureLod(VoxelGridNormalW, ConePos, Mip).x;
-        vec3 VoxelSample = vec3(textureLod(VoxelGridR, ConePos, Mip).x, 
-								textureLod(VoxelGridG, ConePos, Mip).x, 
-								textureLod(VoxelGridB, ConePos, Mip).x);// / SampleAccumCount;
-		vec3 VoxelNormal = vec3(textureLod(VoxelGridNormalX, ConePos, 0).x,
-								textureLod(VoxelGridNormalY, ConePos, 0).x,
-								textureLod(VoxelGridNormalZ, ConePos, 0).x) / SampleAccumCount;
-		VoxelNormal = normalize(VoxelNormal);
+        int BaseMip = int(floor(LogDiameter));
+        float MipFraction = LogDiameter - float(BaseMip);
+        BaseMip = clamp(BaseMip, 0, MaxConeRadius - 1);
 
-		float AngleCosine = dot(-Direction, VoxelNormal);
-		float Weight = 1.0;
-		//float Weight = pow(clamp(AngleCosine, 0.0, 1.0), 2.0);
-		//float Weight = smoothstep(0.0, 1.0, AngleCosine);
-		AccumColor += (1.0 - AccumOcclusion) * Weight * VoxelSample.rgb;
-		AccumOcclusion += (1.0 - AccumOcclusion) * Weight;// * VoxelSample.a;
+        // Smoothly interpolate between mip levels
+        vec4 BaseSample = textureLod(VoxelGrid, ConePos, BaseMip);
+        vec4 NextSample = textureLod(VoxelGrid, ConePos, BaseMip + 1);
+        vec4 VoxelSample = mix(BaseSample, NextSample, MipFraction);
+		     VoxelNorm   = normalize(textureLod(VoxelNormal, ConePos, BaseMip).xyz * 2.0 - 1.0);
+
+		AccumColor += (1.0 - AccumOcclusion) * VoxelSample.rgb;
+		if(VoxelSample.a > 0.0) AccumOcclusion += (1.0 - AccumOcclusion) * VoxelSample.a;
 
         Distance += Diameter;
     }
+
+	Coord = StartPos + Direction * Distance;
+	Direction = reflect(-Direction, Normal);
+	Normal = VoxelNorm;
 
     AccumOcclusion = min(AccumOcclusion, 1.0);
     return vec4(AccumColor, AccumOcclusion);
@@ -204,8 +209,6 @@ void main()
 		return;
 	}
 
-	InitializeCones();
-
 	float Metallic  = 1.0;
 	float Roughness = 0.8;
 
@@ -214,6 +217,8 @@ void main()
 
 	vec3  VertexNormalWS   = normalize(texelFetch(GBuffer[0], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
 	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[1], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
+
+	InitializeCones(FragmentNormalWS);
 
 	vec3 N = VertexNormalWS;
 	vec3 V = normalize(WorldUpdate.CameraPos.xyz - CoordWS);
@@ -225,22 +230,33 @@ void main()
 
 	for(uint i = 0; i < CONE_SAMPLES; i++)
 	{
+		//float Attenuation = 1.0 / ((1 + 0.22 * Distance) * (1 + 0.2 * Distance * Distance));
 		vec3 L = normalize(TangentToWorld(DiffuseConeDirections[i], N));
 		vec3 H = normalize(V + L);
 
-		vec4 IncomingRadiance = TraceCone(CoordWS, L, N, Pi / 4.0, 3);
+		float NdotL = max(dot(N, L), 0.0);
+		float NdotV = max(dot(N, V), 0.0);
+		float HdotV = max(dot(H, V), 0.0);
+
+		vec4 IncomingRadiance = vec4(0);
+		vec3 CurrP = CoordWS, CurrV = L, CurrN = N;
+		float Atten = 1.0;
+		for(int j = 0; j < BOUNCE_COUNT; j++)
+		{
+			vec4 BounceColor = TraceCone(CurrP, CurrV, CurrN, Pi / 4.0);
+			IncomingRadiance += BounceColor * Atten;
+			Atten *= 0.8;
+		}
 
 		float NDF = NormalDistributionGGX(N, H, Roughness);
 		float G = GeometrySmith(N, V, L, Roughness);
-		vec3  F = FresnelSchlick(max(dot(H, V), 0.0), F0);
-
-		vec3 SpecularBRDF = (NDF * G * F) / (4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001);
-
+		vec3  F = FresnelSchlick(HdotV, F0);
 		vec3 kD = (1.0 - F) * (1.0 - Metallic);
-		vec3 DiffuseBRDF = kD * Diffuse / Pi;
 
-		float NdotL = max(dot(N, L), 0.0);
-		IndirectLight += (DiffuseBRDF + SpecularBRDF) * IncomingRadiance.rgb * NdotL * DiffuseConeDirections[i];
+		vec3 DiffuseBRDF = kD * Diffuse / Pi;
+		vec3 SpecularBRDF = (NDF * G * F) / (4.0 * NdotL * NdotV + 0.00001);
+
+		IndirectLight += (DiffuseBRDF + SpecularBRDF) * IncomingRadiance.rgb * DiffuseConeDirections[i] * IncomingRadiance.a * NdotL * DiffuseConeWeights[i];
 	}
 
 	imageStore(ColorOutput, ivec2(TextCoord), vec4(IndirectLight, 1.0));

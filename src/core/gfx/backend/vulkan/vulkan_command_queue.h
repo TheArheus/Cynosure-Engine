@@ -11,7 +11,7 @@ public:
 	VkDevice Device;
 
 	vulkan_command_queue() = default;
-	~vulkan_command_queue() = default;
+	~vulkan_command_queue() { DestroyObject(); };
 
 	vulkan_command_queue(VkDevice NewDevice, u32 NewFamilyIndex)
 	{

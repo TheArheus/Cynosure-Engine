@@ -9,9 +9,10 @@ public:
 		CreateResource(Backend);
 	}
 
-	~directx12_memory_heap() override = default;
+	~directx12_memory_heap() override { DestroyResource(); };
 
 	void CreateResource(renderer_backend* Backend) override;
+	void DestroyResource() override { Handle->Release(); Handle = nullptr; }
 
 	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Usage) override;
 	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName,  void* Data, u64 DataSize, u64 Count, u32 Usage) override;

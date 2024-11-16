@@ -114,13 +114,8 @@ struct voxelization : public shader_graphics_view_context
 		buffer_ref MeshMaterialsBuffer;
 		buffer_ref GeometryOffsets;
 		buffer_ref LightSources;
-		texture_ref VoxelGridR;
-		texture_ref VoxelGridG;
-		texture_ref VoxelGridB;
-		texture_ref VoxelGridNormalX;
-		texture_ref VoxelGridNormalY;
-		texture_ref VoxelGridNormalZ;
-		texture_ref VoxelGridNormalW;
+		texture_ref VoxelGrid;
+		texture_ref VoxelGridNormal;
 	};
 
 	struct static_storage_type
@@ -226,13 +221,8 @@ struct voxel_indirect_light_calc : public shader_compute_view_context
 		buffer_ref  WorldUpdateBuffer;
 		texture_ref DepthTarget;
 		texture_ref GBuffer;
-		texture_ref VoxelGridR;
-		texture_ref VoxelGridG;
-		texture_ref VoxelGridB;
-		texture_ref VoxelGridNormalX;
-		texture_ref VoxelGridNormalY;
-		texture_ref VoxelGridNormalZ;
-		texture_ref VoxelGridNormalW;
+		texture_ref VoxelGrid;
+		texture_ref VoxelGridNormal;
 		texture_ref Out;
 	};
 

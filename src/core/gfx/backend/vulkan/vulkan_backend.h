@@ -9,7 +9,10 @@ public:
 		CreateResource(Backend);
 	}
 
+	~vulkan_memory_heap() override { DestroyResource(); }
+
 	void CreateResource(renderer_backend* Backend) override;
+	void DestroyResource() override { vmaDestroyAllocator(Handle); };
 
 	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags) override;
 	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags) override;
@@ -39,7 +42,7 @@ struct vulkan_backend : public renderer_backend
 	};
 
 	vulkan_backend(window* Window);
-	~vulkan_backend() override = default;
+	~vulkan_backend() override { DestroyObject(); };
 	void DestroyObject() override;
 
 	[[nodiscard]] VkShaderModule LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, image_type>>& TextureTypes, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines = {}, u32* LocalSizeX = nullptr, u32* LocalSizeY = nullptr, u32* LocalSizeZ = nullptr);

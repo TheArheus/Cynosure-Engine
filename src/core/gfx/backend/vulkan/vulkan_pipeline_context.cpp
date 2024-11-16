@@ -422,6 +422,23 @@ EndOneTime()
 }
 
 void vulkan_command_list::
+Present()
+{
+	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
+	PlaceEndOfFrameBarriers();
+	CommandQueue->Execute(&CommandList, &ReleaseSemaphore, &AcquireSemaphore);
+
+	VkPresentInfoKHR PresentInfo = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+	PresentInfo.waitSemaphoreCount = 1;
+	PresentInfo.pWaitSemaphores = &ReleaseSemaphore;
+	PresentInfo.swapchainCount = 1;
+	PresentInfo.pSwapchains = &Gfx->Swapchain;
+	PresentInfo.pImageIndices = &BackBufferIndex;
+	vkQueuePresentKHR(CommandQueue->Handle, &PresentInfo);
+}
+
+
+void vulkan_command_list::
 EmplaceColorTarget(texture* RenderTexture)
 {
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(RenderTexture);
@@ -441,22 +458,6 @@ EmplaceColorTarget(texture* RenderTexture)
 	ImageCopyRegion.extent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
 
 	vkCmdCopyImage(CommandList, Texture->Handle, GetVKLayout(barrier_state::transfer_src), Gfx->SwapchainImages[BackBufferIndex], GetVKLayout(barrier_state::transfer_dst), 1, &ImageCopyRegion);
-}
-
-void vulkan_command_list::
-Present()
-{
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	PlaceEndOfFrameBarriers();
-	CommandQueue->Execute(&CommandList, &ReleaseSemaphore, &AcquireSemaphore);
-
-	VkPresentInfoKHR PresentInfo = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
-	PresentInfo.waitSemaphoreCount = 1;
-	PresentInfo.pWaitSemaphores = &ReleaseSemaphore;
-	PresentInfo.swapchainCount = 1;
-	PresentInfo.pSwapchains = &Gfx->Swapchain;
-	PresentInfo.pImageIndices = &BackBufferIndex;
-	vkQueuePresentKHR(CommandQueue->Handle, &PresentInfo);
 }
 
 void vulkan_command_list::

@@ -360,13 +360,8 @@ struct deferred_raster_system : public entity_system
 			Parameters.Param.MeshMaterialsBuffer = Gfx.UseBuffer(MeshMaterialsBuffer);
 			Parameters.Param.GeometryOffsets = Gfx.UseBuffer(GeometryOffsets);
 			Parameters.Param.LightSources = Gfx.UseBuffer(LightSourcesBuffer);
-			Parameters.Param.VoxelGridR = Gfx.UseTexture(Gfx.VoxelGridTargetR);
-			Parameters.Param.VoxelGridG = Gfx.UseTexture(Gfx.VoxelGridTargetG);
-			Parameters.Param.VoxelGridB = Gfx.UseTexture(Gfx.VoxelGridTargetB);
-			Parameters.Param.VoxelGridNormalX = Gfx.UseTexture(Gfx.VoxelGridNormalX);
-			Parameters.Param.VoxelGridNormalY = Gfx.UseTexture(Gfx.VoxelGridNormalY);
-			Parameters.Param.VoxelGridNormalZ = Gfx.UseTexture(Gfx.VoxelGridNormalZ);
-			Parameters.Param.VoxelGridNormalW = Gfx.UseTexture(Gfx.VoxelGridNormalW);
+			Parameters.Param.VoxelGrid = Gfx.UseTexture(Gfx.VoxelGridTarget);
+			Parameters.Param.VoxelGridNormal = Gfx.UseTexture(Gfx.VoxelGridNormal);
 
 			Parameters.StaticStorage.DiffuseTextures = Gfx.UseTextureArray(DiffuseTextures);
 			Parameters.StaticStorage.NormalTextures = Gfx.UseTextureArray(NormalTextures);
@@ -374,31 +369,27 @@ struct deferred_raster_system : public entity_system
 			Parameters.StaticStorage.HeightTextures = Gfx.UseTextureArray(HeightTextures);
 
 			Gfx.AddPass<voxelization>("Voxelization", Parameters, pass_type::graphics, 
-			[this, VoxelGridTargetR = Gfx.VoxelGridTargetR, VoxelGridTargetG = Gfx.VoxelGridTargetG, VoxelGridTargetB = Gfx.VoxelGridTargetB, VoxelGridNormalX = Gfx.VoxelGridNormalX, VoxelGridNormalY = Gfx.VoxelGridNormalY, VoxelGridNormalZ = Gfx.VoxelGridNormalZ, VoxelGridNormalW = Gfx.VoxelGridNormalW](command_list* Cmd, void* Parameters)
+			[this, VoxelGridTarget = Gfx.VoxelGridTarget, VoxelGridNormal = Gfx.VoxelGridNormal](command_list* Cmd, void* Parameters)
 			{
-				Cmd->FillTexture(VoxelGridTargetR, vec4(0));
-				Cmd->FillTexture(VoxelGridTargetG, vec4(0));
-				Cmd->FillTexture(VoxelGridTargetB, vec4(0));
-				Cmd->FillTexture(VoxelGridNormalX, vec4(0));
-				Cmd->FillTexture(VoxelGridNormalY, vec4(0));
-				Cmd->FillTexture(VoxelGridNormalZ, vec4(0));
-				Cmd->FillTexture(VoxelGridNormalW, vec4(0));
+				Cmd->FillTexture(VoxelGridTarget, vec4(0));
+				Cmd->FillTexture(VoxelGridNormal, vec4(0));
 				Cmd->BindShaderParameters(Parameters);
-				Cmd->SetViewport(0, 0, VoxelGridTargetR->Width, VoxelGridTargetR->Height);
+				Cmd->SetViewport(0, 0, VoxelGridTarget->Width, VoxelGridTarget->Height);
 				Cmd->SetIndexBuffer(IndexBuffer);
 				Cmd->DrawIndirect(IndirectDrawIndexedCommands, Geometries.MeshCount, sizeof(indirect_draw_indexed_command));
 			});
 
-			for(u32 MipIdx = 1; MipIdx < Gfx.VoxelGridTargetR->Info.MipLevels; ++MipIdx)
+			for(u32 MipIdx = 1; MipIdx < Gfx.VoxelGridTarget->Info.MipLevels; ++MipIdx)
 			{
-				vec3 VecDims(Max(1u, Gfx.VoxelGridTargetR->Width  >> MipIdx),
-							 Max(1u, Gfx.VoxelGridTargetR->Height >> MipIdx),
-							 Max(1u, Gfx.VoxelGridTargetR->Depth  >> MipIdx));
+				vec3 VecDims(Max(1u, Gfx.VoxelGridTarget->Width  >> MipIdx),
+							 Max(1u, Gfx.VoxelGridTarget->Height >> MipIdx),
+							 Max(1u, Gfx.VoxelGridTarget->Depth  >> MipIdx));
 
 				shader_parameter<texel_reduce_3d> ReduceParameters;
-				ReduceParameters.Param.Input  = Gfx.UseTextureMip(Gfx.VoxelGridTargetR, MipIdx - 1);
-				ReduceParameters.Param.Output = Gfx.UseTextureMip(Gfx.VoxelGridTargetR, MipIdx);
-				Gfx.AddPass<texel_reduce_3d>("Voxel grid mip generation pass R #" + std::to_string(MipIdx), ReduceParameters, pass_type::compute,
+				ReduceParameters.Param.Input  = Gfx.UseTextureMip(Gfx.VoxelGridTarget, MipIdx - 1);
+				ReduceParameters.Param.Output = Gfx.UseTextureMip(Gfx.VoxelGridTarget, MipIdx);
+
+				Gfx.AddPass<texel_reduce_3d>("Voxel grid mip generation pass #" + std::to_string(MipIdx), ReduceParameters, pass_type::compute,
 				[this, VecDims](command_list* Cmd, void* Parameters)
 				{
 					Cmd->BindShaderParameters(Parameters);
@@ -406,69 +397,17 @@ struct deferred_raster_system : public entity_system
 					Cmd->Dispatch(VecDims.x, VecDims.y, VecDims.z);
 				});
 
-				ReduceParameters.Param.Input  = Gfx.UseTextureMip(Gfx.VoxelGridTargetG, MipIdx - 1);
-				ReduceParameters.Param.Output = Gfx.UseTextureMip(Gfx.VoxelGridTargetG, MipIdx);
-				Gfx.AddPass<texel_reduce_3d>("Voxel grid mip generation pass G #" + std::to_string(MipIdx), ReduceParameters, pass_type::compute,
+
+				ReduceParameters.Param.Input  = Gfx.UseTextureMip(Gfx.VoxelGridNormal, MipIdx - 1);
+				ReduceParameters.Param.Output = Gfx.UseTextureMip(Gfx.VoxelGridNormal, MipIdx);
+
+				Gfx.AddPass<texel_reduce_3d>("Voxel normals mip generation pass #" + std::to_string(MipIdx), ReduceParameters, pass_type::compute,
 				[this, VecDims](command_list* Cmd, void* Parameters)
 				{
 					Cmd->BindShaderParameters(Parameters);
 					Cmd->SetConstant((void*)&VecDims, sizeof(vec3));
 					Cmd->Dispatch(VecDims.x, VecDims.y, VecDims.z);
 				});
-
-				ReduceParameters.Param.Input  = Gfx.UseTextureMip(Gfx.VoxelGridTargetB, MipIdx - 1);
-				ReduceParameters.Param.Output = Gfx.UseTextureMip(Gfx.VoxelGridTargetB, MipIdx);
-				Gfx.AddPass<texel_reduce_3d>("Voxel grid mip generation pass B #" + std::to_string(MipIdx), ReduceParameters, pass_type::compute,
-				[this, VecDims](command_list* Cmd, void* Parameters)
-				{
-					Cmd->BindShaderParameters(Parameters);
-					Cmd->SetConstant((void*)&VecDims, sizeof(vec3));
-					Cmd->Dispatch(VecDims.x, VecDims.y, VecDims.z);
-				});
-
-				////////////////////////////////////////////////////////////////////////////////////////////////
-
-#if 0
-				ReduceParameters.Param.Input  = Gfx.UseTextureMip(Gfx.VoxelGridNormalX, MipIdx - 1);
-				ReduceParameters.Param.Output = Gfx.UseTextureMip(Gfx.VoxelGridNormalX, MipIdx);
-				Gfx.AddPass<texel_reduce_3d>("Voxel normals mip generation pass X #" + std::to_string(MipIdx), ReduceParameters, pass_type::compute,
-				[this, VecDims](command_list* Cmd, void* Parameters)
-				{
-					Cmd->BindShaderParameters(Parameters);
-					Cmd->SetConstant((void*)&VecDims, sizeof(vec3));
-					Cmd->Dispatch(VecDims.x, VecDims.y, VecDims.z);
-				});
-
-				ReduceParameters.Param.Input  = Gfx.UseTextureMip(Gfx.VoxelGridNormalY, MipIdx - 1);
-				ReduceParameters.Param.Output = Gfx.UseTextureMip(Gfx.VoxelGridNormalY, MipIdx);
-				Gfx.AddPass<texel_reduce_3d>("Voxel normals mip generation pass Y #" + std::to_string(MipIdx), ReduceParameters, pass_type::compute,
-				[this, VecDims](command_list* Cmd, void* Parameters)
-				{
-					Cmd->BindShaderParameters(Parameters);
-					Cmd->SetConstant((void*)&VecDims, sizeof(vec3));
-					Cmd->Dispatch(VecDims.x, VecDims.y, VecDims.z);
-				});
-
-				ReduceParameters.Param.Input  = Gfx.UseTextureMip(Gfx.VoxelGridNormalZ, MipIdx - 1);
-				ReduceParameters.Param.Output = Gfx.UseTextureMip(Gfx.VoxelGridNormalZ, MipIdx);
-				Gfx.AddPass<texel_reduce_3d>("Voxel normals mip generation pass Z #" + std::to_string(MipIdx), ReduceParameters, pass_type::compute,
-				[this, VecDims](command_list* Cmd, void* Parameters)
-				{
-					Cmd->BindShaderParameters(Parameters);
-					Cmd->SetConstant((void*)&VecDims, sizeof(vec3));
-					Cmd->Dispatch(VecDims.x, VecDims.y, VecDims.z);
-				});
-
-				ReduceParameters.Param.Input  = Gfx.UseTextureMip(Gfx.VoxelGridNormalW, MipIdx - 1);
-				ReduceParameters.Param.Output = Gfx.UseTextureMip(Gfx.VoxelGridNormalW, MipIdx);
-				Gfx.AddPass<texel_reduce_3d>("Voxel normals mip generation pass W #" + std::to_string(MipIdx), ReduceParameters, pass_type::compute,
-				[this, VecDims](command_list* Cmd, void* Parameters)
-				{
-					Cmd->BindShaderParameters(Parameters);
-					Cmd->SetConstant((void*)&VecDims, sizeof(vec3));
-					Cmd->Dispatch(VecDims.x, VecDims.y, VecDims.z);
-				});
-#endif
 			}
 		}
 
@@ -539,13 +478,8 @@ struct deferred_raster_system : public entity_system
 			Parameters.Param.WorldUpdateBuffer = Gfx.UseBuffer(WorldUpdateBuffer);
 			Parameters.Param.DepthTarget = Gfx.UseTexture(Gfx.GfxDepthTarget);
 			Parameters.Param.GBuffer = Gfx.UseTextureArray(Gfx.GBuffer);
-			Parameters.Param.VoxelGridR = Gfx.UseTexture(Gfx.VoxelGridTargetR);
-			Parameters.Param.VoxelGridG = Gfx.UseTexture(Gfx.VoxelGridTargetG);
-			Parameters.Param.VoxelGridB = Gfx.UseTexture(Gfx.VoxelGridTargetB);
-			Parameters.Param.VoxelGridNormalX = Gfx.UseTexture(Gfx.VoxelGridNormalX);
-			Parameters.Param.VoxelGridNormalY = Gfx.UseTexture(Gfx.VoxelGridNormalY);
-			Parameters.Param.VoxelGridNormalZ = Gfx.UseTexture(Gfx.VoxelGridNormalZ);
-			Parameters.Param.VoxelGridNormalW = Gfx.UseTexture(Gfx.VoxelGridNormalW);
+			Parameters.Param.VoxelGrid = Gfx.UseTexture(Gfx.VoxelGridTarget);
+			Parameters.Param.VoxelGridNormal = Gfx.UseTexture(Gfx.VoxelGridNormal);
 			Parameters.Param.Out = Gfx.UseTexture(Gfx.IndirectLightOut);
 
 			Gfx.AddPass<voxel_indirect_light_calc>("Draw voxel indirect light", Parameters, pass_type::compute,

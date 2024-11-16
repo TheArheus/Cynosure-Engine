@@ -349,6 +349,7 @@ public:
 	virtual ~memory_heap() = default;
 
 	virtual void CreateResource(renderer_backend* Backend) = 0;
+	virtual void DestroyResource() = 0;
 
 	//void BeginFrame();
 	//void EndFrame();
