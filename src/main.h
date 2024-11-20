@@ -33,7 +33,6 @@
 #include <imgui/imgui_tables.cpp>
 #include <imgui/imgui_widgets.cpp>
 
-
 struct draw_indexed_indirect_command
 {
     u32 IndexCount;

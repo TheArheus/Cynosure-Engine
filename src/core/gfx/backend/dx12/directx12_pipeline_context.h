@@ -20,7 +20,7 @@ struct directx12_command_list : public command_list
 
 	~directx12_command_list() override = default;
 	
-	void DestroyObject() override {}
+	void DestroyObject() override;
 
 	void CreateResource(renderer_backend* Backend) override;
 
@@ -100,6 +100,7 @@ class directx12_render_context : public render_context
 
 public:
 	directx12_render_context() = default;
+	~directx12_render_context() override { DestroyObject(); };
 
 	directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::vector<std::string> ShaderList, 
 			const std::vector<image_format>& ColorTargetFormats, const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
@@ -107,13 +108,13 @@ public:
 	directx12_render_context(const directx12_render_context&) = delete;
 	directx12_render_context& operator=(const directx12_render_context&) = delete;
 
-	~directx12_render_context() override = default;
-
 	void Clear() override
 	{
 		ResourceBindingIdx = 0;
 		SamplersBindingIdx = 0;
 	}
+
+	void DestroyObject() override {}
 
 private:
 	ComPtr<ID3D12PipelineState> Pipeline;
@@ -148,17 +149,18 @@ class directx12_compute_context : public compute_context
 
 public:
 	directx12_compute_context(renderer_backend* Backend, const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
+	~directx12_compute_context() override { DestroyObject(); };
 
 	directx12_compute_context(const directx12_compute_context&) = delete;
 	directx12_compute_context& operator=(const directx12_compute_context&) = delete;
-
-	~directx12_compute_context() override = default;
 
 	void Clear() override
 	{
 		ResourceBindingIdx = 0;
 		SamplersBindingIdx = 0;
 	}
+
+	void DestroyObject() override {}
 
 private:
 	ComPtr<ID3D12PipelineState> Pipeline;
@@ -211,7 +213,9 @@ public:
 	directx12_resource_binder(const directx12_resource_binder&) = delete;
 	directx12_resource_binder operator=(const directx12_resource_binder&) = delete;
 
-	void DestroyObject() {};
+	void DestroyObject() override 
+	{
+	}
 
 	void AppendStaticStorage(general_context* Context, void* Data) override;
 	void BindStaticStorage(renderer_backend* GeneralBackend) override {};
@@ -219,9 +223,9 @@ public:
 	void SetStorageBufferView(buffer* Buffer, u32 Set = 0) override;
 	void SetUniformBufferView(buffer* Buffer, u32 Set = 0) override;
 
-	void SetSampledImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
 	ID3D12Device6* Device;
 	std::map<u32, u32> SetIndices;

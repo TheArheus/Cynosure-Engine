@@ -163,7 +163,7 @@ SetUniformBufferView(buffer* Buffer, u32 Set)
 }
 
 void vulkan_resource_binder::
-SetSampledImage(u32 DescriptorCount, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetSampledImage(u32 DescriptorCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
@@ -207,7 +207,7 @@ SetSampledImage(u32 DescriptorCount, const std::vector<texture*>& Textures, imag
 }
 
 void vulkan_resource_binder::
-SetStorageImage(u32 DescriptorCount, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetStorageImage(u32 DescriptorCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
@@ -251,7 +251,7 @@ SetStorageImage(u32 DescriptorCount, const std::vector<texture*>& Textures, imag
 }
 
 void vulkan_resource_binder::
-SetImageSampler(u32 DescriptorCount, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetImageSampler(u32 DescriptorCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
@@ -313,6 +313,8 @@ void vulkan_command_list::
 DestroyObject()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
+	vkQueueWaitIdle(CommandQueue->Handle);
+
 	if(AcquireSemaphore)
 	{
 		vkDestroySemaphore(Device, AcquireSemaphore, nullptr);
@@ -325,7 +327,7 @@ DestroyObject()
 	}
 	if(CommandList)
 	{
-		CommandQueue->ExecuteAndRemove(&CommandList);
+		CommandQueue->Remove(&CommandList);
 		CommandList = nullptr;
 	}
 }
@@ -1238,7 +1240,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	: LoadOp(NewLoadOp), StoreOp(NewStoreOp)
 {
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-	VkDevice Device = Gfx->Device;
+	Device = Gfx->Device;
 	Type = pass_type::graphics;
 
 	u32 PushConstantSize = 0;
@@ -1336,7 +1338,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 
 	// TODO: Check if binding partially bound
 	// TODO: Binding flags
-	std::vector<VkDescriptorSetLayout> Layouts(ShaderRootLayout.size());
+	Layouts.resize(ShaderRootLayout.size());
 	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
 	PushDescriptors.resize(ShaderRootLayout.size());
 	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)
@@ -1570,7 +1572,7 @@ vulkan_compute_context::
 vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, const std::vector<shader_define>& ShaderDefines)
 {
 	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-	VkDevice Device = Gfx->Device;
+	Device = Gfx->Device;
 	Type = pass_type::compute;
 
 	u32 PushConstantSize = 0;
@@ -1615,7 +1617,7 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 	}
 
 	// TODO: Check if binding partially bound
-	std::vector<VkDescriptorSetLayout> Layouts(ShaderRootLayout.size());
+	Layouts.resize(ShaderRootLayout.size());
 	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
 	PushDescriptors.resize(ShaderRootLayout.size());
 	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)

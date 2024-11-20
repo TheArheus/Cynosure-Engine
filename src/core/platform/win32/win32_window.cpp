@@ -40,6 +40,20 @@ void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name
 	QueryPerformanceFrequency(&TimerFrequency);
 }
 
+window::
+~window()
+{
+	Gfx.DestroyObject();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+	DestroyWindow(Handle);
+	WindowClass.WindowNames.erase(std::remove(WindowClass.WindowNames.begin(), WindowClass.WindowNames.end(), Name), WindowClass.WindowNames.end());
+	if(WindowClass.WindowNames.size() == 0)
+	{
+		WindowClass.IsRunning = false;
+	}
+}
+
 LRESULT window::InitWindowProc(HWND hWindow, UINT Message, WPARAM wParam, LPARAM lParam)
 {
 	switch(Message)

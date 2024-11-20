@@ -15,15 +15,7 @@ Init(VkDevice NewDevice, u32 NewFamilyIndex)
 void vulkan_command_queue::
 DestroyObject()
 {
-#if 0
-	for(u32 Idx = 0;
-		Idx < CommandLists.size();
-		++Idx)
-	{
-		Execute(CommandLists[Idx], ReleaseSemaphore, AcquireSemaphore);
-	}
-#endif
-	vkFreeCommandBuffers(Device, CommandAlloc, CommandLists.size(), CommandLists.data());
+	if(CommandLists.size()) vkFreeCommandBuffers(Device, CommandAlloc, CommandLists.size(), CommandLists.data());
 	CommandLists.clear();
 	if(CommandAlloc)
 	{
@@ -61,11 +53,18 @@ void vulkan_command_queue::
 Reset(VkCommandBuffer* CommandList)
 {
 	vkResetCommandBuffer(*CommandList, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
-	vkResetCommandPool(Device, CommandAlloc, 0);
 
 	VkCommandBufferBeginInfo CommandBufferBeginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 	CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	vkBeginCommandBuffer(*CommandList, &CommandBufferBeginInfo);
+}
+
+void vulkan_command_queue::
+Remove(VkCommandBuffer* CommandList)
+{
+	vkFreeCommandBuffers(Device, CommandAlloc, 1, CommandList);
+	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
+	*CommandList = VK_NULL_HANDLE;
 }
 
 void vulkan_command_queue::
@@ -138,16 +137,12 @@ void vulkan_command_queue::
 ExecuteAndRemove(VkCommandBuffer* CommandList)
 {
 	Execute(CommandList);
-	vkFreeCommandBuffers(Device, CommandAlloc, 1, CommandList);
-	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
-	*CommandList = VK_NULL_HANDLE;
+	Remove(CommandList);
 }
 
 void vulkan_command_queue::
 ExecuteAndRemove(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
 {
 	Execute(CommandList, ReleaseSemaphore, AcquireSemaphore);
-	vkFreeCommandBuffers(Device, CommandAlloc, 1, CommandList);
-	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
-	*CommandList = VK_NULL_HANDLE;
+	Remove(CommandList);
 }

@@ -54,7 +54,7 @@ SetUniformBufferView(buffer* Buffer, u32 Set)
 }
 
 void directx12_resource_binder::
-SetSampledImage(u32 BindingCount, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetSampledImage(u32 BindingCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootSamplersBindingIdx += 1;
@@ -72,7 +72,7 @@ SetSampledImage(u32 BindingCount, const std::vector<texture*>& Textures, image_t
 }
 
 void directx12_resource_binder::
-SetStorageImage(u32 BindingCount, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetStorageImage(u32 BindingCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	BindingDescriptions.push_back({dx12_descriptor_type::unordered_access_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootResourceBindingIdx += 1;
@@ -90,7 +90,7 @@ SetStorageImage(u32 BindingCount, const std::vector<texture*>& Textures, image_t
 }
 
 void directx12_resource_binder::
-SetImageSampler(u32 BindingCount, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetImageSampler(u32 BindingCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	BindingDescriptions.push_back({dx12_descriptor_type::shader_resource_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootResourceBindingIdx += 1;
@@ -132,6 +132,13 @@ CreateResource(renderer_backend* Backend)
 }
 
 void directx12_command_list::
+DestroyObject()
+{
+	//Gfx->CommandQueue->ExecuteAndRemove(CommandList);
+	Fence.Flush(Gfx->CommandQueue);
+}
+
+void directx12_command_list::
 AcquireNextImage()
 {
 	// NOTE: For directx12 this happens in the end of the frame
@@ -155,7 +162,7 @@ PlaceEndOfFrameBarriers()
 	}
 
 #ifdef CE_DEBUG
-	// TODO: This will be needed only when PIX capture will be acquired
+	// NOTE: This will be needed only when PIX capture will be acquired
 	{
 		for(u32 Idx = 0; Idx < BuffersToCommon.size(); ++Idx)
 		{
@@ -240,8 +247,6 @@ Present()
 		D3D12_DRED_PAGE_FAULT_OUTPUT1 DredPageFaultOutput;
 		pDred->GetAutoBreadcrumbsOutput1(&DredAutoBreadcrumbsOutput);
 		pDred->GetPageFaultAllocationOutput1(&DredPageFaultOutput);
-
-		int fin = 5;
 	}
 
 	Fence.Flush(Gfx->CommandQueue);

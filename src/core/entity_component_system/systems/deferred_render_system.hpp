@@ -40,6 +40,42 @@ struct deferred_raster_system : public entity_system
 		RequireComponent<static_instances_component>();
 	}
 
+	~deferred_raster_system()
+	{
+		for(texture* T : DiffuseTextures)
+			delete T;
+		for(texture* T : NormalTextures)
+			delete T;
+		for(texture* T : SpecularTextures)
+			delete T;
+		for(texture* T : HeightTextures)
+			delete T;
+
+		for(texture* T : LightShadows)
+			delete T;
+		for(texture* T : PointLightShadows)
+			delete T;
+
+		delete WorldUpdateBuffer;
+		delete MeshCommonCullingInputBuffer;
+		delete MeshDrawCommandDataBuffer;
+
+		delete GeometryOffsets;
+		delete VertexBuffer;
+		delete IndexBuffer;
+
+		delete MeshMaterialsBuffer;
+		delete LightSourcesBuffer;
+
+		delete MeshDrawVisibilityDataBuffer;
+		delete IndirectDrawIndexedCommands;
+		delete MeshDrawCommandBuffer;
+
+		delete MeshDrawShadowVisibilityDataBuffer;
+		delete ShadowIndirectDrawIndexedCommands;
+		delete MeshDrawShadowCommandBuffer;
+	}
+
 	// TODO: Move to/create a asset storage
 	void Setup(window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCommonCullingInput)
 	{

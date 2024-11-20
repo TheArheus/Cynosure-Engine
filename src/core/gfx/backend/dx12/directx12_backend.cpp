@@ -132,7 +132,36 @@ directx12_backend(window* Window)
 };
 
 void directx12_backend::
-DestroyObject() {}
+DestroyObject() 
+{
+    ImGui_ImplDX12_Shutdown();
+
+    delete GlobalHeap;
+    GlobalHeap = nullptr;
+
+    delete CommandQueue;
+    CommandQueue = nullptr;
+
+	SwapchainImages[0].Reset();
+	SwapchainImages[1].Reset();
+
+    SwapChain.Reset();
+    Device.Reset();
+    Adapter.Reset();
+    Factory.Reset();
+    pDredSettings.Reset();
+
+#if defined(CE_DEBUG)
+    if (Device)
+    {
+        ComPtr<ID3D12InfoQueue1> InfoQueue;
+        if (SUCCEEDED(Device->QueryInterface(IID_PPV_ARGS(&InfoQueue))))
+        {
+            InfoQueue->UnregisterMessageCallback(MsgCallback);
+        }
+    }
+#endif
+}
 
 void directx12_backend::
 RecreateSwapchain(u32 NewWidth, u32 NewHeight)
@@ -198,6 +227,7 @@ dx12_descriptor_type GetDXSpvDescriptorType(const std::vector<op_info>& ShaderIn
 	}
 }
 
+// TODO: Use allocator for the inner data so that there wouldn't be a leak
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
 LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, descriptor_param>>& ParameterLayout, std::map<u32, std::map<u32, u32>>& NewBindings, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {
@@ -224,10 +254,26 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 		ComPtr<IDxcCompiler> DxcCompiler;
 		ComPtr<IDxcLibrary> DxcLib;
 		ComPtr<IDxcUtils> DxcUtils;
+
 		HRESULT hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&DxcCompiler3));
-				hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&DxcCompiler));
-				hr = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&DxcLib));
-		        hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&DxcUtils));
+		bool UseDxcCompiler3 = SUCCEEDED(hr);
+		if(UseDxcCompiler3)
+		{
+			hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&DxcUtils));
+			if(FAILED(hr))
+			{
+				std::cerr << "Failed to create IDxcUtils instance." << std::endl;
+				return {};
+			}
+		}
+		else
+		{
+			hr = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&DxcLib));
+			if(FAILED(hr)) { /* Handle error */ }
+
+			hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&DxcCompiler));
+			if(FAILED(hr)) { /* Handle error */ }
+		}
 
 		std::vector<std::wstring> LongArgs;
 		std::vector<LPCWSTR> ShaderCompileArgs;
@@ -248,6 +294,19 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 			ShaderCompileArgs.push_back(L"hs_6_2");
 		else if (ShaderType == shader_stage::tessellation_eval)
 			ShaderCompileArgs.push_back(L"ds_6_2");
+
+		const wchar_t* TargetProfile = L"vs_6_2";
+		if (ShaderType == shader_stage::fragment)
+			TargetProfile = L"ps_6_2";
+		else if (ShaderType == shader_stage::compute)
+			TargetProfile = L"cs_6_2";
+		else if (ShaderType == shader_stage::geometry)
+			TargetProfile = L"gs_6_2";
+		else if (ShaderType == shader_stage::tessellation_control)
+			TargetProfile = L"hs_6_2";
+		else if (ShaderType == shader_stage::tessellation_eval)
+			TargetProfile = L"ds_6_2";
+
 
 		std::string ShaderDefinesResult;
 		for(const shader_define& Define : ShaderDefines)
@@ -276,22 +335,79 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 			ShaderType == shader_stage::tessellation_control || 
 			ShaderType == shader_stage::tessellation_eval)
 		{
-			DxcBuffer ShaderBuffer = {};
-			ShaderBuffer.Ptr  = ShaderCode.c_str();
-			ShaderBuffer.Size = ShaderCode.size();
-
-			ComPtr<IDxcResult> ShaderResult;
-			DxcCompiler3->Compile(&ShaderBuffer, ShaderCompileArgs.data(), ShaderCompileArgs.size(), nullptr, IID_PPV_ARGS(&ShaderResult));
-
-			ComPtr<IDxcBlobUtf8> ShaderErrors;
-			ShaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&ShaderErrors), nullptr);
-			if(ShaderErrors->GetStringLength())
+			ComPtr<IDxcBlobEncoding> SourceBlob;
+			if (UseDxcCompiler3)
 			{
-				std::cout << ShaderErrors->GetStringPointer() << std::endl;
+				hr = DxcUtils->CreateBlobFromPinned(ShaderCode.c_str(), static_cast<UINT32>(ShaderCode.size()), CP_UTF8, &SourceBlob);
+			}
+			else
+			{
+				hr = DxcLib->CreateBlobWithEncodingFromPinned(ShaderCode.c_str(), static_cast<UINT32>(ShaderCode.size()), CP_UTF8, &SourceBlob);
+			}
+
+			if (FAILED(hr))
+			{
+				std::cerr << "Failed to create source blob." << std::endl;
+				return {};
 			}
 
 			ComPtr<IDxcBlob> ShaderBlob;
-			ShaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&ShaderBlob), nullptr);
+			if(UseDxcCompiler3)
+			{
+				DxcBuffer SourceBuffer = {};
+				SourceBuffer.Ptr = SourceBlob->GetBufferPointer();
+				SourceBuffer.Size = SourceBlob->GetBufferSize();
+				//SourceBuffer.Encoding = DXC_CP_UTF8;
+
+				ComPtr<IDxcResult> CompileResult;
+				hr = DxcCompiler3->Compile(&SourceBuffer, ShaderCompileArgs.data(), ShaderCompileArgs.size(), nullptr, IID_PPV_ARGS(&CompileResult));
+				if (FAILED(hr)) { /* Handle error */ }
+
+				HRESULT hrStatus;
+				hr = CompileResult->GetStatus(&hrStatus);
+				if (FAILED(hrStatus))
+				{
+					ComPtr<IDxcBlobUtf8> Errors;
+					hr = CompileResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&Errors), nullptr);
+					if (SUCCEEDED(hr) && Errors && Errors->GetStringLength() > 0)
+					{
+						std::cerr << "Shader compilation errors:\n" << Errors->GetStringPointer() << std::endl;
+					}
+					return {};
+				}
+
+				hr = CompileResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&ShaderBlob), nullptr);
+				if (FAILED(hr) || ShaderBlob == nullptr)
+				{
+					std::cerr << "Failed to retrieve compiled shader code." << std::endl;
+					return {};
+				}
+			}
+			else
+			{
+				ComPtr<IDxcOperationResult> CompileResult;
+				hr = DxcCompiler->Compile(SourceBlob.Get(), nullptr, L"main", TargetProfile, ShaderCompileArgs.data(), static_cast<UINT32>(ShaderCompileArgs.size()), nullptr, 0, nullptr, &CompileResult);
+
+				HRESULT hrStatus;
+				hr = CompileResult->GetStatus(&hrStatus);
+				if (FAILED(hrStatus))
+				{
+					ComPtr<IDxcBlobEncoding> ErrorsBlob;
+					hr = CompileResult->GetErrorBuffer(&ErrorsBlob);
+					if (SUCCEEDED(hr) && ErrorsBlob)
+					{
+						std::cerr << "Shader compilation errors:\n" << (const char*)ErrorsBlob->GetBufferPointer() << std::endl;
+					}
+					return {};
+				}
+
+				hr = CompileResult->GetResult(&ShaderBlob);
+				if (FAILED(hr) || ShaderBlob == nullptr)
+				{
+					std::cerr << "Failed to retrieve compiled shader code." << std::endl;
+					return {};
+				}
+			}
 
 			const void* BlobDataPtr = ShaderBlob->GetBufferPointer();
 			size_t BlobDataSize = ShaderBlob->GetBufferSize();
@@ -593,6 +709,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 				}
 			}
 		}
+
 		CompiledShaders[Path].ShaderRootLayout.insert(ShaderRootLayout.begin(), ShaderRootLayout.end());
 		CompiledShaders[Path].DescriptorHeapSizes.insert(DescriptorHeapSizes.begin(), DescriptorHeapSizes.end());
 		CompiledShaders[Path].HavePushConstant = HavePushConstant;
@@ -716,93 +833,107 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 			}
 		}
 
-		u32 CodePage = CP_UTF8;
-		ComPtr<IDxcBlobEncoding> SourceBlob;
-		DxcLib->CreateBlobWithEncodingFromPinned(HlslCode.c_str(), static_cast<u32>(HlslCode.size()), CodePage, &SourceBlob);
+        ComPtr<IDxcBlobEncoding> SourceBlob;
+        if (UseDxcCompiler3)
+        {
+            hr = DxcUtils->CreateBlobFromPinned(HlslCode.c_str(), static_cast<UINT32>(HlslCode.size()), CP_UTF8, &SourceBlob);
+        }
+        else
+        {
+            hr = DxcLib->CreateBlobWithEncodingFromPinned(HlslCode.c_str(), static_cast<UINT32>(HlslCode.size()), CP_UTF8, &SourceBlob);
+        }
 
-		const wchar_t* TargetProfile = L"vs_6_2";
-		if (ShaderType == shader_stage::fragment)
-			TargetProfile = L"ps_6_2";
-		else if (ShaderType == shader_stage::compute)
-			TargetProfile = L"cs_6_2";
-		else if (ShaderType == shader_stage::geometry)
-			TargetProfile = L"gs_6_2";
-		else if (ShaderType == shader_stage::tessellation_control)
-			TargetProfile = L"hs_6_2";
-		else if (ShaderType == shader_stage::tessellation_eval)
-			TargetProfile = L"ds_6_2";
+        if (FAILED(hr))
+        {
+            std::cerr << "Failed to create source blob." << std::endl;
+            return {};
+        }
 
 		std::vector<LPCWSTR> Arguments;
 		Arguments.push_back(DXC_ARG_OPTIMIZATION_LEVEL3);
 #if defined(CE_DEBUG)
-		Arguments.push_back(L"-Zi");
-		Arguments.push_back(L"-Qembed_debug");
-		Arguments.push_back(L"-Qstrip_debug");
-		Arguments.push_back(L"-Qstrip_reflect");
+		//Arguments.push_back(L"-Zi");
+		//Arguments.push_back(L"-Qembed_debug");
+		//Arguments.push_back(L"-Qstrip_debug");
+		//Arguments.push_back(L"-Qstrip_reflect");
 #endif
-
-		ComPtr<IDxcBlobUtf8> Errors;
-		ComPtr<IDxcBlobUtf8> DebugData;
-		ComPtr<IDxcBlobUtf16> DebugPath;
-		ComPtr<IDxcResult> CompileResult;
-
-		{
-			IDxcOperationResult* OperationResult = nullptr;
-			DxcCompiler->Compile(static_cast<IDxcBlob*>(SourceBlob.Get()), nullptr, L"main", TargetProfile, Arguments.data(), Arguments.size(), nullptr, 0, nullptr, &OperationResult);
-
-			CompileResult.Attach(static_cast<IDxcResult*>(OperationResult));
-		}
-
-		CompileResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(Errors.GetAddressOf()), nullptr);
-		CompileResult->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(DebugData.GetAddressOf()), DebugPath.GetAddressOf());
-
-		if(DebugData)
-		{
-			std::wstring OutputPath(reinterpret_cast<const wchar_t*>(DebugPath->GetBufferPointer()));
-			std::wofstream PDBFile(OutputPath, std::ios::binary);
-			PDBFile.write(reinterpret_cast<const wchar_t*>(DebugData->GetBufferPointer()), DebugData->GetBufferSize());
-			PDBFile.close();
-		}
-
-		if (Errors && Errors->GetStringLength() > 0)
-		{
-			std::cerr << (const char*)Errors->GetStringPointer() << std::endl;
-		}
-
-		CompileResult->GetStatus(&hr);
-
-		if(FAILED(hr))
-		{
-			if(CompileResult)
-			{
-				ComPtr<IDxcBlobEncoding> ErrorsBlob;
-				hr = CompileResult->GetErrorBuffer(&ErrorsBlob);
-				if (SUCCEEDED(hr) && ErrorsBlob)
-				{
-					std::cerr << (const char*)ErrorsBlob->GetBufferPointer() << std::endl;
-					return {};
-				}
-			}
-		}
+		Arguments.push_back(L"-T");
+		if (ShaderType == shader_stage::vertex)
+			Arguments.push_back(L"vs_6_2");
+		else if (ShaderType == shader_stage::fragment)
+			Arguments.push_back(L"ps_6_2");
+		else if (ShaderType == shader_stage::compute)
+			Arguments.push_back(L"cs_6_2");
+		else if (ShaderType == shader_stage::geometry)
+			Arguments.push_back(L"gs_6_2");
+		else if (ShaderType == shader_stage::tessellation_control)
+			Arguments.push_back(L"hs_6_2");
+		else if (ShaderType == shader_stage::tessellation_eval)
+			Arguments.push_back(L"ds_6_2");
 
 		ComPtr<IDxcBlob> Code;
-		CompileResult->GetResult(&Code);
-
-		if (Code.Get() != NULL)
+		if(UseDxcCompiler3)
 		{
-			Result.BytecodeLength  = Code->GetBufferSize();
-			Result.pShaderBytecode = PushArray(u8, Result.BytecodeLength);
-			memcpy((void*)Result.pShaderBytecode, Code->GetBufferPointer(), Result.BytecodeLength);
-			Code->Release();
+			DxcBuffer SourceBuffer = {};
+			SourceBuffer.Ptr = SourceBlob->GetBufferPointer();
+			SourceBuffer.Size = SourceBlob->GetBufferSize();
+			//SourceBuffer.Encoding = DXC_CP_UTF8;
+
+			ComPtr<IDxcResult> CompileResult;
+			hr = DxcCompiler3->Compile(&SourceBuffer, Arguments.data(), Arguments.size(), nullptr, IID_PPV_ARGS(&CompileResult));
+			if (FAILED(hr)) { /* Handle error */ }
+
+			HRESULT hrStatus;
+            hr = CompileResult->GetStatus(&hrStatus);
+            if (FAILED(hrStatus))
+            {
+				ComPtr<IDxcBlobUtf8> Errors;
+                hr = CompileResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&Errors), nullptr);
+                if (SUCCEEDED(hr) && Errors && Errors->GetStringLength() > 0)
+                {
+                    std::cerr << "Shader compilation errors:\n" << Errors->GetStringPointer() << std::endl;
+                }
+                return {};
+            }
+
+            hr = CompileResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&Code), nullptr);
+            if (FAILED(hr) || Code == nullptr)
+            {
+                std::cerr << "Failed to retrieve compiled shader code." << std::endl;
+                return {};
+            }
 		}
 		else
 		{
-			std::cerr << "Failed to compile shader source" << std::endl;
-			return {};
+			ComPtr<IDxcOperationResult> CompileResult;
+            hr = DxcCompiler->Compile(SourceBlob.Get(), nullptr, L"main", TargetProfile, Arguments.data(), static_cast<UINT32>(Arguments.size()), nullptr, 0, nullptr, &CompileResult);
+
+            HRESULT hrStatus;
+            hr = CompileResult->GetStatus(&hrStatus);
+            if (FAILED(hrStatus))
+            {
+                ComPtr<IDxcBlobEncoding> ErrorsBlob;
+                hr = CompileResult->GetErrorBuffer(&ErrorsBlob);
+                if (SUCCEEDED(hr) && ErrorsBlob)
+                {
+                    std::cerr << "Shader compilation errors:\n" << (const char*)ErrorsBlob->GetBufferPointer() << std::endl;
+                }
+                return {};
+            }
+
+            hr = CompileResult->GetResult(&Code);
+            if (FAILED(hr) || Code == nullptr)
+            {
+                std::cerr << "Failed to retrieve compiled shader code." << std::endl;
+                return {};
+            }
 		}
 
+		Result.BytecodeLength  = Code->GetBufferSize();
+		Result.pShaderBytecode = PushArray(u8, Result.BytecodeLength);
+		memcpy((void*)Result.pShaderBytecode, Code->GetBufferPointer(), Result.BytecodeLength);
+
 		CompiledShaders[Path].Handle = Result;
-		SourceBlob->Release();
 	}
 
 	File.close();

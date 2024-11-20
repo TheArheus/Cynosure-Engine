@@ -4,6 +4,7 @@ global_graphics_context::
 global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendType)
 	: Backend(NewBackend), BackendType(NewBackendType)
 {
+	Binder = CreateResourceBinder();
 	ExecutionContext = CreateGlobalPipelineContext();
 
 	utils::texture::input_data TextureInputData = {};
@@ -196,77 +197,230 @@ global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendTyp
 	BlurTemp			 = PushTexture("BlurTemp", Backend->Width, Backend->Height, 1, TextureInputData);
 }
 
-global_graphics_context::
-global_graphics_context(global_graphics_context&& Oth) noexcept : 
-	Backend(std::move(Oth.Backend)),
-	BackendType(std::move(Oth.BackendType)),
-	PoissonDiskBuffer(std::move(Oth.PoissonDiskBuffer)),
-	RandomSamplesBuffer(std::move(Oth.RandomSamplesBuffer)),
-	GfxDepthTarget(std::move(Oth.GfxDepthTarget)),
-	DebugCameraViewDepthTarget(std::move(Oth.DebugCameraViewDepthTarget)),
-	GlobalShadow(std::move(Oth.GlobalShadow)),
-	GBuffer(std::move(Oth.GBuffer)),
-	AmbientOcclusionData(std::move(Oth.AmbientOcclusionData)),
-	BlurTemp(std::move(Oth.BlurTemp)),
-	DepthPyramid(std::move(Oth.DepthPyramid)),
-	RandomAnglesTexture(std::move(Oth.RandomAnglesTexture)),
-	NoiseTexture(std::move(Oth.NoiseTexture))
+void global_graphics_context::
+DestroyObject()
 {
-	GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
-	GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
-	VoxelGridTarget = std::move(Oth.VoxelGridTarget);
-	VoxelGridNormal = std::move(Oth.VoxelGridNormal);
-	HdrColorTarget = std::move(Oth.HdrColorTarget);
-	BrightTarget = std::move(Oth.BrightTarget);
-	TempBrTarget = std::move(Oth.TempBrTarget);
+	GeneralShaderViewMap.clear();
+	ContextMap.clear();
 
-	VolumetricLightOut = std::move(Oth.VolumetricLightOut);
-	IndirectLightOut = std::move(Oth.IndirectLightOut);
-	LightColor = std::move(Oth.LightColor);
+	if(PoissonDiskBuffer) delete PoissonDiskBuffer;
+	if(RandomSamplesBuffer) delete RandomSamplesBuffer;
 
-	ExecutionContext = std::move(Oth.ExecutionContext);
-	ContextMap = std::move(Oth.ContextMap);
-	GeneralShaderViewMap = std::move(Oth.GeneralShaderViewMap);
-	Dispatches = std::move(Oth.Dispatches);
+	if(GfxColorTarget[0]) delete GfxColorTarget[0];
+	if(GfxColorTarget[1]) delete GfxColorTarget[1];
+	if(GfxDepthTarget) delete GfxDepthTarget;
+	if(DebugCameraViewDepthTarget) delete DebugCameraViewDepthTarget;
+
+	if(VoxelGridTarget) delete VoxelGridTarget;
+	if(VoxelGridNormal) delete VoxelGridNormal;
+	if(HdrColorTarget) delete HdrColorTarget;
+	if(BrightTarget) delete BrightTarget;
+	if(TempBrTarget) delete TempBrTarget;
+
+	for(texture* T : GlobalShadow)
+		delete T;
+	GlobalShadow.clear();
+	for(texture* T : GBuffer)
+		delete T;
+	GBuffer.clear();
+
+	if(AmbientOcclusionData) delete AmbientOcclusionData;
+	if(BlurTemp) delete BlurTemp;
+	if(DepthPyramid) delete DepthPyramid;
+	if(RandomAnglesTexture) delete RandomAnglesTexture;
+	if(NoiseTexture) delete NoiseTexture;
+
+	// TODO: Check the clean up from here
+	if(VolumetricLightOut) delete VolumetricLightOut;
+	if(IndirectLightOut) delete IndirectLightOut;
+	if(LightColor) delete LightColor;
+
+	if(ExecutionContext) delete ExecutionContext;
+	if(Binder) delete Binder;
+	if(Backend) delete Backend;
+
+    for (size_t i = 0; i < 2; ++i)
+	{
+        GfxColorTarget[i] = nullptr;
+    }
+
+	Binder = nullptr;
+    Backend = nullptr;
+    CurrentContext = nullptr;
+    ExecutionContext = nullptr;
+
+    PoissonDiskBuffer = nullptr;
+    RandomSamplesBuffer = nullptr;
+
+    GfxDepthTarget = nullptr;
+    DebugCameraViewDepthTarget = nullptr;
+
+    VoxelGridTarget = nullptr;
+    VoxelGridNormal = nullptr;
+
+    HdrColorTarget = nullptr;
+    BrightTarget = nullptr;
+    TempBrTarget = nullptr;
+
+    AmbientOcclusionData = nullptr;
+    BlurTemp = nullptr;
+    DepthPyramid = nullptr;
+    RandomAnglesTexture = nullptr;
+    NoiseTexture = nullptr;
+
+    VolumetricLightOut = nullptr;
+    IndirectLightOut = nullptr;
+    LightColor = nullptr;
+}
+
+global_graphics_context::
+global_graphics_context(global_graphics_context&& Oth) noexcept
+    : Binder(Oth.Binder),
+	  Backend(Oth.Backend),
+      BackendType(Oth.BackendType),
+      ContextMap(std::move(Oth.ContextMap)),
+      GeneralShaderViewMap(std::move(Oth.GeneralShaderViewMap)),
+      Dispatches(std::move(Oth.Dispatches)),
+      PassToContext(std::move(Oth.PassToContext)),
+      Passes(std::move(Oth.Passes)),
+      CurrentContext(Oth.CurrentContext),
+      ExecutionContext(Oth.ExecutionContext),
+      BackBufferIndex(Oth.BackBufferIndex),
+      PoissonDiskBuffer(Oth.PoissonDiskBuffer),
+      RandomSamplesBuffer(Oth.RandomSamplesBuffer),
+      GfxDepthTarget(Oth.GfxDepthTarget),
+      DebugCameraViewDepthTarget(Oth.DebugCameraViewDepthTarget),
+      VoxelGridTarget(Oth.VoxelGridTarget),
+      VoxelGridNormal(Oth.VoxelGridNormal),
+      HdrColorTarget(Oth.HdrColorTarget),
+      BrightTarget(Oth.BrightTarget),
+      TempBrTarget(Oth.TempBrTarget),
+      GlobalShadow(std::move(Oth.GlobalShadow)),
+      GBuffer(std::move(Oth.GBuffer)),
+      AmbientOcclusionData(Oth.AmbientOcclusionData),
+      BlurTemp(Oth.BlurTemp),
+      DepthPyramid(Oth.DepthPyramid),
+      RandomAnglesTexture(Oth.RandomAnglesTexture),
+      NoiseTexture(Oth.NoiseTexture),
+      VolumetricLightOut(Oth.VolumetricLightOut),
+      IndirectLightOut(Oth.IndirectLightOut),
+      LightColor(Oth.LightColor)
+{
+    for (size_t i = 0; i < 2; ++i)
+	{
+        GfxColorTarget[i] = Oth.GfxColorTarget[i];
+        Oth.GfxColorTarget[i] = nullptr;
+    }
+
+	Oth.Binder = nullptr;
+    Oth.Backend = nullptr;
+    Oth.CurrentContext = nullptr;
+    Oth.ExecutionContext = nullptr;
+
+    Oth.PoissonDiskBuffer = nullptr;
+    Oth.RandomSamplesBuffer = nullptr;
+
+    Oth.GfxDepthTarget = nullptr;
+    Oth.DebugCameraViewDepthTarget = nullptr;
+
+    Oth.VoxelGridTarget = nullptr;
+    Oth.VoxelGridNormal = nullptr;
+
+    Oth.HdrColorTarget = nullptr;
+    Oth.BrightTarget = nullptr;
+    Oth.TempBrTarget = nullptr;
+
+    Oth.AmbientOcclusionData = nullptr;
+    Oth.BlurTemp = nullptr;
+    Oth.DepthPyramid = nullptr;
+    Oth.RandomAnglesTexture = nullptr;
+    Oth.NoiseTexture = nullptr;
+
+    Oth.VolumetricLightOut = nullptr;
+    Oth.IndirectLightOut = nullptr;
+    Oth.LightColor = nullptr;
 }
 
 global_graphics_context& global_graphics_context::
 operator=(global_graphics_context&& Oth) noexcept
 {
-	if(this != &Oth)
+	if (this != &Oth)
 	{
-		Backend = std::move(Oth.Backend);
-		BackendType = std::move(Oth.BackendType);
-		PoissonDiskBuffer = std::move(Oth.PoissonDiskBuffer);
-		RandomSamplesBuffer = std::move(Oth.RandomSamplesBuffer);
-		GfxColorTarget[0] = std::move(Oth.GfxColorTarget[0]);
-		GfxColorTarget[1] = std::move(Oth.GfxColorTarget[1]);
-		GfxDepthTarget = std::move(Oth.GfxDepthTarget);
-		VoxelGridTarget = std::move(Oth.VoxelGridTarget);
-		VoxelGridNormal = std::move(Oth.VoxelGridNormal);
-		HdrColorTarget = std::move(Oth.HdrColorTarget);
-		BrightTarget = std::move(Oth.BrightTarget);
-		TempBrTarget = std::move(Oth.TempBrTarget);
-		DebugCameraViewDepthTarget = std::move(Oth.DebugCameraViewDepthTarget);
-		GlobalShadow = std::move(Oth.GlobalShadow);
-		GBuffer = std::move(Oth.GBuffer);
-		AmbientOcclusionData = std::move(Oth.AmbientOcclusionData);
-		BlurTemp = std::move(Oth.BlurTemp);
-		DepthPyramid = std::move(Oth.DepthPyramid);
-		RandomAnglesTexture = std::move(Oth.RandomAnglesTexture);
-		NoiseTexture = std::move(Oth.NoiseTexture);
+		Binder = Oth.Binder;
+        Backend = Oth.Backend;
+        BackendType = Oth.BackendType;
+        ContextMap = std::move(Oth.ContextMap);
+        GeneralShaderViewMap = std::move(Oth.GeneralShaderViewMap);
+        Dispatches = std::move(Oth.Dispatches);
+        PassToContext = std::move(Oth.PassToContext);
+        Passes = std::move(Oth.Passes);
+        CurrentContext = Oth.CurrentContext;
+        ExecutionContext = Oth.ExecutionContext;
 
-		VolumetricLightOut = std::move(Oth.VolumetricLightOut);
-		IndirectLightOut = std::move(Oth.IndirectLightOut);
-		LightColor = std::move(Oth.LightColor);
+        BackBufferIndex = Oth.BackBufferIndex;
 
-		ExecutionContext = std::move(Oth.ExecutionContext);
-		ContextMap = std::move(Oth.ContextMap);
-		GeneralShaderViewMap = std::move(Oth.GeneralShaderViewMap);
-		Dispatches = std::move(Oth.Dispatches);
-	}
+        PoissonDiskBuffer = Oth.PoissonDiskBuffer;
+        RandomSamplesBuffer = Oth.RandomSamplesBuffer;
 
-	return *this;
+		for (size_t i = 0; i < 2; ++i)
+		{
+            GfxColorTarget[i] = Oth.GfxColorTarget[i];
+            Oth.GfxColorTarget[i] = nullptr;
+        }
+
+        GfxDepthTarget = Oth.GfxDepthTarget;
+        DebugCameraViewDepthTarget = Oth.DebugCameraViewDepthTarget;
+
+        VoxelGridTarget = Oth.VoxelGridTarget;
+        VoxelGridNormal = Oth.VoxelGridNormal;
+
+        HdrColorTarget = Oth.HdrColorTarget;
+        BrightTarget = Oth.BrightTarget;
+        TempBrTarget = Oth.TempBrTarget;
+
+        GlobalShadow = std::move(Oth.GlobalShadow);
+        GBuffer = std::move(Oth.GBuffer);
+
+        AmbientOcclusionData = Oth.AmbientOcclusionData;
+        BlurTemp = Oth.BlurTemp;
+        DepthPyramid = Oth.DepthPyramid;
+        RandomAnglesTexture = Oth.RandomAnglesTexture;
+        NoiseTexture = Oth.NoiseTexture;
+
+        VolumetricLightOut = Oth.VolumetricLightOut;
+        IndirectLightOut = Oth.IndirectLightOut;
+        LightColor = Oth.LightColor;
+
+		Oth.Binder = nullptr;
+        Oth.Backend = nullptr;
+        Oth.CurrentContext = nullptr;
+        Oth.ExecutionContext = nullptr;
+
+        Oth.PoissonDiskBuffer = nullptr;
+        Oth.RandomSamplesBuffer = nullptr;
+
+        Oth.GfxDepthTarget = nullptr;
+        Oth.DebugCameraViewDepthTarget = nullptr;
+
+        Oth.VoxelGridTarget = nullptr;
+        Oth.VoxelGridNormal = nullptr;
+
+        Oth.HdrColorTarget = nullptr;
+        Oth.BrightTarget = nullptr;
+        Oth.TempBrTarget = nullptr;
+
+        Oth.AmbientOcclusionData = nullptr;
+        Oth.BlurTemp = nullptr;
+        Oth.DepthPyramid = nullptr;
+        Oth.RandomAnglesTexture = nullptr;
+        Oth.NoiseTexture = nullptr;
+
+        Oth.VolumetricLightOut = nullptr;
+        Oth.IndirectLightOut = nullptr;
+        Oth.LightColor = nullptr;
+    }
+
+    return *this;
 }
 
 general_context* global_graphics_context::
@@ -276,10 +430,10 @@ GetOrCreateContext(shader_pass* Pass)
     
     if (auto it = ContextMap.find(ContextType); it != ContextMap.end())
     {
-        return it->second;
+        return it->second.get();
     }
 
-    shader_view_context* ContextView = GeneralShaderViewMap[ContextType];
+    shader_view_context* ContextView = GeneralShaderViewMap[ContextType].get();
     general_context* NewContext = nullptr;
 
     if (Pass->Type == pass_type::graphics)
@@ -293,13 +447,13 @@ GetOrCreateContext(shader_pass* Pass)
             GraphicsContextView->SetupPipelineState(),
             GraphicsContextView->Defines
         );
-		ContextMap[ContextType] = NewContext;
+		ContextMap[ContextType] = std::unique_ptr<general_context>(NewContext);
     }
     else if (Pass->Type == pass_type::compute)
     {
         auto* ComputeContextView = static_cast<shader_compute_view_context*>(ContextView);
         NewContext = CreateComputeContext(ComputeContextView->Shader, ComputeContextView->Defines);
-		ContextMap[ContextType] = NewContext;
+		ContextMap[ContextType] = std::unique_ptr<general_context>(NewContext);
     }
 
     return NewContext;
@@ -323,15 +477,15 @@ template<typename context_type, typename param_type>
 shader_pass* global_graphics_context::
 AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec)
 {
-	shader_pass* NewPass = PushStructConstruct(shader_pass);
-	NewPass->Name = Name;
+	shader_pass* NewPass = PushStruct(shader_pass);
+	NewPass->Name = string(Name);
 	NewPass->Type = Type;
 	NewPass->HaveStaticStorage = has_static_storage_type<context_type>::value;
 	
 	meta_descriptor* ReflectionData = reflect<context_type>::Get();
 	ParseShaderParam(ReflectionData, (void*)&Parameters);
 
-	NewPass->Parameters = PushStructConstruct(param_type);
+	NewPass->Parameters = PushStruct(param_type);
 	*((param_type*)NewPass->Parameters) = Parameters;
 
 	Passes.push_back(NewPass);
@@ -342,7 +496,7 @@ AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Ex
 
 	if(FindIt == ContextMap.end())
 	{
-		GeneralShaderViewMap[std::type_index(typeid(context_type))] = PushStructConstruct(context_type);
+		GeneralShaderViewMap[std::type_index(typeid(context_type))] = std::make_unique<context_type>();
 	}
 
 	return NewPass;
@@ -351,8 +505,8 @@ AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Ex
 shader_pass* global_graphics_context::
 AddTransferPass(std::string Name, execute_func Exec)
 {
-	shader_pass* NewPass = PushStructConstruct(shader_pass);
-	NewPass->Name = Name;
+	shader_pass* NewPass = PushStruct(shader_pass);
+	NewPass->Name = string(Name);
 	NewPass->Type = pass_type::transfer;
 	NewPass->Parameters = nullptr;
 
@@ -364,7 +518,7 @@ AddTransferPass(std::string Name, execute_func Exec)
 
 	if(FindIt == ContextMap.end())
 	{
-		GeneralShaderViewMap[std::type_index(typeid(transfer))] = PushStructConstruct(transfer);
+		GeneralShaderViewMap[std::type_index(typeid(transfer))] = std::make_unique<transfer>();
 	}
 
 	return NewPass;
@@ -395,7 +549,6 @@ ParseShaderParam(meta_descriptor* Descriptor, void* Parameters)
 void global_graphics_context::
 Compile()
 {
-	resource_binder* Binder = CreateResourceBinder();
 	for(shader_pass* Pass : Passes)
 	{
 		if(Pass->Type == pass_type::transfer) continue;
@@ -408,6 +561,7 @@ Compile()
 		}
 	}
 	Binder->BindStaticStorage(Backend);
+	Binder->DestroyObject();
 }
 
 // TODO: Consider of pushing pass work in different thread if some of them are not dependent and can use different queue type

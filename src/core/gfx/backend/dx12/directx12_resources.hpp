@@ -1,5 +1,49 @@
 #pragma once
 
+struct directx12_texture_sampler : public texture_sampler
+{
+	directx12_texture_sampler() = default;
+	directx12_texture_sampler(renderer_backend* Backend, u32 MipLevels = 1, const utils::texture::sampler_info& SamplerInfo = {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear})
+	{
+		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
+		Device = Gfx->Device.Get();
+
+        D3D12_SAMPLER_DESC SamplerDesc = {};
+        SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(SamplerInfo.AddressMode);
+        SamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(SamplerInfo.MinFilter), GetDXFilter(SamplerInfo.MagFilter), GetDXMipmapMode(SamplerInfo.MipmapMode), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(SamplerInfo.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
+        SamplerDesc.MaxLOD = MipLevels;
+
+        switch(SamplerInfo.BorderColor)
+		{
+			case border_color::black_transparent:
+				SamplerDesc.BorderColor[0] = 0.0f;
+				SamplerDesc.BorderColor[1] = 0.0f;
+				SamplerDesc.BorderColor[2] = 0.0f;
+				SamplerDesc.BorderColor[3] = 0.0f;
+				break;
+			case border_color::black_opaque:
+				SamplerDesc.BorderColor[0] = 0.0f;
+				SamplerDesc.BorderColor[1] = 0.0f;
+				SamplerDesc.BorderColor[2] = 0.0f;
+				SamplerDesc.BorderColor[3] = 1.0f;
+				break;
+			case border_color::white_opaque:
+				SamplerDesc.BorderColor[0] = 1.0f;
+				SamplerDesc.BorderColor[1] = 1.0f;
+				SamplerDesc.BorderColor[2] = 1.0f;
+				SamplerDesc.BorderColor[3] = 1.0f;
+				break;
+		};
+
+		Sampler = Gfx->SamplersHeap.GetNextCpuHandle();
+        Gfx->Device->CreateSampler(&SamplerDesc, Sampler);
+	}
+
+	ID3D12Device6* Device;
+	D3D12_CPU_DESCRIPTOR_HANDLE Sampler = {};
+};
+
 struct directx12_buffer : public buffer
 {
 	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 NewUsage)
@@ -14,6 +58,9 @@ struct directx12_buffer : public buffer
 	}
 
 	~directx12_buffer() override = default;
+
+    directx12_buffer(const directx12_buffer&) = delete;
+    directx12_buffer& operator=(const directx12_buffer&) = delete;
 
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
@@ -147,50 +194,6 @@ struct directx12_buffer : public buffer
 	ComPtr<D3D12MA::Allocation> Allocation;
 };
 
-struct directx12_texture_sampler : public texture_sampler
-{
-	directx12_texture_sampler() = default;
-	directx12_texture_sampler(renderer_backend* Backend, u32 MipLevels = 1, const utils::texture::sampler_info& SamplerInfo = {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear})
-	{
-		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-		Device = Gfx->Device.Get();
-
-        D3D12_SAMPLER_DESC SamplerDesc = {};
-        SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(SamplerInfo.AddressMode);
-        SamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-        SamplerDesc.Filter = D3D12_ENCODE_BASIC_FILTER(GetDXFilter(SamplerInfo.MinFilter), GetDXFilter(SamplerInfo.MagFilter), GetDXMipmapMode(SamplerInfo.MipmapMode), Gfx->MinMaxFilterAvailable ? GetDXSamplerReductionMode(SamplerInfo.ReductionMode) : D3D12_FILTER_REDUCTION_TYPE_STANDARD);
-        SamplerDesc.MaxLOD = MipLevels;
-
-        switch(SamplerInfo.BorderColor)
-		{
-			case border_color::black_transparent:
-				SamplerDesc.BorderColor[0] = 0.0f;
-				SamplerDesc.BorderColor[1] = 0.0f;
-				SamplerDesc.BorderColor[2] = 0.0f;
-				SamplerDesc.BorderColor[3] = 0.0f;
-				break;
-			case border_color::black_opaque:
-				SamplerDesc.BorderColor[0] = 0.0f;
-				SamplerDesc.BorderColor[1] = 0.0f;
-				SamplerDesc.BorderColor[2] = 0.0f;
-				SamplerDesc.BorderColor[3] = 1.0f;
-				break;
-			case border_color::white_opaque:
-				SamplerDesc.BorderColor[0] = 1.0f;
-				SamplerDesc.BorderColor[1] = 1.0f;
-				SamplerDesc.BorderColor[2] = 1.0f;
-				SamplerDesc.BorderColor[3] = 1.0f;
-				break;
-		};
-
-		Sampler = Gfx->SamplersHeap.GetNextCpuHandle();
-        Gfx->Device->CreateSampler(&SamplerDesc, Sampler);
-	}
-
-	ID3D12Device6* Device;
-	D3D12_CPU_DESCRIPTOR_HANDLE Sampler = {};
-};
-
 struct directx12_texture : public texture
 {
 	directx12_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
@@ -240,6 +243,9 @@ struct directx12_texture : public texture
 	}
 
 	~directx12_texture() override = default;
+
+    directx12_texture(const directx12_texture&) = delete;
+    directx12_texture& operator=(const directx12_texture&) = delete;
 
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
@@ -598,23 +604,53 @@ CreateResource(renderer_backend* Backend)
 buffer* directx12_memory_heap::
 PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Usage)
 {
-	return new directx12_buffer(Backend, this, DebugName, DataSize, Count, Usage);
+	size_t Hash = 0;
+	bool WithCounter = Usage & RF_WithCounter;
+	std::hash_combine(Hash, std::hash<u64>{}(DataSize * Count + WithCounter * sizeof(u32)));
+	std::hash_combine(Hash, std::hash<u32>{}(Usage));
+
+	buffer* Buffer = new directx12_buffer(Backend, this, DebugName, DataSize, Count, Usage);
+	u64 TestHash = std::hash<buffer>()(*Buffer);
+	return Buffer;
 }
 
 buffer* directx12_memory_heap::
 PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Usage)
 {
-	return new directx12_buffer(Backend, this, DebugName, Data, DataSize, Count, Usage);
+	size_t Hash = 0;
+	bool WithCounter = Usage & RF_WithCounter;
+	std::hash_combine(Hash, std::hash<u64>{}(DataSize * Count + WithCounter * sizeof(u32)));
+	std::hash_combine(Hash, std::hash<u32>{}(Usage));
+
+	buffer* Buffer = new directx12_buffer(Backend, this, DebugName, Data, DataSize, Count, Usage);
+	u64 TestHash = std::hash<buffer>()(*Buffer);
+	return Buffer;
 }
 
 texture* directx12_memory_heap::
 PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 {
-	return new directx12_texture(Backend, this, DebugName, nullptr, Width, Height, Depth, InputData);
+	size_t Hash = 0;
+	std::hash_combine(Hash, std::hash<u64>{}(Width));
+	std::hash_combine(Hash, std::hash<u64>{}(Height));
+	std::hash_combine(Hash, std::hash<u32>{}(Depth));
+	std::hash_combine(Hash, std::hash<utils::texture::input_data>{}(InputData));
+
+	texture* Texture = new directx12_texture(Backend, this, DebugName, nullptr, Width, Height, Depth, InputData);
+	u64 TestHash = std::hash<texture>()(*Texture);
+	return Texture;
 }
 
 texture* directx12_memory_heap::
 PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 {
-	return new directx12_texture(Backend, this, DebugName, Data, Width, Height, Depth, InputData);
+	size_t Hash = 0;
+	std::hash_combine(Hash, std::hash<u64>{}(Width));
+	std::hash_combine(Hash, std::hash<u64>{}(Height));
+	std::hash_combine(Hash, std::hash<u32>{}(Depth));
+	std::hash_combine(Hash, std::hash<utils::texture::input_data>{}(InputData));
+
+	texture* Texture = new directx12_texture(Backend, this, DebugName, Data, Width, Height, Depth, InputData);
+	u64 TestHash = std::hash<texture>()(*Texture);
+	return Texture;
 }

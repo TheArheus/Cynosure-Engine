@@ -32,6 +32,25 @@ struct render_debug_system : public entity_system
 		RequireComponent<static_instances_component>();
 	}
 
+	~render_debug_system()
+	{
+		delete GeometryDebugOffsets;
+		delete WorldUpdateBuffer;
+		delete MeshCommonCullingInputBuffer;
+
+		delete DebugMeshDrawCommandDataBuffer;
+		delete DebugMeshDrawVisibilityDataBuffer;
+
+		delete DebugIndirectDrawIndexedCommands;
+
+		delete MeshDebugMaterialsBuffer;
+
+		delete DebugVertexBuffer;
+		delete DebugIndexBuffer;
+
+		delete MeshDrawDebugCommandBuffer;
+	}
+
 	void SubscribeToEvents(event_bus& Events)
 	{
 	}

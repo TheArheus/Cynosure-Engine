@@ -401,10 +401,7 @@ vulkan_backend(window* Window)
 void vulkan_backend::
 DestroyObject()
 {
-	vkDeviceWaitIdle(Device);
-
-    ImGui_ImplVulkan_DestroyDeviceObjects();
-    ImGui_ImplVulkan_Shutdown();
+	ImGui_ImplVulkan_Shutdown();
 
     if (!Features13.dynamicRendering && ImGuiRenderPass != VK_NULL_HANDLE)
     {
@@ -418,8 +415,21 @@ DestroyObject()
         ImGuiPool = VK_NULL_HANDLE;
     }
 
+	delete NullTexture1D;
+	delete NullTexture2D;
+	delete NullTexture3D;
+	delete NullTextureCube;
+
 	delete CommandQueue;
 	delete GlobalHeap;
+
+	for (VkImageView ImageView : SwapchainImageViews)
+	{
+		if (ImageView != VK_NULL_HANDLE)
+		{
+			vkDestroyImageView(Device, ImageView, nullptr);
+		}
+	}
 
 	vkDestroySwapchainKHR(Device, Swapchain, nullptr);
 	vkDestroyDevice(Device, nullptr);
@@ -568,45 +578,11 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 	std::ifstream File(Path);
 	if(File)
 	{
-		std::vector<std::wstring> LongArgs;
-		std::vector<LPCWSTR> ShaderCompileArgs;
-		ShaderCompileArgs.push_back(L"-spirv");
-		ShaderCompileArgs.push_back(L"-E");
-		ShaderCompileArgs.push_back(L"main");
-
-		ShaderCompileArgs.push_back(L"-T");
-		if (ShaderType == shader_stage::vertex)
-			ShaderCompileArgs.push_back(L"vs_6_2");
-		else if (ShaderType == shader_stage::fragment)
-			ShaderCompileArgs.push_back(L"ps_6_2");
-		else if (ShaderType == shader_stage::compute)
-			ShaderCompileArgs.push_back(L"cs_6_2");
-		else if (ShaderType == shader_stage::geometry)
-			ShaderCompileArgs.push_back(L"gs_6_2");
-		else if (ShaderType == shader_stage::tessellation_control)
-			ShaderCompileArgs.push_back(L"hs_6_2");
-		else if (ShaderType == shader_stage::tessellation_eval)
-			ShaderCompileArgs.push_back(L"ds_6_2");
-
 		std::string ShaderDefinesResult;
 		for(const shader_define& Define : ShaderDefines)
 		{
-			std::string  ArgParam = Define.Name + "=" + Define.Value;
-			std::wstring ResParam(ArgParam.begin(), ArgParam.end());
-
-			LongArgs.push_back(ResParam);
-			ShaderCompileArgs.push_back(L"-D");
-			ShaderCompileArgs.push_back(LongArgs.back().c_str());
-
 			ShaderDefinesResult += std::string("#define " + Define.Name + " " + Define.Value + "\n");
 		}
-
-		ComPtr<IDxcCompiler3> DxcCompiler;
-		ComPtr<IDxcLibrary> DxcLib;
-		ComPtr<IDxcUtils> DxcUtils;
-		DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&DxcCompiler));
-		DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&DxcLib));
-		DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&DxcUtils));
 
 		std::string ShaderCode((std::istreambuf_iterator<char>(File)), (std::istreambuf_iterator<char>()));
 		std::vector<u32> SpirvCode;

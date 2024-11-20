@@ -66,6 +66,7 @@ public:
 
 // TODO: implement data for memory footprint visualization
 // TODO: Least Frequently Used Cache
+// TODO: Better memory handling
 class global_memory_allocator
 {
 public:
@@ -76,9 +77,10 @@ public:
 
 	~global_memory_allocator()
 	{
-		for(auto& Block : MemoryBlocks)
+		for(auto it = MemoryBlocks.begin(); it != MemoryBlocks.end(); ++it)
 		{
-			delete Block;
+			free((*it)->Start);
+			(*it)->Start = nullptr;
 		}
 	}
 
@@ -101,7 +103,6 @@ public:
 				{
 					free((*it)->Start);
 					(*it)->Start = nullptr;
-					delete *it;
 					it = MemoryBlocks.erase(it);
 					continue;
 				}
@@ -130,11 +131,11 @@ private:
 	void AllocateNewBlock(const size_t& MemoryBlockSize = MiB(128))
 	{
 		void* NewBlock = calloc(1, MemoryBlockSize);
-		MemoryBlocks.push_back(new linear_allocator(MemoryBlockSize, NewBlock));
+		MemoryBlocks.push_back(std::make_unique<linear_allocator>(MemoryBlockSize, NewBlock));
 		CurrentBlockIndex = MemoryBlocks.size() - 1;
 	}
 
-	std::vector<linear_allocator*> MemoryBlocks;
+	std::vector<std::unique_ptr<linear_allocator>> MemoryBlocks;
 };
 
 static global_memory_allocator Allocator;
@@ -251,3 +252,176 @@ private:
 	allocator_type Allocator_;
 	base Vector_;
 };
+
+// TODO: improve the implementation
+// NOTE: this structures are meant to be used in game loop
+//       so, maybe, better naming and etc.
+class string
+{
+public:
+	string() = default;
+    string(char* Data, size_t Size)
+	{
+		Size_ = Size;
+		Data_ = PushArray(char, Size_ + 1);
+		memcpy(Data_, Data, Size_);
+		Data_[Size_] = '\0';
+	}
+
+	string(const std::string& Str) : string((char*)Str.data(), Str.length()) {}
+
+	string(const string& other) : Size_(other.Size_)
+	{
+		Data_ = PushArray(char, Size_ + 1);
+		memcpy(Data_, other.Data_, Size_ + 1);
+	}
+
+	string& operator=(const string& other)
+	{
+		if (this != &other)
+		{
+			Size_ = other.Size_;
+			Data_ = PushArray(char, Size_ + 1);
+			memcpy(Data_, other.Data_, Size_ + 1);
+		}
+		return *this;
+	}
+
+	string(string&& other) noexcept : Data_(other.Data_), Size_(other.Size_)
+	{
+		other.Data_ = nullptr;
+		other.Size_ = 0;
+	}
+
+	string& operator=(string&& other) noexcept
+	{
+		if (this != &other)
+		{
+			Data_ = other.Data_;
+			Size_ = other.Size_;
+			other.Data_ = nullptr;
+			other.Size_ = 0;
+		}
+		return *this;
+	}
+
+	string(const char* Data) : Size_(strlen(Data))
+    {
+        Data_ = PushArray(char, Size_ + 1);
+        memcpy(Data_, Data, Size_ + 1);
+    }
+
+    string& operator=(const char* Data)
+    {
+		Size_ = strlen(Data);
+		Data_ = PushArray(char, Size_ + 1);
+		memcpy(Data_, Data, Size_ + 1);
+
+        return *this;
+    }
+
+    char& operator[](size_t i) { return Data_[i]; }
+    const char& operator[](size_t i) const { return Data_[i]; }
+
+    size_t size() const { return Size_; }
+    char* data() const { return Data_; }
+
+    char* begin() { return Data_; }
+    char* end() { return Data_ + Size_; }
+
+private:
+    char*  Data_;
+    size_t Size_;
+};
+
+template <typename type>
+class array
+{
+public:
+	array() = default;
+    array(type* Data, size_t Size)
+	{
+		Size_ = Size;
+		Data_ = PushArray(type, Size_);
+		memcpy(Data_, Data, sizeof(type) * Size_);
+	}
+
+    array(std::initializer_list<type> initList)
+    {
+        Size_ = initList.size();
+        Data_ = PushArray(type, Size_);
+        std::copy(initList.begin(), initList.end(), Data_);
+    }
+
+	array(const array& other) : Size_(other.Size_)
+	{
+		Data_ = PushArray(type, Size_);
+		memcpy(Data_, other.Data_, sizeof(type) * Size_);
+	}
+
+	array& operator=(const array& other)
+	{
+		if (this != &other)
+		{
+			Size_ = other.Size_;
+			Data_ = PushArray(type, Size_);
+			memcpy(Data_, other.Data_, sizeof(type) * Size_);
+		}
+		return *this;
+	}
+
+	array(array&& other) noexcept : Data_(other.Data_), Size_(other.Size_)
+	{
+		other.Data_ = nullptr;
+		other.Size_ = 0;
+	}
+
+	array& operator=(array&& other) noexcept
+	{
+		if (this != &other)
+		{
+			Data_ = other.Data_;
+			Size_ = other.Size_;
+			other.Data_ = nullptr;
+			other.Size_ = 0;
+		}
+		return *this;
+	}
+
+    type& operator[](size_t i) { return Data_[i]; }
+    const type& operator[](size_t i) const { return Data_[i]; }
+
+    size_t size() const { return Size_; }
+    type* data() const { return Data_; }
+
+    type* begin() { return Data_; }
+    type* end() { return Data_ + Size_; }
+
+private:
+    type*  Data_;
+    size_t Size_;
+};
+
+template <typename type>
+class array_view
+{
+public:
+	array_view() = default;
+    array_view(type* Data, size_t Size) : Data_(Data), Size_(Size) {}
+
+    type& operator[](size_t i) { return Data_[i]; }
+    const type& operator[](size_t i) const { return Data_[i]; }
+
+    size_t size() const { return Size_; }
+    type* data() const { return Data_; }
+
+    type* begin() { return Data_; }
+    type* end() { return Data_ + Size_; }
+
+private:
+    type*  Data_;
+    size_t Size_;
+};
+
+using string_view = array_view<char>;
+

@@ -8,6 +8,9 @@
 
 #if _WIN32
 #include <D3D12MemAlloc.cpp>
+#ifdef CE_DEBUG
+#include <crtdbg.h>
+#endif
 #endif
 
 
@@ -38,6 +41,8 @@
 //
 // TODO: Implement sound system with openal???
 //
+// TODO: Custom containers
+//
 // TODO: Implement mesh shading pipeline in the future
 // TODO: Implement ray  tracing pipeline in the future
 
@@ -45,9 +50,14 @@
 
 [[nodiscard]] int engine_main([[maybe_unused]] const std::vector<std::string>& args)
 {
+#ifdef CE_DEBUG
+#if _WIN32
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+#endif
+#endif
 	window Window(1280, 720, "3D Renderer");
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 	scene_manager SceneManager;
 
 	double TargetFrameRate = 1.0 / 60.0 * 1000.0; // Frames Per Milliseconds

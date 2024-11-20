@@ -44,17 +44,7 @@ public:
 	window(const char* Name);
 	window(window&& rhs) = default;
 	window& operator=(window&& rhs) = default;
-	~window()
-	{
-		ImGui::DestroyContext();
-		DestroyWindow(Handle);
-		WindowClass.WindowNames.erase(std::remove(WindowClass.WindowNames.begin(), WindowClass.WindowNames.end(), Name), WindowClass.WindowNames.end());
-		if(WindowClass.WindowNames.size() == 0)
-		{
-			WindowClass.IsRunning = false;
-		}
-	}
-
+	~window();
 
 	void Create(unsigned int _Width, unsigned int _Height, const char* _Name);
 

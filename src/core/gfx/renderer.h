@@ -2,7 +2,7 @@
 
 struct shader_pass
 {
-	std::string Name;
+	string Name;
 	pass_type Type;
 	void* Parameters;
 	bool HaveStaticStorage;
@@ -22,9 +22,12 @@ class global_graphics_context
 public:
 	global_graphics_context() = default;
 	global_graphics_context(renderer_backend* NewBackend, backend_type BackendType);
+	~global_graphics_context() { DestroyObject(); };
 
 	global_graphics_context(global_graphics_context&& Oth) noexcept;
 	global_graphics_context& operator=(global_graphics_context&& Oth) noexcept;
+
+	void DestroyObject();
 
 	// TODO: Get buffer_ref
 	buffer* PushBuffer(std::string DebugName, u64 DataSize, u64 Count, u32 Flags)
@@ -56,7 +59,7 @@ public:
 	{
 		texture_ref NewRef;
 		NewRef.SubresourceIndex = SUBRESOURCES_ALL;
-		NewRef.Handle = ArrayOfTextures;
+		NewRef.Handle = array<texture*>(ArrayOfTextures.data(), ArrayOfTextures.size());
 		return NewRef;
 	}
 
@@ -65,7 +68,7 @@ public:
 	{
 		texture_ref NewRef;
 		NewRef.SubresourceIndex = SUBRESOURCES_ALL;
-		NewRef.Handle.push_back(Texture);
+		NewRef.Handle = array<texture*>(&Texture, 1);
 		return NewRef;
 	}
 
@@ -74,7 +77,7 @@ public:
 	{
 		texture_ref NewRef;
 		NewRef.SubresourceIndex = Idx;
-		NewRef.Handle.push_back(Texture);
+		NewRef.Handle = array<texture*>(&Texture, 1);
 		return NewRef;
 	}
 
@@ -214,19 +217,18 @@ public:
 
 	renderer_backend* Backend;
 	backend_type BackendType;
-	memory_heap* GlobalHeap;
 
-	std::unordered_map<std::type_index, general_context*> ContextMap;
-	std::unordered_map<std::type_index, shader_view_context*> GeneralShaderViewMap;
+	std::unordered_map<std::type_index, std::unique_ptr<general_context>> ContextMap;
+	std::unordered_map<std::type_index, std::unique_ptr<shader_view_context>> GeneralShaderViewMap;
 	
 	std::unordered_map<shader_pass*, execute_func> Dispatches;
 	std::unordered_map<shader_pass*, std::type_index> PassToContext;
 
 	std::vector<shader_pass*> Passes;
 
+	resource_binder* Binder = nullptr;
 	general_context* CurrentContext = nullptr;
-
-	command_list* ExecutionContext;
+	command_list* ExecutionContext = nullptr;
 
 	//////////////////////////////////////////////////////
 	u32 BackBufferIndex = 0;

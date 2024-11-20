@@ -351,10 +351,6 @@ public:
 	virtual void CreateResource(renderer_backend* Backend) = 0;
 	virtual void DestroyResource() = 0;
 
-	//void BeginFrame();
-	//void EndFrame();
-	//void CollectGarbage();
-
 	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags) = 0;
 	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags) = 0;
 
@@ -371,8 +367,6 @@ public:
 
 	std::unordered_map<u64, texture*> PersistentTextures;
 	std::unordered_map<u64, texture*> TransientTextures;
-
-	//std::unordered_map<texture, sampler> Samplers;
 };
 
 struct renderer_backend
@@ -406,6 +400,7 @@ public:
 	general_context operator=(const general_context&) = delete;
 
 	virtual void Clear() = 0;
+	virtual void DestroyObject() = 0;
 
 	std::string Name;
 	pass_type Type;
@@ -496,6 +491,7 @@ struct resource_binder
 	resource_binder() = default;
 
 	virtual ~resource_binder() = default;
+	virtual void DestroyObject() = 0;
 
 	resource_binder(const resource_binder&) = delete;
 	resource_binder operator=(const resource_binder&) = delete;
@@ -507,15 +503,16 @@ struct resource_binder
 	virtual void SetUniformBufferView(buffer* Buffer, u32 Set = 0) = 0;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	virtual void SetSampledImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetStorageImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetImageSampler(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetSampledImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetStorageImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetImageSampler(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 };
 
+// TODO: Use custom containers instead of std::vector and std::string
 struct texture_ref
 {
 	u64 SubresourceIndex = SUBRESOURCES_ALL;
-	std::vector<texture*> Handle;
+	array<texture*> Handle;
 };
 
 // TODO: use the actual structure for the data.
@@ -526,6 +523,7 @@ struct buffer_ref
 	buffer* Handle = nullptr;
 };
 
+// TODO: Use custom containers instead of std::vector and std::string
 struct shader_view_context
 {
 	shader_view_context() = default;
@@ -539,7 +537,7 @@ struct shader_view_context
 struct shader_graphics_view_context : public shader_view_context
 {
 	shader_graphics_view_context() = default;
-	virtual ~shader_graphics_view_context() = default;
+	virtual ~shader_graphics_view_context() override = default;
 
 	load_op  LoadOp;
 	store_op StoreOp;
@@ -552,7 +550,7 @@ struct shader_graphics_view_context : public shader_view_context
 struct shader_compute_view_context : public shader_view_context
 {
 	shader_compute_view_context() = default;
-	virtual ~shader_compute_view_context() = default;
+	virtual ~shader_compute_view_context() override = default;
 
 	std::string Shader;
 };
@@ -571,7 +569,7 @@ class render_context : public general_context
 {
 public:
 	render_context() = default;
-	virtual ~render_context() = default;
+	virtual ~render_context() override = default;
 
 	render_context(const render_context&) = delete;
 	render_context& operator=(const render_context&) = delete;
@@ -583,7 +581,7 @@ class compute_context : public general_context
 {
 public:
 	compute_context() = default;
-	virtual ~compute_context() = default;
+	virtual ~compute_context() override = default;
 
 	compute_context(const compute_context&) = delete;
 	compute_context& operator=(const compute_context&) = delete;
@@ -593,10 +591,15 @@ public:
 	u32 BlockSizeZ;
 };
 
+struct texture_sampler {};
+
 struct buffer
 {
 	buffer() = default;
 	virtual ~buffer() = default;
+
+    buffer(const buffer&) = delete;
+    buffer& operator=(const buffer&) = delete;
 
 	virtual void Update(renderer_backend* Backend, void* Data) = 0;
 	virtual void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) = 0;
@@ -613,19 +616,21 @@ struct buffer
 	u64  Size          = 0;
 	u64  Alignment     = 0;
 	u32  CounterOffset = 0;
+
+	u32 PrevShader     = PSF_TopOfPipe;
+	u32 CurrentLayout  = 0;
+	u32 Usage          = 0;
+
 	bool WithCounter   = false;
-
-	u32 PrevShader = PSF_TopOfPipe;
-	u32 CurrentLayout = 0;
-	u32 Usage = 0;
 };
-
-struct texture_sampler {};
 
 struct texture
 {
 	texture() = default;
 	virtual ~texture() = default;
+
+    texture(const texture&) = delete;
+    texture& operator=(const texture&) = delete;
 
 	virtual void Update(renderer_backend* Backend, void* Data) = 0;
 	virtual void ReadBack(renderer_backend* Backend, void* Data) = 0;
@@ -638,10 +643,10 @@ struct texture
 	virtual void DestroyStagingResource() = 0;
 
 	std::string Name;
-	u64 Width;
-	u64 Height;
-	u64 Depth;
-	u64 Size;
+	u64 Width  = 0;
+	u64 Height = 0;
+	u64 Depth  = 0;
+	u64 Size   = 0;
 
 	utils::texture::input_data Info;
 
@@ -659,9 +664,7 @@ namespace std
         {
             size_t Result = 0;
             hash_combine(Result, hash<u64>{}(b.Size));
-            hash_combine(Result, hash<u64>{}(b.Alignment));
-            hash_combine(Result, hash<u32>{}(b.CounterOffset));
-            hash_combine(Result, hash<bool>{}(b.WithCounter));
+            hash_combine(Result, hash<u32>{}(b.Usage));
             return Result;
         }
     };
@@ -694,7 +697,6 @@ namespace std
             hash_combine(Result, hash<u32>{}(id.MipLevels));
             hash_combine(Result, hash<u32>{}(id.Layers));
             hash_combine(Result, hash<bool>{}(id.UseStagingBuffer));
-            //hash_combine(Result, hash<utils::texture::sampler_info>{}(id.SamplerInfo)); // Do I actually need this for texture hash?
             hash_combine(Result, hash<u64>{}(static_cast<u64>(id.InitialState)));
             return Result;
         }
@@ -709,7 +711,6 @@ namespace std
             hash_combine(Result, hash<u64>{}(t.Width));
             hash_combine(Result, hash<u64>{}(t.Height));
             hash_combine(Result, hash<u32>{}(t.Depth));
-            hash_combine(Result, hash<bool>{}(t.Size));
             hash_combine(Result, hash<utils::texture::input_data>{}(t.Info));
             return Result;
         }

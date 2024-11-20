@@ -31,6 +31,23 @@ struct scene_manager
 		LoadAllScenes(ScenesPath);
 	}
 
+	~scene_manager()
+	{
+		for (size_t i = 0; i < Scenes.size(); ++i)
+		{
+			Scenes[i].reset();
+		}
+
+		for(scene_info& Info : Infos)
+		{
+			if(Info.Module)
+			{
+				window::FreeLoadedLibrary(Info.Module);
+				Info.Module = nullptr;
+			}
+		}
+	}
+
 	u32 Count()
 	{
 		return Scenes.size();

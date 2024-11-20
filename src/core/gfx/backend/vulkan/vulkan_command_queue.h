@@ -27,6 +27,8 @@ public:
 	void Reset();
 	void Reset(VkCommandBuffer* CommandList);
 
+	void Remove(VkCommandBuffer* CommandList);
+
 	void Execute();
 	void Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore);
 	void Execute(VkCommandBuffer* CommandList);

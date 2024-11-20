@@ -22,21 +22,24 @@ struct vulkan_texture_sampler : public texture_sampler
 		CreateInfo.compareOp = VK_COMPARE_OP_NEVER;
 		CreateInfo.maxLod = MipLevels;
 
-		VK_CHECK(vkCreateSampler(Device, &CreateInfo, nullptr, &SamplerHandle));
+		VK_CHECK(vkCreateSampler(Device, &CreateInfo, nullptr, &Handle));
 	}
 
 	void DestroyObject()
 	{
-		vkDestroySampler(Device, SamplerHandle, nullptr);
-		SamplerHandle = 0;
+		if(Handle != VK_NULL_HANDLE)
+		{
+			vkDestroySampler(Device, Handle, nullptr);
+			Handle = VK_NULL_HANDLE;
+		}
 	}
 	~vulkan_texture_sampler()
 	{
 		DestroyObject();
 	}
 
-	VkDevice Device;
-	VkSampler SamplerHandle;
+	VkDevice Device = VK_NULL_HANDLE;
+	VkSampler Handle = VK_NULL_HANDLE;
 };
 
 // TODO: make UpdateSize() function to do a resource recreation if update size is bigger than current one()
@@ -46,9 +49,11 @@ struct vulkan_buffer : public buffer
 	vulkan_buffer() = default;
 	~vulkan_buffer() override { DestroyResource(); }
 
+    vulkan_buffer(const vulkan_buffer&) = delete;
+    vulkan_buffer& operator=(const vulkan_buffer&) = delete;
+
 	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 Flags)
 	{
-		Flags |= resource_flags::RF_CopyDst;
 		CreateResource(Backend, Heap, DebugName, NewSize, Count, Flags);
 		Update(Backend, Data);
 	}
@@ -99,6 +104,7 @@ struct vulkan_buffer : public buffer
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) override
 	{
+		Usage = Flags;
 		VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
 		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
@@ -124,7 +130,7 @@ struct vulkan_buffer : public buffer
 			CreateInfo.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 		if(Flags & RF_CopySrc)
 			CreateInfo.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		if(Flags & RF_CopyDst)
+		//if(Flags & RF_CopyDst)
 			CreateInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 		VmaAllocationCreateInfo AllocCreateInfo = {};
@@ -193,27 +199,39 @@ struct vulkan_buffer : public buffer
 
 	void DestroyResource() override
 	{
-		vmaDestroyBuffer(VulkanHeap->Handle, Handle, Allocation);
+		if(Handle != VK_NULL_HANDLE)
+		{
+			if(VulkanHeap && Allocation)
+			{
+				vmaDestroyBuffer(VulkanHeap->Handle, Handle, Allocation);
+				Allocation = VK_NULL_HANDLE;
+			}
+			Handle = VK_NULL_HANDLE;
+		}
+		if(TempMemory)
+		{
+			vkFreeMemory(Device, TempMemory, nullptr);
+			TempMemory = 0;
+		}
+		if(Temp != VK_NULL_HANDLE)
+		{
+			vkDestroyBuffer(Device, Temp, nullptr);
+			Temp = VK_NULL_HANDLE;
+		}
 
-		if(TempMemory) vkFreeMemory(Device, TempMemory, nullptr);
-		if(Temp) vkDestroyBuffer(Device, Temp, nullptr);
-
-		TempMemory = 0;
-		Temp = VK_NULL_HANDLE;
 		Memory = 0;
-		Handle = VK_NULL_HANDLE;
 		VulkanHeap = nullptr;
 	}
 
-	VkBuffer Handle;
-	VkDeviceMemory Memory;
-	VmaAllocation Allocation;
+	VkBuffer Handle = VK_NULL_HANDLE;
+	VkDeviceMemory Memory = 0;
+	VmaAllocation Allocation = VK_NULL_HANDLE;
 
 private:
-	VkDevice Device;
-	VkBuffer Temp;
-	VkDeviceMemory TempMemory;
-	vulkan_memory_heap* VulkanHeap;
+	VkDevice Device = VK_NULL_HANDLE;
+	VkBuffer Temp = VK_NULL_HANDLE;
+	VkDeviceMemory TempMemory = VK_NULL_HANDLE;
+	vulkan_memory_heap* VulkanHeap = nullptr;
 };
 
 // TODO: Better image view handling
@@ -221,7 +239,10 @@ struct vulkan_texture : public texture
 {
 	friend vulkan_command_list;
 	vulkan_texture() = default;
-	~vulkan_texture() override { DestroyResource(); DestroyStagingResource(); }
+	~vulkan_texture() override { DestroyStagingResource(); DestroyResource(); }
+
+    vulkan_texture(const vulkan_texture&) = delete;
+    vulkan_texture& operator=(const vulkan_texture&) = delete;
 
 	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
@@ -428,41 +449,58 @@ struct vulkan_texture : public texture
 
 	void DestroyResource() override
 	{
-		vmaDestroyImage(VulkanHeap->Handle, Handle, Allocation);
+		if(SamplerHandle != VK_NULL_HANDLE)
+		{
+			vkDestroySampler(Device, SamplerHandle, nullptr);
+			SamplerHandle = VK_NULL_HANDLE;
+		}
 		for(VkImageView& View : Views)
 		{
 			vkDestroyImageView(Device, View, nullptr);
 		}
+		if(Handle != VK_NULL_HANDLE)
+		{
+			if(VulkanHeap && Allocation)
+			{
+				vmaDestroyImage(VulkanHeap->Handle, Handle, Allocation);
+				Allocation = VK_NULL_HANDLE;
+			}
+			Handle = VK_NULL_HANDLE;
+		}
 
 		Memory = 0;
-		Handle = VK_NULL_HANDLE;
 		Views.clear();
 		VulkanHeap = nullptr;
 	}
 
 	void DestroyStagingResource() override
 	{
-		if(TempMemory) vkFreeMemory(Device, TempMemory, nullptr);
-		if(Temp) vkDestroyBuffer(Device, Temp, nullptr);
-
-		TempMemory = 0;
-		Temp = VK_NULL_HANDLE;
+		if(TempMemory)
+		{
+			vkFreeMemory(Device, TempMemory, nullptr);
+			TempMemory = 0;
+		}
+		if(Temp != VK_NULL_HANDLE)
+		{
+			vkDestroyBuffer(Device, Temp, nullptr);
+			Temp = VK_NULL_HANDLE;
+		}
 	}
 
-	VkImage Handle;
-	VkDeviceMemory Memory;
+	VkImage Handle = VK_NULL_HANDLE;
+	VkDeviceMemory Memory = 0;
 	VkImageAspectFlags Aspect;
 	std::vector<VkImageView> Views;
 
-	VkSampler SamplerHandle;
-	VmaAllocation Allocation;
+	VkSampler SamplerHandle = VK_NULL_HANDLE;
+	VmaAllocation Allocation = VK_NULL_HANDLE;
 
 private:
-	VkDevice Device;
-	VkBuffer Temp;
-	VkDeviceMemory TempMemory;
+	VkDevice Device = VK_NULL_HANDLE;
+	VkBuffer Temp = VK_NULL_HANDLE;
+	VkDeviceMemory TempMemory = VK_NULL_HANDLE;
 	VkPhysicalDeviceMemoryProperties MemoryProperties;
-	vulkan_memory_heap* VulkanHeap;
+	vulkan_memory_heap* VulkanHeap = nullptr;
 };
 
 void vulkan_memory_heap::
@@ -485,31 +523,53 @@ CreateResource(renderer_backend* Backend)
 buffer* vulkan_memory_heap::
 PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags)
 {
+	size_t Hash = 0;
+	bool WithCounter = Flags & RF_WithCounter;
+	std::hash_combine(Hash, std::hash<u64>{}(DataSize * Count + WithCounter * sizeof(u32)));
+	std::hash_combine(Hash, std::hash<u32>{}(Flags));
+
 	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, DataSize, Count, Flags);
-	u64 Hash = std::hash<buffer>()(*Buffer);
+	u64 TestHash = std::hash<buffer>()(*Buffer);
 	return  Buffer;
 }
 
 buffer* vulkan_memory_heap::
 PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags)
 {
+	size_t Hash = 0;
+	bool WithCounter = Flags & RF_WithCounter;
+	std::hash_combine(Hash, std::hash<u64>{}(DataSize * Count + WithCounter * sizeof(u32)));
+	std::hash_combine(Hash, std::hash<u32>{}(Flags));
+
 	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, Data, DataSize, Count, Flags);
-	u64 Hash = std::hash<buffer>()(*Buffer);
+	u64 TestHash = std::hash<buffer>()(*Buffer);
 	return  Buffer;
 }
 
 texture* vulkan_memory_heap::
 PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 {
+	size_t Hash = 0;
+	std::hash_combine(Hash, std::hash<u64>{}(Width));
+	std::hash_combine(Hash, std::hash<u64>{}(Height));
+	std::hash_combine(Hash, std::hash<u32>{}(Depth));
+	std::hash_combine(Hash, std::hash<utils::texture::input_data>{}(InputData));
+
 	texture* Texture = new vulkan_texture(Backend, this, DebugName, nullptr, Width, Height, Depth, InputData);
-	u64 Hash = std::hash<texture>()(*Texture);
+	u64 TestHash = std::hash<texture>()(*Texture);
 	return   Texture;
 }
 
 texture* vulkan_memory_heap::
 PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 {
+	size_t Hash = 0;
+	std::hash_combine(Hash, std::hash<u64>{}(Width));
+	std::hash_combine(Hash, std::hash<u64>{}(Height));
+	std::hash_combine(Hash, std::hash<u32>{}(Depth));
+	std::hash_combine(Hash, std::hash<utils::texture::input_data>{}(InputData));
+
 	texture* Texture = new vulkan_texture(Backend, this, DebugName, Data, Width, Height, Depth, InputData);
-	u64 Hash = std::hash<texture>()(*Texture);
+	u64 TestHash = std::hash<texture>()(*Texture);
 	return   Texture;
 }

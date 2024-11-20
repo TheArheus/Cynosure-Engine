@@ -30,6 +30,15 @@ public:
 		Device->CreateCommandAllocator(Type, IID_PPV_ARGS(&CommandAlloc));
 	}
 
+	~directx12_command_queue()
+	{
+		for (ID3D12GraphicsCommandList* CommandList : CommandLists)
+		{
+			CommandList->Release();
+		}
+		CommandLists.clear();
+	}
+
 	ID3D12GraphicsCommandList* AllocateCommandList()
 	{
 		ID3D12GraphicsCommandList* Result;

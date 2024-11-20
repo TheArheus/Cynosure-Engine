@@ -64,6 +64,8 @@ void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name
 
 window::~window()
 {
+	Gfx.DestroyObject();
+	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 	glfwDestroyWindow(Handle);
 	glfwTerminate();

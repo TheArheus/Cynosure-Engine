@@ -106,8 +106,10 @@ class vulkan_render_context : public render_context
 {
 	friend vulkan_command_list;
 	friend vulkan_resource_binder;
+
 public:
 	vulkan_render_context() = default;
+	~vulkan_render_context() override { DestroyObject(); }
 
 	vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::vector<std::string> ShaderList, 
 						  const std::vector<image_format>& ColorTargetFormats, const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
@@ -136,6 +138,59 @@ public:
 	{
 		FrameBufferIdx = 0;
 	};
+
+	void DestroyObject() override
+	{
+		for (auto& [Key, Framebuffer] : FrameBuffers)
+		{
+			if (Framebuffer != VK_NULL_HANDLE)
+			{
+				vkDestroyFramebuffer(Device, Framebuffer, nullptr);
+				Framebuffer = VK_NULL_HANDLE;
+			}
+		}
+
+		for (auto& Layout : Layouts)
+		{
+			if(Layout != VK_NULL_HANDLE)
+			{
+				vkDestroyDescriptorSetLayout(Device, Layout, nullptr);
+				Layout = VK_NULL_HANDLE;
+			}
+		}
+
+		for (auto& Stage : ShaderStages)
+		{
+			if (Stage.module != VK_NULL_HANDLE)
+			{
+				vkDestroyShaderModule(Device, Stage.module, nullptr);
+				Stage.module = VK_NULL_HANDLE;
+			}
+		}
+
+		if (RenderPass != VK_NULL_HANDLE)
+		{
+			vkDestroyRenderPass(Device, RenderPass, nullptr);
+		}
+
+		if (Pipeline != VK_NULL_HANDLE)
+		{
+			vkDestroyPipeline(Device, Pipeline, nullptr);
+			Pipeline = VK_NULL_HANDLE;
+		}
+
+		if (Pool != VK_NULL_HANDLE)
+		{
+			vkDestroyDescriptorPool(Device, Pool, nullptr);
+			Pool = VK_NULL_HANDLE;
+		}
+
+		if (RootSignatureHandle != VK_NULL_HANDLE)
+		{
+			vkDestroyPipelineLayout(Device, RootSignatureHandle, nullptr);
+			RootSignatureHandle = VK_NULL_HANDLE;
+		}
+	}
 	
 private:
 	
@@ -146,12 +201,14 @@ private:
 
 	std::unordered_map<u32, VkFramebuffer> FrameBuffers;
 	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
+	std::vector<VkDescriptorSetLayout> Layouts;
 
 	std::vector<bool> PushDescriptors;
 	std::vector<u32>  DescriptorSizes;
 	std::vector<VkPipelineShaderStageCreateInfo> ShaderStages;
 	std::vector<VkDescriptorSet> Sets;
 
+	VkDevice Device;
 	VkPipeline Pipeline;
 	VkDescriptorPool Pool;
 	VkPipelineLayout RootSignatureHandle;
@@ -165,9 +222,10 @@ class vulkan_compute_context : public compute_context
 {
 	friend vulkan_command_list;
 	friend vulkan_resource_binder;
+
 public:
 	vulkan_compute_context() = default;
-	~vulkan_compute_context() override = default;
+	~vulkan_compute_context() override { DestroyObject(); };
 
 	vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
 
@@ -191,8 +249,43 @@ public:
         return *this;
     }
 
-
 	void Clear() override {};
+
+	void DestroyObject() override
+	{
+		for (auto& Layout : Layouts)
+		{
+			if(Layout != VK_NULL_HANDLE)
+			{
+				vkDestroyDescriptorSetLayout(Device, Layout, nullptr);
+				Layout = VK_NULL_HANDLE;
+			}
+		}
+
+		if (ComputeStage.module != VK_NULL_HANDLE)
+		{
+			vkDestroyShaderModule(Device, ComputeStage.module, nullptr);
+			ComputeStage.module = VK_NULL_HANDLE;
+		}
+
+		if (Pipeline != VK_NULL_HANDLE)
+		{
+			vkDestroyPipeline(Device, Pipeline, nullptr);
+			Pipeline = VK_NULL_HANDLE;
+		}
+
+		if (Pool != VK_NULL_HANDLE)
+		{
+			vkDestroyDescriptorPool(Device, Pool, nullptr);
+			Pool = VK_NULL_HANDLE;
+		}
+
+		if (RootSignatureHandle != VK_NULL_HANDLE)
+		{
+			vkDestroyPipelineLayout(Device, RootSignatureHandle, nullptr);
+			RootSignatureHandle = VK_NULL_HANDLE;
+		}
+	}
 
 private:
 
@@ -203,7 +296,9 @@ private:
 	std::vector<VkDescriptorSet> Sets;
 
 	std::map<u32, std::vector<VkDescriptorSetLayoutBinding>> Parameters;
+	std::vector<VkDescriptorSetLayout> Layouts;
 
+	VkDevice Device;
 	VkPipeline Pipeline;
 	VkDescriptorPool Pool;
 	VkPipelineLayout RootSignatureHandle;
@@ -251,7 +346,7 @@ struct vulkan_resource_binder : public resource_binder
 		DestroyObject();
 	}
 
-	void DestroyObject()
+	void DestroyObject() override
 	{
 		Sets.clear();
 		PushDescriptors.clear();
@@ -268,9 +363,9 @@ struct vulkan_resource_binder : public resource_binder
 	void SetUniformBufferView(buffer* Buffer, u32 Set = 0) override;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	void SetSampledImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(u32 Count, const std::vector<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
 	texture* NullTexture1D;
 	texture* NullTexture2D;
