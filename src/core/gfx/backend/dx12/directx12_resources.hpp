@@ -36,11 +36,11 @@ struct directx12_texture_sampler : public texture_sampler
 				break;
 		};
 
-		Sampler = Gfx->SamplersHeap.GetNextCpuHandle();
+		Sampler = Gfx->SamplersHeap->GetNextCpuHandle();
         Gfx->Device->CreateSampler(&SamplerDesc, Sampler);
 	}
 
-	ID3D12Device6* Device;
+	ID3D12Device6* Device = nullptr;
 	D3D12_CPU_DESCRIPTOR_HANDLE Sampler = {};
 };
 
@@ -57,7 +57,7 @@ struct directx12_buffer : public buffer
 		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewUsage);
 	}
 
-	~directx12_buffer() override = default;
+	~directx12_buffer() override { Gfx->Fence->Wait(); DestroyResource(); Gfx = nullptr; };
 
     directx12_buffer(const directx12_buffer&) = delete;
     directx12_buffer& operator=(const directx12_buffer&) = delete;
@@ -103,7 +103,7 @@ struct directx12_buffer : public buffer
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage) override 
 	{
-		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
+		Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
 		WithCounter = NewUsage & RF_WithCounter;
 
@@ -129,7 +129,7 @@ struct directx12_buffer : public buffer
 		if(WithCounter)
 		{
 			Gfx->Device->CreateCommittedResource(&ResourceType, D3D12_HEAP_FLAG_NONE, &CounterResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&CounterHandle));
-			NAME_DX12_OBJECT_CSTR(CounterHandle.Get(), (DebugName + "_counter").c_str());
+			NAME_DX12_OBJECT_CSTR(CounterHandle, (DebugName + "_counter").c_str());
 		}
 
 		CD3DX12_HEAP_PROPERTIES ResourceTempType = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
@@ -144,14 +144,14 @@ struct directx12_buffer : public buffer
 			SrvDesc.Buffer.Flags                    = D3D12_BUFFER_SRV_FLAG_RAW;
 			SrvDesc.Buffer.NumElements              = static_cast<u32>(CounterOffset / 4);
 
-			ShaderResourceView = Gfx->ResourcesHeap.GetNextCpuHandle();
+			ShaderResourceView = Gfx->ResourcesHeap->GetNextCpuHandle();
 			Gfx->Device->CreateShaderResourceView(Handle.Get(), &SrvDesc, ShaderResourceView);
 
 			if(WithCounter)
 			{
 				SrvDesc.Format                     = DXGI_FORMAT_R32_TYPELESS;
 				SrvDesc.Buffer.NumElements         = 1;
-				CounterShaderResourceView = Gfx->ResourcesHeap.GetNextCpuHandle();
+				CounterShaderResourceView = Gfx->ResourcesHeap->GetNextCpuHandle();
 				Gfx->Device->CreateShaderResourceView(CounterHandle.Get(), &SrvDesc, CounterShaderResourceView);
 			}
 		}
@@ -165,21 +165,42 @@ struct directx12_buffer : public buffer
 
 			if(Usage & RF_StorageBuffer)
 			{
-				UnorderedAccessView = Gfx->ResourcesHeap.GetNextCpuHandle();
+				UnorderedAccessView = Gfx->ResourcesHeap->GetNextCpuHandle();
 				Gfx->Device->CreateUnorderedAccessView(Handle.Get(), nullptr, &UavDesc, UnorderedAccessView);
 
 				if(WithCounter)
 				{
 					UavDesc.Format                     = DXGI_FORMAT_R32_TYPELESS;
 					UavDesc.Buffer.NumElements         = 1;
-					CounterUnorderedAccessView = Gfx->ResourcesHeap.GetNextCpuHandle();
+					CounterUnorderedAccessView = Gfx->ResourcesHeap->GetNextCpuHandle();
 					Gfx->Device->CreateUnorderedAccessView(CounterHandle.Get(), nullptr, &UavDesc, CounterUnorderedAccessView);
 				}
 			}
 		}
 	}
 
-	void DestroyResource() override {Handle.Reset();};
+	void DestroyResource() override
+	{
+		if(Handle)
+		{
+			Handle.Reset();
+		}
+		if(TempHandle)
+		{
+			TempHandle.Reset();
+		}
+		if(CounterHandle)
+		{
+			CounterHandle.Reset();
+		}
+		if(Allocation)
+		{
+			Allocation.Reset();
+		}
+	}
+
+
+	directx12_backend* Gfx = nullptr;
 
 	ComPtr<ID3D12Resource> Handle;
 	ComPtr<ID3D12Resource> TempHandle;
@@ -198,9 +219,6 @@ struct directx12_texture : public texture
 {
 	directx12_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
-		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-		Device = Gfx->Device.Get();
-
 		CreateResource(Backend, Heap, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
 		if(Data || Info.UseStagingBuffer)
 		{
@@ -238,11 +256,11 @@ struct directx12_texture : public texture
 				break;
 		};
 
-		Sampler = Gfx->SamplersHeap.GetNextCpuHandle();
+		Sampler = Gfx->SamplersHeap->GetNextCpuHandle();
         Gfx->Device->CreateSampler(&SamplerDesc, Sampler);
 	}
 
-	~directx12_texture() override = default;
+	~directx12_texture() override { Gfx->Fence->Wait(); DestroyStagingResource(); DestroyResource(); Gfx = nullptr; };
 
     directx12_texture(const directx12_texture&) = delete;
     directx12_texture& operator=(const directx12_texture&) = delete;
@@ -270,7 +288,7 @@ struct directx12_texture : public texture
 
 	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override 
 	{
-		directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
+		Gfx = static_cast<directx12_backend*>(Backend);
 		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
 		CurrentLayout.resize(InputData.MipLevels);
 		CurrentState.resize(InputData.MipLevels);
@@ -280,6 +298,7 @@ struct directx12_texture : public texture
 		Height = NewHeight;
 		Depth  = DepthOrArraySize;
 		Info   = InputData;
+		Device = Gfx->Device.Get();
 
 		D3D12_CLEAR_VALUE* Clear = nullptr;
         D3D12_RESOURCE_DESC ResourceDesc = {};
@@ -383,7 +402,7 @@ struct directx12_texture : public texture
 					SrvDesc.Texture3D.MostDetailedMip = MipIdx;
 				}
 
-				auto ShaderResourceView = Gfx->ResourcesHeap.GetNextCpuHandle();
+				auto ShaderResourceView = Gfx->ResourcesHeap->GetNextCpuHandle();
 				Gfx->Device->CreateShaderResourceView(Handle.Get(), &SrvDesc, ShaderResourceView);
 				ShaderResourceViews.push_back(ShaderResourceView);
 			}
@@ -432,7 +451,7 @@ struct directx12_texture : public texture
 					UavDesc.Texture3D.WSize       = ~0u;
 				}
 
-				auto UnorderedAccessView = Gfx->ResourcesHeap.GetNextCpuHandle();
+				auto UnorderedAccessView = Gfx->ResourcesHeap->GetNextCpuHandle();
 				Gfx->Device->CreateUnorderedAccessView(Handle.Get(), nullptr, &UavDesc, UnorderedAccessView);
 				UnorderedAccessViews.push_back(UnorderedAccessView);
 			}
@@ -449,7 +468,7 @@ struct directx12_texture : public texture
 				MipIdx < Info.MipLevels;
 				++MipIdx)
 			{
-				auto RenderTargetView = Gfx->ColorTargetHeap.GetNextCpuHandle();
+				auto RenderTargetView = Gfx->ColorTargetHeap->GetNextCpuHandle();
 
 				if (Info.Usage & image_flags::TF_CubeMap)
 				{
@@ -462,7 +481,7 @@ struct directx12_texture : public texture
 
 						Gfx->Device->CreateRenderTargetView(Handle.Get(), &RtvDesc, RenderTargetView);
 						RenderTargetViews.push_back(RenderTargetView);
-						RenderTargetView = Gfx->ColorTargetHeap.GetNextCpuHandle();
+						RenderTargetView = Gfx->ColorTargetHeap->GetNextCpuHandle();
 					}
 					continue;
 				}
@@ -514,7 +533,7 @@ struct directx12_texture : public texture
 				MipIdx < Info.MipLevels;
 				++MipIdx)
 			{
-				auto DepthStencilView = Gfx->DepthStencilHeap.GetNextCpuHandle();
+				auto DepthStencilView = Gfx->DepthStencilHeap->GetNextCpuHandle();
 
 				if (Info.Usage & image_flags::TF_CubeMap)
 				{
@@ -527,7 +546,7 @@ struct directx12_texture : public texture
 
 						Gfx->Device->CreateDepthStencilView(Handle.Get(), &DepthStencilDesc, DepthStencilView);
 						DepthStencilViews.push_back(DepthStencilView);
-						DepthStencilView = Gfx->DepthStencilHeap.GetNextCpuHandle();
+						DepthStencilView = Gfx->DepthStencilHeap->GetNextCpuHandle();
 					}
 					continue;
 				}
@@ -572,11 +591,31 @@ struct directx12_texture : public texture
 		Device->CreateCommittedResource(&ResourceTempType, D3D12_HEAP_FLAG_NONE, &TempDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempHandle));
 	}
 
-	void DestroyResource() override {/*Handle.Reset();*/}
-	void DestroyStagingResource() override {/*TempHandle.Reset();*/}
+	void DestroyResource() override 
+	{
+		if(Handle)
+		{
+			Handle.Reset();
+		}
+
+		if(Allocation)
+		{
+			Allocation.Reset();
+		}
+	}
+
+	void DestroyStagingResource() override 
+	{
+		if(TempHandle)
+		{
+			TempHandle.Reset();
+		}
+	}
 
 
-	ID3D12Device6* Device;
+	directx12_backend* Gfx = nullptr;
+
+	ID3D12Device6* Device = nullptr;
 	ComPtr<ID3D12Resource> Handle;
 	ComPtr<ID3D12Resource> TempHandle;
 	ComPtr<D3D12MA::Allocation> Allocation;

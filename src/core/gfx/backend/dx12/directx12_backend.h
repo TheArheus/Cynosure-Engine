@@ -20,7 +20,7 @@ public:
 	texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
 	texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
 
-	D3D12MA::Allocator* Handle;
+	D3D12MA::Allocator* Handle = nullptr;
 };
 
 
@@ -36,6 +36,55 @@ public:
 	{
 		Init(Device, NumberOfDescriptors, NewType, Flags);
 	}
+
+	~descriptor_heap()
+	{
+		if(Handle)
+		{
+			Handle->Release();
+		}
+	}
+
+    descriptor_heap(descriptor_heap&& Other) noexcept
+        : Size(Other.Size),
+          Next(Other.Next),
+          AllocInc(Other.AllocInc),
+          GpuHandle(Other.GpuHandle),
+          GpuBegin(Other.GpuBegin),
+          CpuHandle(Other.CpuHandle),
+          CpuBegin(Other.CpuBegin),
+          Handle(std::move(Other.Handle)),
+          Type(Other.Type)
+    {
+        Other.Reset();
+    }
+
+    descriptor_heap& operator=(descriptor_heap&& Other) noexcept
+    {
+        if (this != &Other)
+        {
+            if (Handle)
+            {
+                Handle->Release();
+            }
+
+            Size = Other.Size;
+            Next = Other.Next;
+            AllocInc = Other.AllocInc;
+            GpuHandle = Other.GpuHandle;
+            GpuBegin = Other.GpuBegin;
+            CpuHandle = Other.CpuHandle;
+            CpuBegin = Other.CpuBegin;
+            Handle = std::move(Other.Handle);
+            Type = Other.Type;
+
+            Other.Reset();
+        }
+        return *this;
+    }
+
+    descriptor_heap(const descriptor_heap&) = delete;
+    descriptor_heap& operator=(const descriptor_heap&) = delete;
 
 	void Init(ID3D12Device1* Device, u32 NumberOfDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE NewType, D3D12_DESCRIPTOR_HEAP_FLAGS Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE)
 	{
@@ -133,25 +182,28 @@ struct directx12_backend : public renderer_backend
 	const DXGI_FORMAT ColorTargetFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
 
 	ComPtr<IDXGIFactory6> Factory;
-	descriptor_heap ColorTargetHeap;
-	descriptor_heap DepthStencilHeap;
-	descriptor_heap ResourcesHeap;
-	descriptor_heap SamplersHeap;
+	descriptor_heap* ColorTargetHeap;
+	descriptor_heap* DepthStencilHeap;
+	descriptor_heap* ResourcesHeap;
+	descriptor_heap* SamplersHeap;
 
-	descriptor_heap ImGuiResourcesHeap;
+	descriptor_heap* ImGuiResourcesHeap;
 
 	std::vector<ComPtr<ID3D12Resource>> SwapchainImages;
 	std::vector<D3D12_RESOURCE_STATES> SwapchainCurrentState;
 
 	std::unordered_map<std::string, compiled_shader_info> CompiledShaders;
 
+	directx12_fence* Fence;
 	directx12_command_queue* CommandQueue;
-	directx12_command_queue* CmpCommandQueue;
 
 	ComPtr<IDXGISwapChain4> SwapChain;
 	ComPtr<IDXGIAdapter1> Adapter;
 	ComPtr<ID3D12Device6> Device;
+#if defined(CE_DEBUG)
+	ComPtr<ID3D12InfoQueue1> InfoQueue;
 	ComPtr<ID3D12DeviceRemovedExtendedDataSettings> pDredSettings;
+#endif
 };
 
 #define RENDERER_DIRECTX_12_H_

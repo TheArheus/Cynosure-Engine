@@ -18,7 +18,7 @@ struct directx12_command_list : public command_list
 		CreateResource(Backend);
 	}
 
-	~directx12_command_list() override = default;
+	~directx12_command_list() override { DestroyObject(); };
 	
 	void DestroyObject() override;
 
@@ -34,7 +34,7 @@ struct directx12_command_list : public command_list
 
 	void DeviceWaitIdle() override 
 	{
-		Fence.Wait();
+		Gfx->Fence->Wait();
 	}
 
 	void EndOneTime() override;
@@ -81,11 +81,10 @@ struct directx12_command_list : public command_list
 	void DebugGuiBegin(texture* RenderTarget) override;
 	void DebugGuiEnd() override;
 
-	directx12_fence Fence;
-	directx12_backend* Gfx;
+	directx12_backend* Gfx = nullptr;
 
-	ID3D12Device6* Device;
-	ID3D12GraphicsCommandList* CommandList;
+	ID3D12Device6* Device = nullptr;
+	ID3D12GraphicsCommandList* CommandList = nullptr;
 
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> ColorTargets;
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilTarget;
@@ -94,7 +93,7 @@ struct directx12_command_list : public command_list
 class directx12_resource_binder;
 class directx12_render_context : public render_context
 {
-	ID3D12Device6* Device;
+	ID3D12Device6* Device = nullptr;
 	friend directx12_command_list;
 	friend directx12_resource_binder;
 
@@ -114,7 +113,31 @@ public:
 		SamplersBindingIdx = 0;
 	}
 
-	void DestroyObject() override {}
+	void DestroyObject() override 
+	{
+		if(ResourceHeap)
+		{
+			delete ResourceHeap;
+			ResourceHeap = nullptr;
+		}
+		if(SamplersHeap)
+		{
+			delete SamplersHeap;
+			SamplersHeap = nullptr;
+		}
+		if(IndirectSignatureHandle)
+		{
+			IndirectSignatureHandle.Reset();
+		}
+		if(RootSignatureHandle)
+		{
+			RootSignatureHandle.Reset();
+		}
+		if(Pipeline)
+		{
+			Pipeline.Reset();
+		}
+	}
 
 private:
 	ComPtr<ID3D12PipelineState> Pipeline;
@@ -135,8 +158,8 @@ private:
 	load_op  LoadOp;
 	store_op StoreOp;
 
-	descriptor_heap ResourceHeap;
-	descriptor_heap SamplersHeap;
+	descriptor_heap* ResourceHeap = nullptr;
+	descriptor_heap* SamplersHeap = nullptr;
 
 	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 };
@@ -160,7 +183,27 @@ public:
 		SamplersBindingIdx = 0;
 	}
 
-	void DestroyObject() override {}
+	void DestroyObject() override 
+	{
+		if(ResourceHeap)
+		{
+			delete ResourceHeap;
+			ResourceHeap = nullptr;
+		}
+		if(SamplersHeap)
+		{
+			delete SamplersHeap;
+			SamplersHeap = nullptr;
+		}
+		if(RootSignatureHandle)
+		{
+			RootSignatureHandle.Reset();
+		}
+		if(Pipeline)
+		{
+			Pipeline.Reset();
+		}
+	}
 
 private:
 	ComPtr<ID3D12PipelineState> Pipeline;
@@ -175,8 +218,8 @@ private:
 	bool IsResourceHeapInited = false;
 	bool IsSamplersHeapInited = false;
 
-	descriptor_heap ResourceHeap;
-	descriptor_heap SamplersHeap;
+	descriptor_heap* ResourceHeap = nullptr;
+	descriptor_heap* SamplersHeap = nullptr;
 
 	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
 };
@@ -227,7 +270,7 @@ public:
 	void SetStorageImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 	void SetImageSampler(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
-	ID3D12Device6* Device;
+	ID3D12Device6* Device = nullptr;
 	std::map<u32, u32> SetIndices;
 	std::vector<descriptor_binding> BindingDescriptions;
 	std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>> ShaderRootLayout;
@@ -237,6 +280,6 @@ public:
 	u32 RootResourceBindingIdx = 0;
 	u32 RootSamplersBindingIdx = 0;
 
-	descriptor_heap ResourceHeap;
-	descriptor_heap SamplersHeap;
+	descriptor_heap* ResourceHeap = nullptr;
+	descriptor_heap* SamplersHeap = nullptr;
 };

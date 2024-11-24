@@ -62,6 +62,7 @@ Reset(VkCommandBuffer* CommandList)
 void vulkan_command_queue::
 Remove(VkCommandBuffer* CommandList)
 {
+	if(*CommandList == VK_NULL_HANDLE) return;
 	vkFreeCommandBuffers(Device, CommandAlloc, 1, CommandList);
 	CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
 	*CommandList = VK_NULL_HANDLE;

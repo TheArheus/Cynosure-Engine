@@ -37,7 +37,6 @@ directx12_backend(window* Window)
 #endif
 	
 	CreateDXGIFactory2(FactoryFlags, IID_PPV_ARGS(&Factory));
-
 	{
 		GetDevice(Factory.Get(), &Adapter);
 		D3D12CreateDevice(Adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
@@ -45,7 +44,6 @@ directx12_backend(window* Window)
 
 #if defined(CE_DEBUG)
 	{
-		ID3D12InfoQueue1* InfoQueue = nullptr;
 		if (SUCCEEDED(Device->QueryInterface<ID3D12InfoQueue1>(&InfoQueue)))
 		{
 			InfoQueue->RegisterMessageCallback(&MessageCallback, D3D12_MESSAGE_CALLBACK_IGNORE_FILTERS, nullptr, &MsgCallback);
@@ -62,6 +60,7 @@ directx12_backend(window* Window)
 	Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &RendererOptions, sizeof(RendererOptions));
 	if(RendererOptions.TiledResourcesTier >= 2) MinMaxFilterAvailable = true;
 
+	Fence = new directx12_fence(Device.Get());
 	CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 	{
@@ -76,24 +75,24 @@ directx12_backend(window* Window)
 		SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		SwapChainDesc.SampleDesc.Count = 1;
 		SwapChainDesc.SampleDesc.Quality = 0;
-		Factory->CreateSwapChainForHwnd(CommandQueue->Handle.Get(), Window->Handle, &SwapChainDesc, nullptr, nullptr, _SwapChain.GetAddressOf());
+		Factory->CreateSwapChainForHwnd(CommandQueue->Handle.Get(), Window->Handle, &SwapChainDesc, nullptr, nullptr, &_SwapChain);
 		_SwapChain.As(&SwapChain);
 
 		SwapchainImages.resize(2);
 		SwapchainCurrentState.resize(2);
 	}
 
-	ColorTargetHeap  = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-	DepthStencilHeap = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
-	ResourcesHeap    = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	SamplersHeap     = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+	ColorTargetHeap  = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	DepthStencilHeap = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	ResourcesHeap    = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	SamplersHeap     = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
 
-	ImGuiResourcesHeap = descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+	ImGuiResourcesHeap = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 
-	NAME_DX12_OBJECT_CSTR(ColorTargetHeap.Handle.Get(), "GlobalColorTargetHeap");
-	NAME_DX12_OBJECT_CSTR(DepthStencilHeap.Handle.Get(), "GlobalDepthStencilHeap");
-	NAME_DX12_OBJECT_CSTR(ResourcesHeap.Handle.Get(), "GlobalResourcesHeap");
-	NAME_DX12_OBJECT_CSTR(SamplersHeap.Handle.Get(), "GlobalSamplersHeap");
+	NAME_DX12_OBJECT_CSTR(ColorTargetHeap->Handle.Get(), "GlobalColorTargetHeap");
+	NAME_DX12_OBJECT_CSTR(DepthStencilHeap->Handle.Get(), "GlobalDepthStencilHeap");
+	NAME_DX12_OBJECT_CSTR(ResourcesHeap->Handle.Get(), "GlobalResourcesHeap");
+	NAME_DX12_OBJECT_CSTR(SamplersHeap->Handle.Get(), "GlobalSamplersHeap");
 
 	{
 		D3D12_RENDER_TARGET_VIEW_DESC ColorTargetViewDesc = {};
@@ -101,9 +100,9 @@ directx12_backend(window* Window)
 		ColorTargetViewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
 
 		SwapChain->GetBuffer(0, IID_PPV_ARGS(&SwapchainImages[0]));
-		Device->CreateRenderTargetView(SwapchainImages[0].Get(), &ColorTargetViewDesc, ColorTargetHeap.GetNextCpuHandle());
+		Device->CreateRenderTargetView(SwapchainImages[0].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
 		SwapChain->GetBuffer(1, IID_PPV_ARGS(&SwapchainImages[1]));
-		Device->CreateRenderTargetView(SwapchainImages[1].Get(), &ColorTargetViewDesc, ColorTargetHeap.GetNextCpuHandle());
+		Device->CreateRenderTargetView(SwapchainImages[1].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
 	}
 
 	u32 RenderFormatRequired = D3D12_FORMAT_SUPPORT1_RENDER_TARGET | D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE | D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET;
@@ -127,7 +126,7 @@ directx12_backend(window* Window)
 	if (MsaaQuality >= 2) MsaaState = true;
 	if (MsaaQuality < 2) RenderMultisampleSupport = false;
 
-	ImGui_ImplDX12_Init(Device.Get(), 2, ColorTargetFormat, ImGuiResourcesHeap.Handle.Get(), ImGuiResourcesHeap.CpuHandle, ImGuiResourcesHeap.GpuHandle);
+	ImGui_ImplDX12_Init(Device.Get(), 2, ColorTargetFormat, ImGuiResourcesHeap->Handle.Get(), ImGuiResourcesHeap->CpuHandle, ImGuiResourcesHeap->GpuHandle);
 	GlobalHeap = new directx12_memory_heap(this);
 };
 
@@ -136,31 +135,43 @@ DestroyObject()
 {
     ImGui_ImplDX12_Shutdown();
 
+	delete ColorTargetHeap;
+	ColorTargetHeap = nullptr;
+	delete DepthStencilHeap;
+	DepthStencilHeap = nullptr;
+	delete ResourcesHeap;
+	ResourcesHeap = nullptr;
+	delete SamplersHeap;
+	SamplersHeap = nullptr;
+
+	delete ImGuiResourcesHeap;
+	ImGuiResourcesHeap = nullptr;
+
     delete GlobalHeap;
     GlobalHeap = nullptr;
 
     delete CommandQueue;
     CommandQueue = nullptr;
 
-	SwapchainImages[0].Reset();
-	SwapchainImages[1].Reset();
+	delete Fence;
+	Fence = nullptr;
+
+	SwapchainImages.clear();
 
     SwapChain.Reset();
-    Device.Reset();
     Adapter.Reset();
     Factory.Reset();
-    pDredSettings.Reset();
 
 #if defined(CE_DEBUG)
-    if (Device)
-    {
-        ComPtr<ID3D12InfoQueue1> InfoQueue;
-        if (SUCCEEDED(Device->QueryInterface(IID_PPV_ARGS(&InfoQueue))))
-        {
-            InfoQueue->UnregisterMessageCallback(MsgCallback);
-        }
+	pDredSettings.Reset();
+    if (Device && InfoQueue)
+	{
+		InfoQueue->UnregisterMessageCallback(MsgCallback);
+		InfoQueue.Reset();
     }
 #endif
+
+    Device.Reset();
 }
 
 void directx12_backend::
@@ -169,8 +180,7 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	Width  = NewWidth;
 	Height = NewHeight;
 
-	SwapchainImages[0].Reset();
-	SwapchainImages[1].Reset();
+	SwapchainImages.clear();
 
 	SwapChain->ResizeBuffers(2, NewWidth, NewHeight, ColorTargetFormat, (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 
@@ -180,9 +190,9 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 		ColorTargetViewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
 
 		SwapChain->GetBuffer(0, IID_PPV_ARGS(&SwapchainImages[0]));
-		Device->CreateRenderTargetView(SwapchainImages[0].Get(), &ColorTargetViewDesc, ColorTargetHeap.GetNextCpuHandle());
+		Device->CreateRenderTargetView(SwapchainImages[0].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
 		SwapChain->GetBuffer(1, IID_PPV_ARGS(&SwapchainImages[1]));
-		Device->CreateRenderTargetView(SwapchainImages[1].Get(), &ColorTargetViewDesc, ColorTargetHeap.GetNextCpuHandle());
+		Device->CreateRenderTargetView(SwapchainImages[1].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
 	}
 }
 
@@ -578,7 +588,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 				if(Size != ~0u)
 				{
 					ParameterOffsets[Var.Set][Var.Binding] = Size;
-					D3D12_DESCRIPTOR_RANGE* ParameterRange = new D3D12_DESCRIPTOR_RANGE;
+					D3D12_DESCRIPTOR_RANGE* ParameterRange = PushStruct(D3D12_DESCRIPTOR_RANGE);
 					switch(DescriptorType)
 					{
 					case dx12_descriptor_type::shader_resource:
@@ -629,7 +639,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 						ParameterRange->RegisterSpace = Var.Set;
 						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-						D3D12_DESCRIPTOR_RANGE* ParameterRange1 = new D3D12_DESCRIPTOR_RANGE;
+						D3D12_DESCRIPTOR_RANGE* ParameterRange1 = PushStruct(D3D12_DESCRIPTOR_RANGE);
 						ParameterRange1->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
 						ParameterRange1->BaseShaderRegister = Var.Binding;
 						ParameterRange1->NumDescriptors = Size;

@@ -94,7 +94,7 @@ struct vulkan_command_list : public command_list
 	VkCommandBuffer CommandList;
 	VkSemaphore AcquireSemaphore, ReleaseSemaphore;
 
-	vulkan_backend* Gfx;
+	vulkan_backend* Gfx = nullptr;
 
 	std::vector<VkImageView>  AttachmentViews;
 	std::vector<VkClearValue> RenderTargetClears;
@@ -367,10 +367,10 @@ struct vulkan_resource_binder : public resource_binder
 	void SetStorageImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 	void SetImageSampler(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
-	texture* NullTexture1D;
-	texture* NullTexture2D;
-	texture* NullTexture3D;
-	texture* NullTextureCube;
+	texture* NullTexture1D = nullptr;
+	texture* NullTexture2D = nullptr;
+	texture* NullTexture3D = nullptr;
+	texture* NullTextureCube = nullptr;
 
 	std::map<u32, u32> SetIndices;
 	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;

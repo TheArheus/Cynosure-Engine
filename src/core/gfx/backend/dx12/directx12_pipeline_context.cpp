@@ -9,17 +9,17 @@ SetStorageBufferView(buffer* Buffer, u32 Set)
 {
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
 
-	auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx);
+	auto DescriptorHandle = ResourceHeap->GetCpuHandle(ResourceBindingIdx);
 	auto ParameterType = ShaderRootLayout[Set][SetIndices[Set]][0].ParameterType;
 	if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
 	{
-		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceView, ResourceHeap.Type);
+		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceView, ResourceHeap->Type);
 
 		BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 	}
 	else if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
 	{
-		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessView, ResourceHeap.Type);
+		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessView, ResourceHeap->Type);
 
 		BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 	}
@@ -29,15 +29,15 @@ SetStorageBufferView(buffer* Buffer, u32 Set)
 
 	if(Buffer->WithCounter)
 	{
-		DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx);
+		DescriptorHandle = ResourceHeap->GetCpuHandle(ResourceBindingIdx);
 		if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
 		{
-			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterShaderResourceView, ResourceHeap.Type);
+			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterShaderResourceView, ResourceHeap->Type);
 			BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
 		else if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
 		{
-			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterUnorderedAccessView, ResourceHeap.Type);
+			Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->CounterUnorderedAccessView, ResourceHeap->Type);
 			BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->CounterHandle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 		}
 		RootResourceBindingIdx += 1;
@@ -56,15 +56,15 @@ SetUniformBufferView(buffer* Buffer, u32 Set)
 void directx12_resource_binder::
 SetSampledImage(u32 BindingCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap->GetGpuHandle(SamplersBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootSamplersBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 
-		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx);
-		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap.Type);
+		auto DescriptorHandle = SamplersHeap->GetCpuHandle(SamplersBindingIdx);
+		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap->Type);
 		SamplersBindingIdx++;
 	}
 	SamplersBindingIdx += (BindingCount - Textures.size());
@@ -74,15 +74,15 @@ SetSampledImage(u32 BindingCount, const array<texture*>& Textures, image_type Ty
 void directx12_resource_binder::
 SetStorageImage(u32 BindingCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	BindingDescriptions.push_back({dx12_descriptor_type::unordered_access_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	BindingDescriptions.push_back({dx12_descriptor_type::unordered_access_table, ResourceHeap->GetGpuHandle(ResourceBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootResourceBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 
-		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx);
-		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessViews[ViewIdx], ResourceHeap.Type);
+		auto DescriptorHandle = ResourceHeap->GetCpuHandle(ResourceBindingIdx);
+		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessViews[ViewIdx], ResourceHeap->Type);
 		ResourceBindingIdx++;
 	}
 	ResourceBindingIdx += (BindingCount - Textures.size());
@@ -92,28 +92,28 @@ SetStorageImage(u32 BindingCount, const array<texture*>& Textures, image_type Ty
 void directx12_resource_binder::
 SetImageSampler(u32 BindingCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	BindingDescriptions.push_back({dx12_descriptor_type::shader_resource_table, ResourceHeap.GetGpuHandle(ResourceBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	BindingDescriptions.push_back({dx12_descriptor_type::shader_resource_table, ResourceHeap->GetGpuHandle(ResourceBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootResourceBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 
-		auto DescriptorHandle = ResourceHeap.GetCpuHandle(ResourceBindingIdx);
-		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceViews[ViewIdx], ResourceHeap.Type);
+		auto DescriptorHandle = ResourceHeap->GetCpuHandle(ResourceBindingIdx);
+		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceViews[ViewIdx], ResourceHeap->Type);
 		ResourceBindingIdx++;
 	}
 	ResourceBindingIdx += (BindingCount - Textures.size());
 
-	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap.GetGpuHandle(SamplersBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
+	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap->GetGpuHandle(SamplersBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootSamplersBindingIdx += 1;
 
 	for(u32 Idx = 0; Idx < Textures.size(); ++Idx)
 	{
 		directx12_texture* ToBind = static_cast<directx12_texture*>(Textures[Idx]);
 
-		auto DescriptorHandle = SamplersHeap.GetCpuHandle(SamplersBindingIdx);
-		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap.Type);
+		auto DescriptorHandle = SamplersHeap->GetCpuHandle(SamplersBindingIdx);
+		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->Sampler, SamplersHeap->Type);
 		SamplersBindingIdx++;
 	}
 	SamplersBindingIdx += (BindingCount - Textures.size());
@@ -126,16 +126,18 @@ CreateResource(renderer_backend* Backend)
 	Gfx = static_cast<directx12_backend*>(Backend);
 	Device = Gfx->Device.Get();
 
-	Fence.Init(Gfx->Device.Get());
-
 	CommandList = Gfx->CommandQueue->AllocateCommandList();
 }
 
 void directx12_command_list::
 DestroyObject()
 {
-	//Gfx->CommandQueue->ExecuteAndRemove(CommandList);
-	Fence.Flush(Gfx->CommandQueue);
+	Gfx->Fence->Flush(Gfx->CommandQueue);
+	if(CommandList)
+	{
+		Gfx->CommandQueue->Remove(&CommandList);
+		CommandList = nullptr;
+	}
 }
 
 void directx12_command_list::
@@ -218,38 +220,24 @@ void directx12_command_list::
 End()
 {
 	PlaceEndOfFrameBarriers();
-	Gfx->CommandQueue->Execute(CommandList);
-	Fence.Flush(Gfx->CommandQueue);
+	Gfx->CommandQueue->Execute(&CommandList);
+	Gfx->Fence->Flush(Gfx->CommandQueue);
 }
 
 void directx12_command_list::
 EndOneTime()
 {
 	PlaceEndOfFrameBarriers();
-	Gfx->CommandQueue->ExecuteAndRemove(CommandList);
-	Fence.Flush(Gfx->CommandQueue);
+	Gfx->CommandQueue->ExecuteAndRemove(&CommandList);
+	Gfx->Fence->Flush(Gfx->CommandQueue);
 }
 
 void directx12_command_list::
 Present()
 {
 	PlaceEndOfFrameBarriers();
-	Gfx->CommandQueue->Execute(CommandList);
-
-	HRESULT DeviceResult = Gfx->Device->GetDeviceRemovedReason();
-	if(!SUCCEEDED(DeviceResult))
-	{
-		printf("Device removed reason: %#08x\n", DeviceResult);
-
-		ComPtr<ID3D12DeviceRemovedExtendedData1> pDred;
-		Gfx->Device->QueryInterface(IID_PPV_ARGS(&pDred));
-		D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 DredAutoBreadcrumbsOutput;
-		D3D12_DRED_PAGE_FAULT_OUTPUT1 DredPageFaultOutput;
-		pDred->GetAutoBreadcrumbsOutput1(&DredAutoBreadcrumbsOutput);
-		pDred->GetPageFaultAllocationOutput1(&DredPageFaultOutput);
-	}
-
-	Fence.Flush(Gfx->CommandQueue);
+	Gfx->CommandQueue->Execute(&CommandList);
+	Gfx->Fence->Flush(Gfx->CommandQueue);
 
 	Gfx->SwapChain->Present(0, 0);
 	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
@@ -561,8 +549,8 @@ BindShaderParameters(void* Data)
         ContextToBind->SamplersBindingIdx = Binder.SamplersBindingIdx;
 
         std::vector<ID3D12DescriptorHeap*> Heaps;
-        if (ContextToBind->IsResourceHeapInited) Heaps.push_back(ContextToBind->ResourceHeap.Handle.Get());
-        if (ContextToBind->IsSamplersHeapInited) Heaps.push_back(ContextToBind->SamplersHeap.Handle.Get());
+        if (ContextToBind->IsResourceHeapInited) Heaps.push_back(ContextToBind->ResourceHeap->Handle.Get());
+        if (ContextToBind->IsSamplersHeapInited) Heaps.push_back(ContextToBind->SamplersHeap->Handle.Get());
         CommandList->SetDescriptorHeaps(Heaps.size(), Heaps.data());
 
         for (const auto& BindingDesc : Binder.BindingDescriptions) 
@@ -864,7 +852,7 @@ DebugGuiBegin(texture* RenderTarget)
 	ImGui_ImplDX12_NewFrame();
 
 	std::vector<ID3D12DescriptorHeap*> Heaps;
-	Heaps.push_back(Gfx->ImGuiResourcesHeap.Handle.Get());
+	Heaps.push_back(Gfx->ImGuiResourcesHeap->Handle.Get());
 
 	CommandList->SetDescriptorHeaps(Heaps.size(), Heaps.data());
 	CommandList->OMSetRenderTargets(1, &Clr->RenderTargetViews[0], false, nullptr);
@@ -1027,16 +1015,16 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	// TODO: TEMPORAL HACK. Need a better solution here for different tasks
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] != 0)
 	{
-		//ResourceHeap = descriptor_heap(Gfx->Device.Get(), Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] * 16, 16384u), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
-		ResourceHeap = descriptor_heap(Gfx->Device.Get(), 16384u, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
-		NAME_DX12_OBJECT_CSTR(ResourceHeap.Handle.Get(), (GlobalName + ".resource_heap").c_str());
+		//ResourceHeap = descriptor_heap(Device, Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] * 16, 16384u), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		ResourceHeap = new descriptor_heap(Device, 16384u, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		NAME_DX12_OBJECT_CSTR(ResourceHeap->Handle.Get(), (GlobalName + ".resource_heap").c_str());
 		IsResourceHeapInited = true;
 	}
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] != 0)
 	{
-		//SamplersHeap = descriptor_heap(Gfx->Device.Get(), Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] * 16, 2048u), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
-		SamplersHeap = descriptor_heap(Gfx->Device.Get(), 2048u, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
-		NAME_DX12_OBJECT_CSTR(SamplersHeap.Handle.Get(), (GlobalName + ".samplers_heap").c_str());
+		//SamplersHeap = descriptor_heap(Device, Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] * 16, 2048u), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		SamplersHeap = new descriptor_heap(Device, 2048u, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		NAME_DX12_OBJECT_CSTR(SamplersHeap->Handle.Get(), (GlobalName + ".samplers_heap").c_str());
 		IsSamplersHeapInited = true;
 	}
 
@@ -1050,8 +1038,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	{
 		std::cerr << std::string(static_cast<const char*>(Error->GetBufferPointer())) << std::endl;
 	}
-	Gfx->Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&RootSignatureHandle));
-
+	Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&RootSignatureHandle));
 	PipelineDesc.pRootSignature = RootSignatureHandle.Get();
 	for(u32 FormatIdx = 0; FormatIdx < ColorTargetFormats.size(); ++FormatIdx) PipelineDesc.RTVFormats[FormatIdx] = GetDXFormat(ColorTargetFormats[FormatIdx]);
 
@@ -1067,7 +1054,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	PipelineDesc.DSVFormat = InputData.UseDepth ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_UNKNOWN;
 	PipelineDesc.SampleDesc.Count = 1;
 
-	Res = Gfx->Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline));
+	Res = Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline));
 
 	std::vector<D3D12_INDIRECT_ARGUMENT_DESC> IndirectArgs;
 	D3D12_INDIRECT_ARGUMENT_DESC IndirectArg = {};
@@ -1084,7 +1071,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	IndirectDesc.ByteStride = sizeof(indirect_draw_indexed_command);
 	IndirectDesc.NumArgumentDescs = IndirectArgs.size();
 	IndirectDesc.pArgumentDescs = IndirectArgs.data();
-	Gfx->Device->CreateCommandSignature(&IndirectDesc, HaveDrawID ? RootSignatureHandle.Get() : nullptr, IID_PPV_ARGS(&IndirectSignatureHandle));
+	Device->CreateCommandSignature(&IndirectDesc, HaveDrawID ? RootSignatureHandle.Get() : nullptr, IID_PPV_ARGS(&IndirectSignatureHandle));
 }
 
 directx12_compute_context::
@@ -1176,14 +1163,14 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 	// TODO: TEMPORAL HACK. Need a better solution here for different tasks
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] != 0)
 	{
-		ResourceHeap = descriptor_heap(Gfx->Device.Get(), Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] * 16, 16384u), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
-		NAME_DX12_OBJECT_CSTR(ResourceHeap.Handle.Get(), (Name + ".resource_heap").c_str());
+		ResourceHeap = new descriptor_heap(Device, Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] * 16, 16384u), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		NAME_DX12_OBJECT_CSTR(ResourceHeap->Handle.Get(), (Name + ".resource_heap").c_str());
 		IsResourceHeapInited = true;
 	}
 	if(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] != 0)
 	{
-		SamplersHeap = descriptor_heap(Gfx->Device.Get(), Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] * 16, 2048u), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
-		NAME_DX12_OBJECT_CSTR(SamplersHeap.Handle.Get(), (Name + ".samplers_heap").c_str());
+		SamplersHeap = new descriptor_heap(Device, Min(DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER] * 16, 2048u), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		NAME_DX12_OBJECT_CSTR(SamplersHeap->Handle.Get(), (Name + ".samplers_heap").c_str());
 		IsSamplersHeapInited = true;
 	}
 

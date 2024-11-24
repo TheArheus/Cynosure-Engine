@@ -3,7 +3,7 @@
 class directx12_command_queue
 {
 	D3D12_COMMAND_LIST_TYPE Type;
-	ID3D12Device6* Device;
+	ID3D12Device6* Device = nullptr;
 	std::vector<ID3D12GraphicsCommandList*> CommandLists;
 
 public:
@@ -32,10 +32,21 @@ public:
 
 	~directx12_command_queue()
 	{
+		if(CommandAlloc)
+		{
+			CommandAlloc.Reset();
+		}
+
+		if(Handle)
+		{
+			Handle.Reset();
+		}
+
 		for (ID3D12GraphicsCommandList* CommandList : CommandLists)
 		{
 			CommandList->Release();
 		}
+
 		CommandLists.clear();
 	}
 
@@ -54,6 +65,14 @@ public:
 		CommandAlloc->Reset();
 	}
 
+	void Remove(ID3D12GraphicsCommandList** CommandList)
+	{
+		if(*CommandList == nullptr) return;
+		(*CommandList)->Release();
+		CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), *CommandList), CommandLists.end());
+		*CommandList = nullptr;
+	}
+
 	void Execute()
 	{
 		for(ID3D12GraphicsCommandList* CommandList : CommandLists)
@@ -65,21 +84,18 @@ public:
 		Handle->ExecuteCommandLists(CmdLists.size(), CmdLists.data());
 	}
 
-	void Execute(ID3D12GraphicsCommandList* CommandList)
+	void Execute(ID3D12GraphicsCommandList** CommandList)
 	{
-		CommandList->Close();
-		ID3D12CommandList* CmdLists[] = { CommandList };
+		(*CommandList)->Close();
+		ID3D12CommandList* CmdLists[] = { *CommandList };
 		Handle->ExecuteCommandLists(_countof(CmdLists), CmdLists);
 	}
 
-	void ExecuteAndRemove(ID3D12GraphicsCommandList* CommandList)
+	void ExecuteAndRemove(ID3D12GraphicsCommandList** CommandList)
 	{
 		Execute(CommandList);
-		CommandLists.erase(std::remove(CommandLists.begin(), CommandLists.end(), CommandList), CommandLists.end());
+		Remove(CommandList);
 	}
-
-	ComPtr<ID3D12Fence> Fence;
-	HANDLE FenceEvent;
 };
 
 class directx12_fence
@@ -91,15 +107,24 @@ public:
 		Init(Device);
 	}
 
+	~directx12_fence()
+	{
+		CloseHandle(FenceEvent);
+		if(Handle)
+		{
+			Handle.Reset();
+		}
+	}
+
 	void Init(ID3D12Device6* Device)
 	{
-		Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence));
-		FenceEvent = CreateEvent(nullptr, 0, 0, nullptr);
+		Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Handle));
+		FenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 	}
 
 	void Signal(directx12_command_queue* CommandQueue)
 	{
-		CommandQueue->Handle->Signal(Fence.Get(), ++CurrentFence);
+		CommandQueue->Handle->Signal(Handle.Get(), ++CurrentFence);
 	}
 
 	void Flush(directx12_command_queue* CommandQueue)
@@ -110,17 +135,15 @@ public:
 
 	void Wait()
 	{
-		if(Fence->GetCompletedValue() < CurrentFence)
+		if(Handle->GetCompletedValue() < CurrentFence)
 		{
-			HANDLE Event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-			Fence->SetEventOnCompletion(CurrentFence, Event);
-			WaitForSingleObject(Event, INFINITE);
-			CloseHandle(Event);
+			Handle->SetEventOnCompletion(CurrentFence, FenceEvent);
+			WaitForSingleObject(FenceEvent, INFINITE);
 		}
 	}
 
 private:
 	u64 CurrentFence = 0;
-	ComPtr<ID3D12Fence> Fence;
+	ComPtr<ID3D12Fence> Handle = nullptr;
 	HANDLE FenceEvent;
 };
