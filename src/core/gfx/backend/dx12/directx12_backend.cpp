@@ -2,6 +2,8 @@
 directx12_backend::
 directx12_backend(window* Window)
 {
+	Type = backend_type::directx12;
+
 	RECT WindowRect;
 	GetClientRect(Window->Handle, &WindowRect);
 	u32 ClientWidth  = WindowRect.right - WindowRect.left;
@@ -127,7 +129,11 @@ directx12_backend(window* Window)
 	if (MsaaQuality < 2) RenderMultisampleSupport = false;
 
 	ImGui_ImplDX12_Init(Device.Get(), 2, ColorTargetFormat, ImGuiResourcesHeap->Handle.Get(), ImGuiResourcesHeap->CpuHandle, ImGuiResourcesHeap->GpuHandle);
-	GlobalHeap = new directx12_memory_heap(this);
+
+	D3D12MA::ALLOCATOR_DESC AllocatorDesc = {};
+	AllocatorDesc.pDevice  = Device.Get();
+	AllocatorDesc.pAdapter = Adapter.Get();
+	D3D12MA::CreateAllocator(&AllocatorDesc, &AllocatorHandle);
 };
 
 void directx12_backend::
@@ -147,8 +153,8 @@ DestroyObject()
 	delete ImGuiResourcesHeap;
 	ImGuiResourcesHeap = nullptr;
 
-    delete GlobalHeap;
-    GlobalHeap = nullptr;
+	AllocatorHandle->Release(); 
+	AllocatorHandle = nullptr;
 
     delete CommandQueue;
     CommandQueue = nullptr;

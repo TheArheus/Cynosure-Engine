@@ -4,6 +4,8 @@
 vulkan_backend::
 vulkan_backend(window* Window)
 {
+	Type = backend_type::vulkan;
+
 	volkInitialize();
 
 	VK_CHECK(vkEnumerateInstanceVersion(&HighestUsedVulkanVersion));
@@ -294,7 +296,20 @@ vulkan_backend(window* Window)
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, SwapchainImages.data());
 
 	CommandQueue = new vulkan_command_queue(Device, FamilyIndex);
-	GlobalHeap = new vulkan_memory_heap(this);
+
+	{
+		VmaVulkanFunctions VulkanFunctions = {};
+		VulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+		VulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+		VmaAllocatorCreateInfo AllocatorInfo = {};
+		AllocatorInfo.vulkanApiVersion = HighestUsedVulkanVersion;
+		AllocatorInfo.instance = Instance;
+		AllocatorInfo.physicalDevice = PhysicalDevice;
+		AllocatorInfo.device = Device;
+		AllocatorInfo.pVulkanFunctions = &VulkanFunctions;
+		vmaCreateAllocator(&AllocatorInfo, &AllocatorHandle);
+	}
 
 	// TODO: Custom initial resource state
 	utils::texture::input_data TextureInputData = {};
@@ -304,15 +319,15 @@ vulkan_backend(window* Window)
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_ColorTexture;
 	TextureInputData.InitialState = barrier_state::shader_read;
-	NullTexture1D = GlobalHeap->PushTexture(this, "NullT_1D", nullptr, 1, 1, 1, TextureInputData);
+	NullTexture1D = new vulkan_texture(this, "NullT_1D", nullptr, 1, 1, 1, TextureInputData);
 	TextureInputData.Type	   = image_type::Texture2D;
-	NullTexture2D = GlobalHeap->PushTexture(this, "NullT_2D", nullptr, 1, 1, 1, TextureInputData);
+	NullTexture2D = new vulkan_texture(this, "NullT_2D", nullptr, 1, 1, 1, TextureInputData);
 	TextureInputData.Type	   = image_type::Texture3D;
-	NullTexture3D = GlobalHeap->PushTexture(this, "NullT_3D", nullptr, 1, 1, 1, TextureInputData);
+	NullTexture3D = new vulkan_texture(this, "NullT_3D", nullptr, 1, 1, 1, TextureInputData);
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.Layers    = 6;
 	TextureInputData.Usage    |= image_flags::TF_CubeMap;
-	NullTextureCube = GlobalHeap->PushTexture(this, "NullT_CUBE", nullptr, 1, 1, 1, TextureInputData);
+	NullTextureCube = new vulkan_texture(this, "NullT_CUBE", nullptr, 1, 1, 1, TextureInputData);
 
 	VkDescriptorPoolSize ImGuiPoolSizes[] = 
 	{
@@ -420,8 +435,9 @@ DestroyObject()
 	delete NullTexture3D;
 	delete NullTextureCube;
 
+	vmaDestroyAllocator(AllocatorHandle);
+
 	delete CommandQueue;
-	delete GlobalHeap;
 
 	for (VkImageView ImageView : SwapchainImageViews)
 	{

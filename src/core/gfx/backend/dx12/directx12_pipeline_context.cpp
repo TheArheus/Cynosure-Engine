@@ -276,6 +276,20 @@ UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 }
 
 void directx12_command_list::
+ReadBack(buffer* BufferToRead, void* Data)
+{
+	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
+	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
+
+	CommandList->CopyBufferRegion(Buffer->TempHandle.Get(), 0, Buffer->Handle.Get(), 0, Buffer->Size);
+
+	void* CpuPtr = nullptr;
+	Buffer->TempHandle->Map(0, nullptr, &CpuPtr);
+	memcpy(Data, CpuPtr, Buffer->Size);
+	Buffer->TempHandle->Unmap(0, 0);
+}
+
+void directx12_command_list::
 ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 {
 	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
@@ -499,6 +513,7 @@ SetStencilTarget(texture* StencilAttachment, vec2 Clear)
 void directx12_command_list::
 BindShaderParameters(void* Data)
 {
+	if(!Data) return;
     directx12_resource_binder Binder(Gfx, CurrentContext);
     void* It = Data;
 

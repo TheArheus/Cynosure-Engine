@@ -52,15 +52,15 @@ struct vulkan_buffer : public buffer
     vulkan_buffer(const vulkan_buffer&) = delete;
     vulkan_buffer& operator=(const vulkan_buffer&) = delete;
 
-	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 Flags)
+	vulkan_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 Flags)
 	{
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, Flags);
+		CreateResource(Backend, DebugName, NewSize, Count, Flags);
 		Update(Backend, Data);
 	}
 
-	vulkan_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 Flags)
+	vulkan_buffer(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 Flags)
 	{
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, Flags);
+		CreateResource(Backend, DebugName, NewSize, Count, Flags);
 	}
 
 	void Update(renderer_backend* Backend, void* Data) override
@@ -79,6 +79,14 @@ struct vulkan_buffer : public buffer
 		Cmd->EndOneTime();
 	}
 
+	void ReadBack(renderer_backend* Backend, void* Data) override
+	{
+		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->ReadBack(this, Data);
+		Cmd->EndOneTime();
+	}
+
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
 	{
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
@@ -87,26 +95,10 @@ struct vulkan_buffer : public buffer
 		Cmd->EndOneTime();
 	}
 
-	void Update(void* Data, command_list* Cmd) override
-	{
-		Cmd->Update(this, Data);
-	}
-
-	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* Cmd) override
-	{
-		Cmd->UpdateSize(this, Data, UpdateByteSize);
-	}
-
-	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* Cmd) override
-	{
-		Cmd->ReadBackSize(this, Data, UpdateByteSize);
-	}
-
-	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) override
+	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) override
 	{
 		Usage = Flags;
-		VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
-		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		Gfx = static_cast<vulkan_backend*>(Backend);
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 		WithCounter = Flags & RF_WithCounter;
 		PrevShader = PSF_TopOfPipe;
@@ -136,7 +128,7 @@ struct vulkan_buffer : public buffer
 		VmaAllocationCreateInfo AllocCreateInfo = {};
 		AllocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 		VmaAllocationInfo AllocationInfo;
-		VK_CHECK(vmaCreateBuffer(VulkanHeap->Handle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
+		VK_CHECK(vmaCreateBuffer(Gfx->AllocatorHandle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
 		Memory = AllocationInfo.deviceMemory;
 
 		Name = DebugName;
@@ -201,9 +193,9 @@ struct vulkan_buffer : public buffer
 	{
 		if(Handle != VK_NULL_HANDLE)
 		{
-			if(VulkanHeap && Allocation)
+			if(Gfx && Allocation)
 			{
-				vmaDestroyBuffer(VulkanHeap->Handle, Handle, Allocation);
+				vmaDestroyBuffer(Gfx->AllocatorHandle, Handle, Allocation);
 				Allocation = VK_NULL_HANDLE;
 			}
 			Handle = VK_NULL_HANDLE;
@@ -220,7 +212,7 @@ struct vulkan_buffer : public buffer
 		}
 
 		Memory = 0;
-		VulkanHeap = nullptr;
+		Gfx = nullptr;
 	}
 
 	VkBuffer Handle = VK_NULL_HANDLE;
@@ -231,7 +223,7 @@ private:
 	VkDevice Device = VK_NULL_HANDLE;
 	VkBuffer Temp = VK_NULL_HANDLE;
 	VkDeviceMemory TempMemory = VK_NULL_HANDLE;
-	vulkan_memory_heap* VulkanHeap = nullptr;
+	vulkan_backend* Gfx = nullptr;
 };
 
 // TODO: Better image view handling
@@ -244,11 +236,11 @@ struct vulkan_texture : public texture
     vulkan_texture(const vulkan_texture&) = delete;
     vulkan_texture& operator=(const vulkan_texture&) = delete;
 
-	vulkan_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
+	vulkan_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
-		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		Gfx = static_cast<vulkan_backend*>(Backend);
 
-		CreateResource(Backend, Heap, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
+		CreateResource(Backend, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
 		if(Data || Info.UseStagingBuffer)
 		{
 			CreateStagingResource();
@@ -290,15 +282,9 @@ struct vulkan_texture : public texture
 		Cmd->EndOneTime();
 	}
 
-	void Update(void* Data, command_list* Cmd) override
+	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
 	{
-		Cmd->Update(this, Data);
-	}
-
-	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
-	{
-		VulkanHeap = static_cast<vulkan_memory_heap*>(Heap);
-		vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
+		Gfx = static_cast<vulkan_backend*>(Backend);
 		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		CurrentLayout.resize(InputData.MipLevels);
@@ -369,7 +355,7 @@ struct vulkan_texture : public texture
 		VmaAllocationCreateInfo AllocCreateInfo = {};
 		AllocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 		VmaAllocationInfo AllocationInfo;
-		VK_CHECK(vmaCreateImage(VulkanHeap->Handle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
+		VK_CHECK(vmaCreateImage(Gfx->AllocatorHandle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
 		Memory = AllocationInfo.deviceMemory;
 		Size = AllocationInfo.size;
 
@@ -460,17 +446,17 @@ struct vulkan_texture : public texture
 		}
 		if(Handle != VK_NULL_HANDLE)
 		{
-			if(VulkanHeap && Allocation)
+			if(Gfx && Allocation)
 			{
-				vmaDestroyImage(VulkanHeap->Handle, Handle, Allocation);
+				vmaDestroyImage(Gfx->AllocatorHandle, Handle, Allocation);
 				Allocation = VK_NULL_HANDLE;
 			}
 			Handle = VK_NULL_HANDLE;
 		}
 
+		Gfx = nullptr;
 		Memory = 0;
 		Views.clear();
-		VulkanHeap = nullptr;
 	}
 
 	void DestroyStagingResource() override
@@ -500,76 +486,5 @@ private:
 	VkBuffer Temp = VK_NULL_HANDLE;
 	VkDeviceMemory TempMemory = VK_NULL_HANDLE;
 	VkPhysicalDeviceMemoryProperties MemoryProperties;
-	vulkan_memory_heap* VulkanHeap = nullptr;
+	vulkan_backend* Gfx = nullptr;
 };
-
-void vulkan_memory_heap::
-CreateResource(renderer_backend* Backend)
-{
-	VmaVulkanFunctions VulkanFunctions = {};
-	VulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
-	VulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
-
-	vulkan_backend* Gfx = static_cast<vulkan_backend*>(Backend);
-	VmaAllocatorCreateInfo AllocatorInfo = {};
-	AllocatorInfo.vulkanApiVersion = Gfx->HighestUsedVulkanVersion;
-	AllocatorInfo.instance = Gfx->Instance;
-	AllocatorInfo.physicalDevice = Gfx->PhysicalDevice;
-	AllocatorInfo.device = Gfx->Device;
-	AllocatorInfo.pVulkanFunctions = &VulkanFunctions;
-	vmaCreateAllocator(&AllocatorInfo, &Handle);
-}
-
-buffer* vulkan_memory_heap::
-PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags)
-{
-	size_t Hash = 0;
-	bool WithCounter = Flags & RF_WithCounter;
-	std::hash_combine(Hash, std::hash<u64>{}(DataSize * Count + WithCounter * sizeof(u32)));
-	std::hash_combine(Hash, std::hash<u32>{}(Flags));
-
-	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, DataSize, Count, Flags);
-	u64 TestHash = std::hash<buffer>()(*Buffer);
-	return  Buffer;
-}
-
-buffer* vulkan_memory_heap::
-PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags)
-{
-	size_t Hash = 0;
-	bool WithCounter = Flags & RF_WithCounter;
-	std::hash_combine(Hash, std::hash<u64>{}(DataSize * Count + WithCounter * sizeof(u32)));
-	std::hash_combine(Hash, std::hash<u32>{}(Flags));
-
-	buffer* Buffer = new vulkan_buffer(Backend, this, DebugName, Data, DataSize, Count, Flags);
-	u64 TestHash = std::hash<buffer>()(*Buffer);
-	return  Buffer;
-}
-
-texture* vulkan_memory_heap::
-PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
-{
-	size_t Hash = 0;
-	std::hash_combine(Hash, std::hash<u64>{}(Width));
-	std::hash_combine(Hash, std::hash<u64>{}(Height));
-	std::hash_combine(Hash, std::hash<u32>{}(Depth));
-	std::hash_combine(Hash, std::hash<utils::texture::input_data>{}(InputData));
-
-	texture* Texture = new vulkan_texture(Backend, this, DebugName, nullptr, Width, Height, Depth, InputData);
-	u64 TestHash = std::hash<texture>()(*Texture);
-	return   Texture;
-}
-
-texture* vulkan_memory_heap::
-PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
-{
-	size_t Hash = 0;
-	std::hash_combine(Hash, std::hash<u64>{}(Width));
-	std::hash_combine(Hash, std::hash<u64>{}(Height));
-	std::hash_combine(Hash, std::hash<u32>{}(Depth));
-	std::hash_combine(Hash, std::hash<utils::texture::input_data>{}(InputData));
-
-	texture* Texture = new vulkan_texture(Backend, this, DebugName, Data, Width, Height, Depth, InputData);
-	u64 TestHash = std::hash<texture>()(*Texture);
-	return   Texture;
-}

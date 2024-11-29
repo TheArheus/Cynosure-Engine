@@ -497,6 +497,22 @@ UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 }
 
 void vulkan_command_list::
+ReadBack(buffer* BufferToRead, void* Data)
+{
+	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToRead);
+
+	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
+
+	VkBufferCopy Region = {0, 0, VkDeviceSize(Buffer->Size)};
+	vkCmdCopyBuffer(CommandList, Buffer->Handle, Buffer->Temp, 1, &Region);
+
+	void* CpuPtr;
+	vkMapMemory(Device, Buffer->TempMemory, 0, Buffer->Size, 0, &CpuPtr);
+	memcpy(Data, CpuPtr, Buffer->Size);
+	vkUnmapMemory(Device, Buffer->TempMemory);
+}
+
+void vulkan_command_list::
 ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 {
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToRead);

@@ -1,8 +1,7 @@
-// TODO: CLEAR THE RESOURCES!!!
 
 global_graphics_context::
-global_graphics_context(renderer_backend* NewBackend, backend_type NewBackendType)
-	: Backend(NewBackend), BackendType(NewBackendType)
+global_graphics_context(renderer_backend* NewBackend)
+	: Backend(NewBackend)
 {
 	Binder = CreateResourceBinder();
 	ExecutionContext = CreateGlobalPipelineContext();
@@ -277,7 +276,6 @@ global_graphics_context::
 global_graphics_context(global_graphics_context&& Oth) noexcept
     : Binder(Oth.Binder),
 	  Backend(Oth.Backend),
-      BackendType(Oth.BackendType),
       ContextMap(std::move(Oth.ContextMap)),
       GeneralShaderViewMap(std::move(Oth.GeneralShaderViewMap)),
       Dispatches(std::move(Oth.Dispatches)),
@@ -348,7 +346,6 @@ operator=(global_graphics_context&& Oth) noexcept
 	{
 		Binder = Oth.Binder;
         Backend = Oth.Backend;
-        BackendType = Oth.BackendType;
         ContextMap = std::move(Oth.ContextMap);
         GeneralShaderViewMap = std::move(Oth.GeneralShaderViewMap);
         Dispatches = std::move(Oth.Dispatches);
@@ -573,7 +570,8 @@ Execute(scene_manager& SceneManager)
 	for(shader_pass* Pass : Passes)
 	{
 		SetContext(Pass, ExecutionContext);
-		Dispatches[Pass](ExecutionContext, Pass->Parameters);
+		ExecutionContext->BindShaderParameters(Pass->Parameters);
+		Dispatches[Pass](ExecutionContext);
 	}
 
 	ExecutionContext->DebugGuiBegin(GfxColorTarget[BackBufferIndex]);

@@ -244,13 +244,13 @@ void window::SetTitle(std::string& Title)
 void window::InitVulkanGraphics()
 {
 	renderer_backend* NewBackend = new vulkan_backend(this);
-	Gfx = global_graphics_context(NewBackend, backend_type::vulkan);
+	Gfx = global_graphics_context(NewBackend);
 }
 
 void window::InitDirectx12Graphics()
 {
 	renderer_backend* NewBackend = new directx12_backend(this);
-	Gfx = global_graphics_context(NewBackend, backend_type::directx12);
+	Gfx = global_graphics_context(NewBackend);
 }
 
 void* window::

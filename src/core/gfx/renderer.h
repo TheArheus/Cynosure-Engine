@@ -15,13 +15,13 @@ class global_graphics_context
 	global_graphics_context& operator=(const global_graphics_context&) = delete;
 
 	using setup_func = std::function<void()>;
-	using execute_func = std::function<void(command_list*, void*)>;
+	using execute_func = std::function<void(command_list*)>;
 
 	void ParseShaderParam(meta_descriptor* Descriptor, void* Parameters);
 
 public:
 	global_graphics_context() = default;
-	global_graphics_context(renderer_backend* NewBackend, backend_type BackendType);
+	global_graphics_context(renderer_backend* NewBackend);
 	~global_graphics_context() { DestroyObject(); };
 
 	global_graphics_context(global_graphics_context&& Oth) noexcept;
@@ -32,25 +32,65 @@ public:
 	// TODO: Get buffer_ref
 	buffer* PushBuffer(std::string DebugName, u64 DataSize, u64 Count, u32 Flags)
 	{
-		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, DataSize, Count, Flags);
+		switch(Backend->Type)
+		{
+			case backend_type::vulkan:
+				return new vulkan_buffer(Backend, DebugName, DataSize, Count, Flags);
+#if _WIN32
+			case backend_type::directx12:
+				return new directx12_buffer(Backend, DebugName, DataSize, Count, Flags);
+#endif
+			default:
+				return nullptr;
+		}
 	}
 
 	// TODO: Get buffer_ref
 	buffer* PushBuffer(std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags)
 	{
-		return Backend->GlobalHeap->PushBuffer(Backend, DebugName, Data, DataSize, Count, Flags);
+		switch(Backend->Type)
+		{
+			case backend_type::vulkan:
+				return new vulkan_buffer(Backend, DebugName, Data, DataSize, Count, Flags);
+#if _WIN32
+			case backend_type::directx12:
+				return new directx12_buffer(Backend, DebugName, Data, DataSize, Count, Flags);
+#endif
+			default:
+				return nullptr;
+		}
 	}
 
 	// TODO: Get texture_ref
 	texture* PushTexture(std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
-		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Width, Height, Depth, InputData);
+		switch(Backend->Type)
+		{
+			case backend_type::vulkan:
+				return new vulkan_texture(Backend, DebugName, nullptr, Width, Height, Depth, InputData);
+#if _WIN32
+			case backend_type::directx12:
+				return new directx12_texture(Backend, DebugName, nullptr, Width, Height, Depth, InputData);
+#endif
+			default:
+				return nullptr;
+		}
 	}
 
 	// TODO: Get texture_ref
 	texture* PushTexture(std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
 	{
-		return Backend->GlobalHeap->PushTexture(Backend, DebugName, Data, Width, Height, Depth, InputData);
+		switch(Backend->Type)
+		{
+			case backend_type::vulkan:
+				return new vulkan_texture(Backend, DebugName, Data, Width, Height, Depth, InputData);
+#if _WIN32
+			case backend_type::directx12:
+				return new directx12_texture(Backend, DebugName, Data, Width, Height, Depth, InputData);
+#endif
+			default:
+				return nullptr;
+		}
 	}
 
 	// TODO: Implement better resource handling
@@ -91,7 +131,7 @@ public:
 
 	resource_binder* CreateResourceBinder()
 	{
-		switch(BackendType)
+		switch(Backend->Type)
 		{
 			case backend_type::vulkan:
 				return new vulkan_resource_binder(Backend);
@@ -104,26 +144,9 @@ public:
 		}
 	}
 
-	memory_heap* CreateMemoryHeap()
-	{
-		switch(BackendType)
-		{
-			case backend_type::vulkan:
-				return new vulkan_memory_heap(Backend);
-#if 0
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_memory_heap(Backend);
-#endif
-#endif
-			default:
-				return nullptr;
-		}
-	}
-
 	command_list* CreateGlobalPipelineContext()
 	{
-		switch(BackendType)
+		switch(Backend->Type)
 		{
 			case backend_type::vulkan:
 				return new vulkan_command_list(Backend);
@@ -144,7 +167,7 @@ public:
 		{
 			ColorTargetFormats.push_back(ColorTargets[FormatIdx]->Info.Format);
 		}
-		switch(BackendType)
+		switch(Backend->Type)
 		{
 			case backend_type::vulkan:
 				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargetFormats, InputData, ShaderDefines);
@@ -160,7 +183,7 @@ public:
 	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList, const std::vector<image_format>& ColorTargets, 
 										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
 	{
-		switch(BackendType)
+		switch(Backend->Type)
 		{
 			case backend_type::vulkan:
 				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
@@ -176,7 +199,7 @@ public:
 	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList,
 										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
 	{
-		switch(BackendType)
+		switch(Backend->Type)
 		{
 			case backend_type::vulkan:
 				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, {}, InputData, ShaderDefines);
@@ -191,7 +214,7 @@ public:
 
 	compute_context* CreateComputeContext(const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {})
 	{
-		switch(BackendType)
+		switch(Backend->Type)
 		{
 			case backend_type::vulkan:
 				return new vulkan_compute_context(Backend, Shader, ShaderDefines);
@@ -216,7 +239,6 @@ public:
 	void Execute(scene_manager& SceneManager);
 
 	renderer_backend* Backend;
-	backend_type BackendType;
 
 	std::unordered_map<std::type_index, std::unique_ptr<general_context>> ContextMap;
 	std::unordered_map<std::type_index, std::unique_ptr<shader_view_context>> GeneralShaderViewMap;
@@ -228,6 +250,7 @@ public:
 
 	resource_binder* Binder = nullptr;
 	general_context* CurrentContext = nullptr;
+	gpu_memory_heap* GpuMemoryHeap = nullptr;
 	command_list* ExecutionContext = nullptr;
 
 	//////////////////////////////////////////////////////

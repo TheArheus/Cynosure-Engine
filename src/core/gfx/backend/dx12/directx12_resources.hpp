@@ -46,15 +46,15 @@ struct directx12_texture_sampler : public texture_sampler
 
 struct directx12_buffer : public buffer
 {
-	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 NewUsage)
+	directx12_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 NewUsage)
 	{
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewUsage);
+		CreateResource(Backend, DebugName, NewSize, Count, NewUsage);
 		Update(Backend, Data);
 	}
 
-	directx12_buffer(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage)
+	directx12_buffer(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage)
 	{
-		CreateResource(Backend, Heap, DebugName, NewSize, Count, NewUsage);
+		CreateResource(Backend, DebugName, NewSize, Count, NewUsage);
 	}
 
 	~directx12_buffer() override { Gfx->Fence->Wait(); DestroyResource(); Gfx = nullptr; };
@@ -78,6 +78,14 @@ struct directx12_buffer : public buffer
 		Cmd->EndOneTime();
 	}
 
+	void ReadBack(renderer_backend* Backend, void* Data) override
+	{
+		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		Cmd->Begin();
+		Cmd->ReadBack(this, Data);
+		Cmd->EndOneTime();
+	}
+
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
 	{
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
@@ -86,25 +94,9 @@ struct directx12_buffer : public buffer
 		Cmd->EndOneTime();
 	}
 
-	void Update(void* Data, command_list* Cmd) override 
-	{
-		Cmd->Update(this, Data);
-	}
-
-	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* Cmd) override 
-	{
-		Cmd->UpdateSize(this, Data, UpdateByteSize);
-	}
-
-	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* Cmd) override 
-	{
-		Cmd->ReadBackSize(this, Data, UpdateByteSize);
-	}
-
-	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage) override 
+	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage) override 
 	{
 		Gfx = static_cast<directx12_backend*>(Backend);
-		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
 		WithCounter = NewUsage & RF_WithCounter;
 
 		Name = DebugName;
@@ -123,7 +115,7 @@ struct directx12_buffer : public buffer
 		AllocDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
 		CD3DX12_HEAP_PROPERTIES ResourceType = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 
-		MemoryHeap->Handle->CreateResource(&AllocDesc, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, NULL, &Allocation, IID_PPV_ARGS(&Handle));
+		Gfx->AllocatorHandle->CreateResource(&AllocDesc, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, NULL, &Allocation, IID_PPV_ARGS(&Handle));
 		NAME_DX12_OBJECT_CSTR(Handle.Get(), DebugName.c_str());
 
 		if(WithCounter)
@@ -217,9 +209,9 @@ struct directx12_buffer : public buffer
 
 struct directx12_texture : public texture
 {
-	directx12_texture(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
+	directx12_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
-		CreateResource(Backend, Heap, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
+		CreateResource(Backend, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
 		if(Data || Info.UseStagingBuffer)
 		{
 			CreateStagingResource();
@@ -281,15 +273,9 @@ struct directx12_texture : public texture
 		Cmd->EndOneTime();
 	}
 
-	void Update(void* Data, command_list* Cmd) override 
-	{
-		Cmd->Update(this, Data);
-	}
-
-	void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override 
+	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override 
 	{
 		Gfx = static_cast<directx12_backend*>(Backend);
-		directx12_memory_heap* MemoryHeap = static_cast<directx12_memory_heap*>(Heap);
 		CurrentLayout.resize(InputData.MipLevels);
 		CurrentState.resize(InputData.MipLevels);
 
@@ -345,7 +331,7 @@ struct directx12_texture : public texture
 		D3D12MA::ALLOCATION_DESC AllocDesc = {};
 		AllocDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
 
-		MemoryHeap->Handle->CreateResource(&AllocDesc, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, Clear, &Allocation, IID_PPV_ARGS(&Handle));
+		Gfx->AllocatorHandle->CreateResource(&AllocDesc, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, Clear, &Allocation, IID_PPV_ARGS(&Handle));
 		Size = Allocation->GetSize();
 		NAME_DX12_OBJECT_CSTR(Handle.Get(), DebugName.c_str());
 
@@ -628,68 +614,3 @@ struct directx12_texture : public texture
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> RenderTargetViews;
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> DepthStencilViews;
 };
-
-void directx12_memory_heap::
-CreateResource(renderer_backend* Backend)
-{
-	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
-
-	D3D12MA::ALLOCATOR_DESC AllocatorDesc = {};
-	AllocatorDesc.pDevice  = Gfx->Device.Get();
-	AllocatorDesc.pAdapter = Gfx->Adapter.Get();
-	D3D12MA::CreateAllocator(&AllocatorDesc, &Handle);
-}
-
-buffer* directx12_memory_heap::
-PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Usage)
-{
-	size_t Hash = 0;
-	bool WithCounter = Usage & RF_WithCounter;
-	std::hash_combine(Hash, std::hash<u64>{}(DataSize * Count + WithCounter * sizeof(u32)));
-	std::hash_combine(Hash, std::hash<u32>{}(Usage));
-
-	buffer* Buffer = new directx12_buffer(Backend, this, DebugName, DataSize, Count, Usage);
-	u64 TestHash = std::hash<buffer>()(*Buffer);
-	return Buffer;
-}
-
-buffer* directx12_memory_heap::
-PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Usage)
-{
-	size_t Hash = 0;
-	bool WithCounter = Usage & RF_WithCounter;
-	std::hash_combine(Hash, std::hash<u64>{}(DataSize * Count + WithCounter * sizeof(u32)));
-	std::hash_combine(Hash, std::hash<u32>{}(Usage));
-
-	buffer* Buffer = new directx12_buffer(Backend, this, DebugName, Data, DataSize, Count, Usage);
-	u64 TestHash = std::hash<buffer>()(*Buffer);
-	return Buffer;
-}
-
-texture* directx12_memory_heap::
-PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
-{
-	size_t Hash = 0;
-	std::hash_combine(Hash, std::hash<u64>{}(Width));
-	std::hash_combine(Hash, std::hash<u64>{}(Height));
-	std::hash_combine(Hash, std::hash<u32>{}(Depth));
-	std::hash_combine(Hash, std::hash<utils::texture::input_data>{}(InputData));
-
-	texture* Texture = new directx12_texture(Backend, this, DebugName, nullptr, Width, Height, Depth, InputData);
-	u64 TestHash = std::hash<texture>()(*Texture);
-	return Texture;
-}
-
-texture* directx12_memory_heap::
-PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
-{
-	size_t Hash = 0;
-	std::hash_combine(Hash, std::hash<u64>{}(Width));
-	std::hash_combine(Hash, std::hash<u64>{}(Height));
-	std::hash_combine(Hash, std::hash<u32>{}(Depth));
-	std::hash_combine(Hash, std::hash<utils::texture::input_data>{}(InputData));
-
-	texture* Texture = new directx12_texture(Backend, this, DebugName, Data, Width, Height, Depth, InputData);
-	u64 TestHash = std::hash<texture>()(*Texture);
-	return Texture;
-}

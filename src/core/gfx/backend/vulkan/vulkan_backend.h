@@ -1,31 +1,5 @@
 #pragma once
 
-class vulkan_memory_heap : public memory_heap
-{
-public:
-	vulkan_memory_heap() = default;
-	vulkan_memory_heap(renderer_backend* Backend) 
-	{
-		CreateResource(Backend);
-	}
-
-	~vulkan_memory_heap() override { DestroyResource(); }
-
-	void CreateResource(renderer_backend* Backend) override;
-	void DestroyResource() override { vmaDestroyAllocator(Handle); };
-
-	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags) override;
-	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags) override;
-
-	texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
-	texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
-
-	void AllocateBuffer();
-	void AllocateTexture();
-
-	VmaAllocator Handle;
-};
-
 
 struct vulkan_backend : public renderer_backend
 {
@@ -51,6 +25,8 @@ struct vulkan_backend : public renderer_backend
 	u32 HighestUsedVulkanVersion;
 	u32 FamilyIndex = 0;
 	bool IsPushDescriptorsFeatureEnabled;
+
+	VmaAllocator AllocatorHandle;
 
 	VkInstance Instance;
 	VkPhysicalDevice PhysicalDevice;

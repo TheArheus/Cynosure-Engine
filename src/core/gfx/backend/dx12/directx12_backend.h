@@ -1,28 +1,5 @@
 #ifndef RENDERER_DIRECTX_12_H_
 
-class directx12_memory_heap : public memory_heap
-{
-public:
-	directx12_memory_heap() = default;
-	directx12_memory_heap(renderer_backend* Backend) 
-	{
-		CreateResource(Backend);
-	}
-
-	~directx12_memory_heap() override { DestroyResource(); };
-
-	void CreateResource(renderer_backend* Backend) override;
-	void DestroyResource() override { Handle->Release(); Handle = nullptr; }
-
-	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Usage) override;
-	buffer* PushBuffer(renderer_backend* Backend, std::string DebugName,  void* Data, u64 DataSize, u64 Count, u32 Usage) override;
-
-	texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
-	texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) override;
-
-	D3D12MA::Allocator* Handle = nullptr;
-};
-
 
 class descriptor_heap
 {
@@ -180,6 +157,8 @@ struct directx12_backend : public renderer_backend
 	DWORD MsgCallback = 0;
 
 	const DXGI_FORMAT ColorTargetFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+
+	D3D12MA::Allocator* AllocatorHandle = nullptr;
 
 	ComPtr<IDXGIFactory6> Factory;
 	descriptor_heap* ColorTargetHeap;

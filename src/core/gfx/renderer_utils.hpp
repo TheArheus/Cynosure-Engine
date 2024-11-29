@@ -326,58 +326,40 @@ namespace utils
 	};
 };
 
-struct shader_define
+namespace std
 {
-	std::string Name;
-	std::string Value;
-};
+	template<>
+    struct hash<utils::texture::sampler_info>
+    {
+        size_t operator()(const utils::texture::sampler_info& s) const
+        {
+            size_t Result = 0;
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.BorderColor)));
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.AddressMode)));
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.ReductionMode)));
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.MinFilter)));
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.MagFilter)));
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.MipmapMode)));
+            return Result;
+        }
+    };
 
-struct resource_reference
-{
-	u64 Handle;
-	u32 ResourceType;
-	u32 SubresourceIndex;
-};
-
-struct buffer;
-struct texture;
-struct renderer_backend;
-class memory_heap
-{
-public:
-	memory_heap() = default;
-	virtual ~memory_heap() = default;
-
-	virtual void CreateResource(renderer_backend* Backend) = 0;
-	virtual void DestroyResource() = 0;
-
-	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, u64 DataSize, u64 Count, u32 Flags) = 0;
-	virtual buffer* PushBuffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags) = 0;
-
-	virtual texture* PushTexture(renderer_backend* Backend, std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) = 0;
-	virtual texture* PushTexture(renderer_backend* Backend, std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData) = 0;
-
-	u64 Size = 0;
-	u64 TotalSize = 0;
-	u64 BeginData = 0;
-	u64 Alignment = 0;
-
-	std::unordered_map<u64, buffer*>  PersistentBuffers;
-	std::unordered_map<u64, buffer*>  TransientBuffers;
-
-	std::unordered_map<u64, texture*> PersistentTextures;
-	std::unordered_map<u64, texture*> TransientTextures;
-};
-
-struct renderer_backend
-{
-	virtual ~renderer_backend() = default;
-	virtual void DestroyObject() = 0;
-	virtual void RecreateSwapchain(u32 NewWidth, u32 NewHeight) = 0;
-
-	u32 Width;
-	u32 Height;
-	memory_heap* GlobalHeap;
+	template<>
+    struct hash<utils::texture::input_data>
+    {
+        size_t operator()(const utils::texture::input_data& id) const
+        {
+            size_t Result = 0;
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(id.Format)));
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(id.Type)));
+            hash_combine(Result, hash<u32>{}(id.Usage));
+            hash_combine(Result, hash<u32>{}(id.MipLevels));
+            hash_combine(Result, hash<u32>{}(id.Layers));
+            hash_combine(Result, hash<bool>{}(id.UseStagingBuffer));
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(id.InitialState)));
+            return Result;
+        }
+    };
 };
 
 struct descriptor_param
@@ -388,6 +370,100 @@ struct descriptor_param
 	u32 ShaderToUse = 0;
 	barrier_state BarrierState;
 	u32 AspectMask;
+};
+
+struct shader_define
+{
+	std::string Name;
+	std::string Value;
+};
+
+struct buffer_descriptor
+{
+	u64 ID;
+	u64 SubresourceIdx = SUBRESOURCES_ALL;
+	descriptor_resource_type Type;
+
+	u64 Size;
+	u64 Count;
+	u32 Usage;
+
+	buffer_descriptor UseSubresource(u32 SubresourceIdxToUse) const
+	{
+		buffer_descriptor NewDescriptor = *this;
+		NewDescriptor.SubresourceIdx = SubresourceIdxToUse;
+		return NewDescriptor;
+	};
+
+	bool operator==(const buffer_descriptor& other) const
+	{
+		if(other.Type != descriptor_resource_type::buffer) return false;
+
+        return other.ID == ID && other.hash() == hash();
+	}
+
+	size_t hash() const
+	{
+		size_t Result = 0;
+		std::hash_combine(Result, std::hash<u64>{}(Size * Count));
+		std::hash_combine(Result, std::hash<u32>{}(Usage));
+		return Result;
+	}
+};
+
+struct texture_descriptor
+{
+	u64 ID;
+	u64 SubresourceIdx = SUBRESOURCES_ALL;
+	descriptor_resource_type Type;
+
+	u64 Width;
+	u64 Height;
+	u64 Depth;
+	utils::texture::input_data Info;
+
+	texture_descriptor UseSubresource(u32 SubresourceIdxToUse) const
+	{
+		texture_descriptor NewDescriptor = *this;
+		NewDescriptor.SubresourceIdx = SubresourceIdxToUse;
+		return NewDescriptor;
+	};
+
+    bool operator==(const texture_descriptor& other) const
+	{
+        if (other.Type != descriptor_resource_type::texture)
+            return false;
+
+		return other.ID == ID && other.hash() == hash();
+    }
+
+	size_t hash() const
+	{
+		size_t Result = 0;
+		std::hash_combine(Result, std::hash<u64>{}(Width));
+		std::hash_combine(Result, std::hash<u64>{}(Height));
+		std::hash_combine(Result, std::hash<u64>{}(Depth));
+		std::hash_combine(Result, std::hash<utils::texture::input_data>{}(Info));
+		return Result;
+	}
+};
+
+struct reference_descriptor
+{
+	u64 ID;
+	u64 SubresourceIdx = SUBRESOURCES_ALL;
+	descriptor_resource_type Type;
+};
+
+struct renderer_backend
+{
+	virtual ~renderer_backend() = default;
+	virtual void DestroyObject() = 0;
+	virtual void RecreateSwapchain(u32 NewWidth, u32 NewHeight) = 0;
+
+	u32 Width;
+	u32 Height;
+	backend_type Type;
 };
 
 class general_context
@@ -410,6 +486,8 @@ public:
 	u32 StaticStorageCount = 0;
 };
 
+struct buffer;
+struct texture;
 class render_context;
 class compute_context;
 struct command_list
@@ -434,6 +512,7 @@ struct command_list
 
 	virtual void Update(buffer* BufferToUpdate, void* Data) = 0;
 	virtual void UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize) = 0;
+	virtual void ReadBack(buffer* BufferToRead, void* Data) = 0;
 	virtual void ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize) = 0;
 
 	virtual void Update(texture* TextureToUpdate, void* Data) = 0;
@@ -593,26 +672,61 @@ public:
 
 struct texture_sampler {};
 
-struct buffer
+struct resource
+{
+    resource() = default;
+    virtual ~resource() = default;
+
+    resource(const resource&) = delete;
+    resource& operator=(const resource&) = delete;
+
+    virtual void Update(renderer_backend* Backend, void* Data) = 0;
+    virtual void ReadBack(renderer_backend* Backend, void* Data) = 0;
+	virtual void Update(void* Data, command_list* Cmd) = 0;
+	virtual void ReadBack(void* Data, command_list* Cmd) = 0;
+
+    virtual void DestroyResource() = 0;
+
+    std::string Name;
+};
+
+struct buffer : resource
 {
 	buffer() = default;
-	virtual ~buffer() = default;
+	virtual ~buffer() override = default;
 
     buffer(const buffer&) = delete;
     buffer& operator=(const buffer&) = delete;
 
-	virtual void Update(renderer_backend* Backend, void* Data) = 0;
+	void Update(void* Data, command_list* Cmd) override
+	{
+		Cmd->Update(this, Data);
+	}
+
+	void UpdateSize(void* Data, u32 UpdateByteSize, command_list* Cmd)
+	{
+		Cmd->UpdateSize(this, Data, UpdateByteSize);
+	}
+
+	void ReadBack(void* Data, command_list* Cmd) override
+	{
+		Cmd->ReadBack(this, Data);
+	}
+
+	void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* Cmd)
+	{
+		Cmd->ReadBackSize(this, Data, UpdateByteSize);
+	}
+
+	virtual void DestroyResource() override = 0;
+
+	virtual void Update(renderer_backend* Backend, void* Data) override = 0;
 	virtual void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) = 0;
+	virtual void ReadBack(renderer_backend* Backend, void* Data) override = 0;
 	virtual void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) = 0;
 
-	virtual void Update(void* Data, command_list* Cmd) = 0;
-	virtual void UpdateSize(void* Data, u32 UpdateByteSize, command_list* Cmd) = 0;
-	virtual void ReadBackSize(void* Data, u32 UpdateByteSize, command_list* Cmd) = 0;
+	virtual void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) = 0;
 
-	virtual void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) = 0;
-	virtual void DestroyResource() = 0;
-
-	std::string Name;
 	u64  Size          = 0;
 	u64  Alignment     = 0;
 	u32  CounterOffset = 0;
@@ -624,25 +738,33 @@ struct buffer
 	bool WithCounter   = false;
 };
 
-struct texture
+struct texture : resource
 {
 	texture() = default;
-	virtual ~texture() = default;
+	virtual ~texture() override = default;
 
     texture(const texture&) = delete;
     texture& operator=(const texture&) = delete;
 
-	virtual void Update(renderer_backend* Backend, void* Data) = 0;
-	virtual void ReadBack(renderer_backend* Backend, void* Data) = 0;
+	void Update(void* Data, command_list* Cmd) override
+	{
+		Cmd->Update(this, Data);
+	}
 
-	virtual void Update(void* Data, command_list* Cmd) = 0;
+	void ReadBack(void* Data, command_list* Cmd) override
+	{
+		Cmd->ReadBack(this, Data);
+	}
 
-	virtual void CreateResource(renderer_backend* Backend, memory_heap* Heap, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) = 0;
+	virtual void Update(renderer_backend* Backend, void* Data) override = 0;
+	virtual void ReadBack(renderer_backend* Backend, void* Data) override = 0;
+
+	virtual void DestroyResource() override = 0;
+
+	virtual void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) = 0;
 	virtual void CreateStagingResource() = 0;
-	virtual void DestroyResource() = 0;
 	virtual void DestroyStagingResource() = 0;
 
-	std::string Name;
 	u64 Width  = 0;
 	u64 Height = 0;
 	u64 Depth  = 0;
@@ -670,39 +792,6 @@ namespace std
     };
 
 	template<>
-    struct hash<utils::texture::sampler_info>
-    {
-        size_t operator()(const utils::texture::sampler_info& s) const
-        {
-            size_t Result = 0;
-            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.BorderColor)));
-            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.AddressMode)));
-            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.ReductionMode)));
-            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.MinFilter)));
-            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.MagFilter)));
-            hash_combine(Result, hash<u64>{}(static_cast<u64>(s.MipmapMode)));
-            return Result;
-        }
-    };
-
-	template<>
-    struct hash<utils::texture::input_data>
-    {
-        size_t operator()(const utils::texture::input_data& id) const
-        {
-            size_t Result = 0;
-            hash_combine(Result, hash<u64>{}(static_cast<u64>(id.Format)));
-            hash_combine(Result, hash<u64>{}(static_cast<u64>(id.Type)));
-            hash_combine(Result, hash<u32>{}(id.Usage));
-            hash_combine(Result, hash<u32>{}(id.MipLevels));
-            hash_combine(Result, hash<u32>{}(id.Layers));
-            hash_combine(Result, hash<bool>{}(id.UseStagingBuffer));
-            hash_combine(Result, hash<u64>{}(static_cast<u64>(id.InitialState)));
-            return Result;
-        }
-    };
-
-	template<>
     struct hash<texture>
     {
         size_t operator()(const texture& t) const
@@ -710,7 +799,7 @@ namespace std
             size_t Result = 0;
             hash_combine(Result, hash<u64>{}(t.Width));
             hash_combine(Result, hash<u64>{}(t.Height));
-            hash_combine(Result, hash<u32>{}(t.Depth));
+            hash_combine(Result, hash<u64>{}(t.Depth));
             hash_combine(Result, hash<utils::texture::input_data>{}(t.Info));
             return Result;
         }

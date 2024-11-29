@@ -85,6 +85,7 @@ class window;
 #endif
 
 struct scene_manager;
+#include "core/gfx/resource_manager.hpp"
 #include "core/gfx/renderer.h"
 #include "core/platform/window.hpp"
 

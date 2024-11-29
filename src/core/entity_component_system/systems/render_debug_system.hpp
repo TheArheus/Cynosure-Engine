@@ -127,7 +127,7 @@ struct render_debug_system : public entity_system
 
 		{
 			Gfx.AddTransferPass("Data upload",
-			[this, &WorldUpdate, &MeshCommonCullingInput](command_list* Cmd, void* Parameters)
+			[this, &WorldUpdate, &MeshCommonCullingInput](command_list* Cmd)
 			{
 				WorldUpdateBuffer->UpdateSize(&WorldUpdate, sizeof(global_world_data), Cmd);
 				MeshCommonCullingInputBuffer->UpdateSize(&MeshCommonCullingInput, sizeof(mesh_comp_culling_common_input), Cmd);
@@ -145,9 +145,8 @@ struct render_debug_system : public entity_system
 
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DebugDrawCount, MeshCommonCullingInput.DebugMeshCount};
 			Gfx.AddPass<generate_all>("Command generation for debug meshes", Parameters, pass_type::compute,
-			[this, Input](command_list* Cmd, void* Parameters)
+			[this, Input](command_list* Cmd)
 			{
-				Cmd->BindShaderParameters(Parameters);
 				Cmd->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
 				Cmd->Dispatch(StaticMeshInstances.size());
 			});
@@ -161,10 +160,8 @@ struct render_debug_system : public entity_system
 			Parameters.Param.GeometryOffsets = Gfx.UseBuffer(GeometryDebugOffsets);
 
 			Gfx.AddPass<debug_raster>("Debug raster", Parameters, pass_type::graphics, 
-			[this, BackBufferIndex = Gfx.BackBufferIndex, GfxColorTarget = Gfx.GfxColorTarget, GfxDepthTarget = Gfx.GfxDepthTarget](command_list* Cmd, void* Parameters)
+			[this, BackBufferIndex = Gfx.BackBufferIndex, GfxColorTarget = Gfx.GfxColorTarget, GfxDepthTarget = Gfx.GfxDepthTarget](command_list* Cmd)
 			{
-				Cmd->BindShaderParameters(Parameters);
-
 				Cmd->SetViewport(0, 0, GfxColorTarget[BackBufferIndex]->Width, GfxColorTarget[BackBufferIndex]->Height);
 				Cmd->SetColorTarget({GfxColorTarget[BackBufferIndex]});
 				Cmd->SetDepthTarget(GfxDepthTarget);

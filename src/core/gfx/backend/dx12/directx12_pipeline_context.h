@@ -41,6 +41,7 @@ struct directx12_command_list : public command_list
 
 	void Update(buffer* BufferToUpdate, void* Data) override;
 	void UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize) override;
+	void ReadBack(buffer* BufferToRead, void* Data) override;
 	void ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize) override;
 
 	void Update(texture* TextureToUpdate, void* Data) override;

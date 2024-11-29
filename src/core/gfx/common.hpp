@@ -368,9 +368,17 @@ enum class barrier_state
 	transfer_dst,
 };
 
+enum class descriptor_resource_type
+{
+	buffer,
+	texture,
+	resource,
+};
+
 enum class resource_type
 {
 	buffer,
+	texture,
 	texture_storage,
 	texture_sampler,
 };
