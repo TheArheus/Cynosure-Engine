@@ -454,6 +454,11 @@ DestroyObject()
 	vkDestroyInstance(Instance, nullptr);
 }
 
+void vulkan_backend::
+RecreateSwapchain(u32 NewWidth, u32 NewHeight)
+{
+}
+
 VkDescriptorType GetVkSpvDescriptorType(u32 OpCode, u32 StorageClass)
 {
 	switch(OpCode)
@@ -575,7 +580,7 @@ bool GlslCompile(std::vector<u32>& SpirvOut, const std::string& Name, const std:
 // TODO: Parse for push constant sizes
 // TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
 VkShaderModule vulkan_backend::
-LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, image_type>>& TextureTypes, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
+LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, bool>>& IsWritable, std::map<u32, std::map<u32, image_type>>& TextureTypes, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {
 	auto FoundCompiledShader = CompiledShaders.find(Path);
 	if(FoundCompiledShader != CompiledShaders.end())
@@ -652,7 +657,8 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 
 				u32 Size = ~0u;
 				u32 StorageClass = Var.StorageClass;
-				image_type TextureType = image_type::Texture2D;
+				bool NonWritable = false;
+				image_type TextureType = image_type::unknown;
 				VkDescriptorType DescriptorType;
 				if(VariableType.OpCode == SpvOpTypePointer)
 				{
@@ -664,6 +670,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 						const op_info& SizeInfo  = ShaderInfo[PointerType.SizeId];
 
 						Size = SizeInfo.Constant;
+						NonWritable = ArrayInfo.NonWritable;
 
 						DescriptorType = GetVkSpvDescriptorType(ArrayInfo.OpCode, StorageClass);
 
@@ -694,6 +701,8 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 					{
 						const op_info& ArrayInfo = ShaderInfo[PointerType.TypeId[0]];
 
+						NonWritable = ArrayInfo.NonWritable;
+
 						DescriptorType = GetVkSpvDescriptorType(ArrayInfo.OpCode, StorageClass);
 
 						if (ArrayInfo.OpCode == SpvOpTypeImage)
@@ -721,6 +730,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 					}
 					else
 					{
+						NonWritable = PointerType.NonWritable;
 						DescriptorType = GetVkSpvDescriptorType(PointerType.OpCode, StorageClass);
 					}
 
@@ -749,10 +759,12 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 				}
 				else
 				{
+					NonWritable = VariableType.NonWritable;
 					DescriptorType = GetVkSpvDescriptorType(VariableType.OpCode, StorageClass);
 				}
 
 				TextureTypes[Var.Set][Var.Binding] = TextureType;
+				IsWritable[Var.Set][Var.Binding] = !NonWritable;
 				VkDescriptorSetLayoutBinding& DescriptorTypeInfoUpdate = ShaderRootLayout[Var.Set][Var.Binding];
 				DescriptorTypeInfoUpdate.stageFlags |= GetVKShaderStage(ShaderType);
 				DescriptorTypeInfoUpdate.binding = Var.Binding;
@@ -770,9 +782,4 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::m
 	File.close();
 
 	return Result;
-}
-
-void vulkan_backend::
-RecreateSwapchain(u32 NewWidth, u32 NewHeight)
-{
 }

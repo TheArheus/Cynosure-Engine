@@ -2,18 +2,11 @@
 
 struct bloom_combine : public shader_compute_view_context
 {
-	struct parameter_type
-	{
-		texture_ref A;
-		texture_ref B;
-		texture_ref Output;
-	};
-
 	shader_input() parameters
 	{
-		texture_ref A;
-		texture_ref B;
-		texture_ref Out;
+		gpu_texture A;
+		gpu_texture B;
+		gpu_texture Output;
 	};
 
 	bloom_combine()
@@ -24,16 +17,10 @@ struct bloom_combine : public shader_compute_view_context
 
 struct bloom_downsample : public shader_compute_view_context
 {
-	struct parameter_type
-	{
-		texture_ref Input;
-		texture_ref Output;
-	};
-
 	shader_input() parameters
 	{
-		texture_ref Input;
-		texture_ref Output;
+		gpu_texture Input;
+		gpu_texture Output;
 	};
 
 	bloom_downsample()
@@ -44,18 +31,11 @@ struct bloom_downsample : public shader_compute_view_context
 
 struct bloom_upsample : public shader_compute_view_context
 {
-	struct parameter_type
-	{
-		texture_ref A;
-		texture_ref B;
-		texture_ref Output;
-	};
-
 	shader_input() parameters
 	{
-		texture_ref A;
-		texture_ref B;
-		texture_ref Output;
+		gpu_texture A;
+		gpu_texture B;
+		gpu_texture Output;
 	};
 
 	bloom_upsample()

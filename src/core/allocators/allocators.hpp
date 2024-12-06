@@ -329,9 +329,12 @@ public:
     char* begin() { return Data_; }
     char* end() { return Data_ + Size_; }
 
+    const char* begin() const { return Data_; }
+    const char* end() const { return Data_ + Size_; }
+
 private:
-    char*  Data_;
-    size_t Size_;
+    char*  Data_ = nullptr;
+    size_t Size_ = 0;
 };
 
 template <typename type>
@@ -339,22 +342,26 @@ class array
 {
 public:
 	array() = default;
-    array(type* Data, size_t Size)
+
+	array(size_t Size)
 	{
 		Size_ = Size;
 		Data_ = PushArray(type, Size_);
+	}
+
+    array(type* Data, size_t Size) : array(Size)
+	{
 		memcpy(Data_, Data, sizeof(type) * Size_);
 	}
 
-    array(std::initializer_list<type> initList)
+    array(std::initializer_list<type> InitList) : array(InitList.size())
     {
-        Size_ = initList.size();
-        Data_ = PushArray(type, Size_);
-        std::copy(initList.begin(), initList.end(), Data_);
+        std::copy(InitList.begin(), InitList.end(), Data_);
     }
 
-	array(const array& other) : Size_(other.Size_)
+	array(const array& other)
 	{
+		Size_ = other.Size_;
 		Data_ = PushArray(type, Size_);
 		memcpy(Data_, other.Data_, sizeof(type) * Size_);
 	}
@@ -397,9 +404,12 @@ public:
     type* begin() { return Data_; }
     type* end() { return Data_ + Size_; }
 
+    const type* begin() const { return Data_; }
+    const type* end() const { return Data_ + Size_; }
+
 private:
-    type*  Data_;
-    size_t Size_;
+    type*  Data_ = nullptr;
+    size_t Size_ = 0;
 };
 
 template <typename type>
@@ -418,9 +428,12 @@ public:
     type* begin() { return Data_; }
     type* end() { return Data_ + Size_; }
 
+    const type* begin() const { return Data_; }
+    const type* end() const { return Data_ + Size_; }
+
 private:
-    type*  Data_;
-    size_t Size_;
+    type*  Data_ = nullptr;
+    size_t Size_ = 0;
 };
 
 using string_view = array_view<char>;

@@ -66,7 +66,7 @@ struct vulkan_command_list : public command_list
 	void SetDepthTarget(texture* Target, vec2 Clear = {1, 0}) override;
 	void SetStencilTarget(texture* Target, vec2 Clear = {1, 0}) override;
 
-	void BindShaderParameters(void* Data) override;
+	void BindShaderParameters(const array<binding_packet>& Data) override;
 
 	void DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount) override;
 	void DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize) override;
@@ -74,6 +74,7 @@ struct vulkan_command_list : public command_list
 
 	void FillBuffer(buffer* Buffer, u32 Value) override;
 	void FillTexture(texture* Texture, vec4 Value) override;
+	void FillTexture(texture* Texture, float Depth, u32 Stencil) override;
 
 	void CopyImage(texture* Dst, texture* Src) override;
 
@@ -325,6 +326,20 @@ struct vulkan_resource_binder : public resource_binder
 		NullTexture3D = Backend->NullTexture3D;
 		NullTextureCube = Backend->NullTextureCube;
 
+		SetContext(ContextToUse);
+	}
+
+	vulkan_resource_binder(const vulkan_resource_binder&) = delete;
+	vulkan_resource_binder operator=(const vulkan_resource_binder&) = delete;
+
+	~vulkan_resource_binder() override
+	{
+		DestroyObject();
+	}
+
+	void SetContext(general_context* ContextToUse) override
+	{
+		SetIndices.clear();
 		if(ContextToUse->Type == pass_type::graphics)
 		{
 			vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(ContextToUse);
@@ -339,14 +354,6 @@ struct vulkan_resource_binder : public resource_binder
 		}
 	}
 
-	vulkan_resource_binder(const vulkan_resource_binder&) = delete;
-	vulkan_resource_binder operator=(const vulkan_resource_binder&) = delete;
-
-	~vulkan_resource_binder() override
-	{
-		DestroyObject();
-	}
-
 	void DestroyObject() override
 	{
 		Sets.clear();
@@ -356,17 +363,17 @@ struct vulkan_resource_binder : public resource_binder
 		StaticDescriptorBindings.clear();
 	};
 
-	void AppendStaticStorage(general_context* Context, void* Data) override;
+	void AppendStaticStorage(general_context* Context, const array<binding_packet>& Data, u32 Offset) override;
 	void BindStaticStorage(renderer_backend* GeneralBackend) override;
 
 	// NOTE: If with counter, then it is using 2 bindings instead of 1
-	void SetStorageBufferView(buffer* Buffer, u32 Set = 0) override;
-	void SetUniformBufferView(buffer* Buffer, u32 Set = 0) override;
+	void SetStorageBufferView(resource* Buffer, u32 Set = 0) override;
+	void SetUniformBufferView(resource* Buffer, u32 Set = 0) override;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	void SetSampledImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
 	texture* NullTexture1D = nullptr;
 	texture* NullTexture2D = nullptr;

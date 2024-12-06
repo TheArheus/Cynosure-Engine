@@ -2,18 +2,11 @@
 
 struct mesh_shadow : public shader_graphics_view_context
 {
-	struct parameter_type
-	{
-		buffer_ref VertexBuffer;
-		buffer_ref CommandBuffer;
-		buffer_ref GeometryOffsets;
-	};
-
 	shader_input() parameters
 	{
-		buffer_ref VertexBuffer;
-		buffer_ref CommandBuffer;
-		buffer_ref GeometryOffsets;
+		gpu_buffer VertexBuffer;
+		gpu_buffer CommandBuffer;
+		gpu_buffer GeometryOffsets;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -35,22 +28,16 @@ struct mesh_shadow : public shader_graphics_view_context
 	}
 };
 
+#if 0
 // TODO: Do this the right way
 template<u32 FaceIdx = 0>
 struct point_shadow : public shader_graphics_view_context
 {
-	struct parameter_type
+	shader_input() parameters
 	{
-		buffer_ref VertexBuffer;
-		buffer_ref CommandBuffer;
-		buffer_ref GeometryOffsets;
-	};
-
-	struct parameters
-	{
-		buffer_ref VertexBuffer;
-		buffer_ref CommandBuffer;
-		buffer_ref GeometryOffsets;
+		gpu_buffer VertexBuffer;
+		gpu_buffer CommandBuffer;
+		gpu_buffer GeometryOffsets;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -72,21 +59,15 @@ struct point_shadow : public shader_graphics_view_context
 		StoreOp = store_op::store;
 	}
 };
+#endif
 
 struct depth_prepass : public shader_graphics_view_context
 {
-	struct parameter_type
-	{
-		buffer_ref VertexBuffer;
-		buffer_ref CommandBuffer;
-		buffer_ref GeometryOffsets;
-	};
-
 	struct parameters
 	{
-		buffer_ref VertexBuffer;
-		buffer_ref CommandBuffer;
-		buffer_ref GeometryOffsets;
+		gpu_buffer VertexBuffer;
+		gpu_buffer CommandBuffer;
+		gpu_buffer GeometryOffsets;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override

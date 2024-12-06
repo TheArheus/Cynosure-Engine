@@ -567,11 +567,14 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					DescriptorType = GetDXSpvDescriptorType(ShaderInfo, VariableType, ImageType, StorageClass, NonWritable);
 				}
 
-				if(DescriptorType == dx12_descriptor_type::shader_resource || 
-				   DescriptorType == dx12_descriptor_type::unordered_access || 
-				   DescriptorType == dx12_descriptor_type::constant_buffer)
+				ParameterLayout[Var.Set][Var.Binding].IsWritable = !NonWritable;
+				if(DescriptorType == dx12_descriptor_type::unordered_access)
 				{
-					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::buffer;
+					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::buffer_storage;
+				}
+				else if(DescriptorType == dx12_descriptor_type::shader_resource || DescriptorType == dx12_descriptor_type::constant_buffer)
+				{
+					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::buffer_uniform;
 				}
 				else if(DescriptorType == dx12_descriptor_type::image)
 				{

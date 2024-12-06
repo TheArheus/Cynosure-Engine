@@ -1,288 +1,5 @@
 #pragma once
 
-// NOTE: https://godbolt.org/z/brdzsc8qT
-template <typename T>
-concept aggregate = std::is_aggregate_v<T>;
-
-template <typename T, typename... Args>
-concept aggregate_initializable = aggregate<T> 
-    && requires { T{std::declval<Args>()...}; };
-
-namespace detail
-{
-    struct any
-    { 
-        template <typename T> constexpr operator T&() const noexcept;
-        template <typename T> constexpr operator T&&() const noexcept;
-    };
-}
-
-namespace detail
-{
-    template <std::size_t I>
-    using indexed_any = any;
-
-    template <aggregate T, typename Indices>
-    struct aggregate_initializable_from_indices;
-
-    template <aggregate T, std::size_t... Indices>
-    struct aggregate_initializable_from_indices<T, std::index_sequence<Indices...>>
-        : std::bool_constant<aggregate_initializable<T, indexed_any<Indices>...>> {};
-}
-
-template <typename T, std::size_t N>
-concept aggregate_initializable_with_n_args = aggregate<T> &&
-    detail::aggregate_initializable_from_indices<T, std::make_index_sequence<N>>::value;
-
-template <template<std::size_t> typename Predicate, std::size_t Beg, std::size_t End>
-struct binary_search;
-
-template <template<std::size_t> typename Predicate, std::size_t Beg, std::size_t End>
-using binary_search_base = 
-    std::conditional_t<(End - Beg <= 1), std::integral_constant<std::size_t, Beg>,
-        std::conditional_t<Predicate<(Beg + End) / 2>::value,
-            binary_search<Predicate, (Beg + End) / 2, End>,
-            binary_search<Predicate, Beg, (Beg + End) / 2>>>;
-
-template <template<std::size_t> typename Predicate, std::size_t Beg, std::size_t End>
-struct binary_search : binary_search_base<Predicate, Beg, End> {};
-
-template <template<std::size_t> typename Predicate, std::size_t Beg, std::size_t End>
-constexpr std::size_t binary_search_v = binary_search<Predicate, Beg, End>::value;
-
-template <template<std::size_t> typename Predicate, std::size_t N>
-struct forward_search : std::conditional_t<Predicate<N>::value,
-    std::integral_constant<std::size_t, N>,
-    forward_search<Predicate, N+1>> {};
-
-template <template<std::size_t> typename Predicate, std::size_t N>
-struct backward_search : std::conditional_t<Predicate<N>::value,
-    std::integral_constant<std::size_t, N>,
-    backward_search<Predicate, N-1>> {};
-
-template <template<std::size_t> typename Predicate>
-struct backward_search<Predicate, (std::size_t)-1> {};
-
-namespace detail
-{
-    template <typename T> requires std::is_aggregate_v<T>
-    struct aggregate_inquiry
-    {
-        template <std::size_t N>
-        struct initializable : std::bool_constant<aggregate_initializable_with_n_args<T, N>> {};
-    };
-
-    template <aggregate T>
-    struct minimum_initialization : forward_search<
-        detail::aggregate_inquiry<T>::template initializable, 0> {};
-
-    template <aggregate T>
-    constexpr auto minimum_initialization_v = minimum_initialization<T>::value;
-}
-
-template <aggregate T>
-struct num_aggregate_fields : binary_search<
-    detail::aggregate_inquiry<T>::template initializable,
-    detail::minimum_initialization_v<T>, 8 * sizeof(T) + 1> {};
-
-template <aggregate T>
-constexpr std::size_t num_aggregate_fields_v = num_aggregate_fields<T>::value;
-
-namespace detail
-{
-    template <aggregate T, typename Indices, typename FieldIndices>
-    struct aggregate_with_indices_initializable_with;
-
-    template <aggregate T, std::size_t... Indices, std::size_t... FieldIndices>
-    struct aggregate_with_indices_initializable_with<T, 
-        std::index_sequence<Indices...>, std::index_sequence<FieldIndices...>>
-        : std::bool_constant<requires
-        { 
-            T{std::declval<indexed_any<Indices>>()...,
-                {std::declval<indexed_any<FieldIndices>>()...}};
-        }> {};
-}
-
-template <typename T, std::size_t N, std::size_t M>
-concept aggregate_field_n_initializable_with_m_args = aggregate<T> &&
-    detail::aggregate_with_indices_initializable_with<T,
-        std::make_index_sequence<N>,
-        std::make_index_sequence<M>>::value;
-
-namespace detail
-{
-    template <aggregate T, std::size_t N>
-    struct aggregate_field_inquiry1
-    {
-        template <std::size_t M>
-        struct initializable : std::bool_constant<
-            aggregate_field_n_initializable_with_m_args<T, N, M>> {};
-    };
-}
-
-template <aggregate T, std::size_t N>
-struct num_fields_on_aggregate_field1 : binary_search<
-    detail::aggregate_field_inquiry1<T, N>::template initializable,
-    0, 8 * sizeof(T) + 1> {};
-
-template <aggregate T, std::size_t N>
-constexpr std::size_t num_fields_on_aggregate_field1_v
-    = num_fields_on_aggregate_field1<T, N>::value;
-
-namespace detail
-{
-    template <aggregate T, typename Indices, typename AfterIndices>
-    struct aggregate_with_indices_initializable_after;
-
-    template <aggregate T, std::size_t... Indices, std::size_t... AfterIndices>
-    struct aggregate_with_indices_initializable_after<T, 
-        std::index_sequence<Indices...>, std::index_sequence<AfterIndices...>>
-        : std::bool_constant<requires
-        { 
-            T{std::declval<indexed_any<Indices>>()..., {std::declval<any>()},
-                std::declval<indexed_any<AfterIndices>>()...};
-        }> {};
-}
-
-template <typename T, std::size_t N, std::size_t K>
-concept aggregate_initializable_after_n_with_k_args = aggregate<T> &&
-    detail::aggregate_with_indices_initializable_after<T,
-        std::make_index_sequence<N>,
-        std::make_index_sequence<K>>::value;
-
-namespace detail
-{
-    template <aggregate T, std::size_t N>
-    struct aggregate_field_inquiry2
-    {
-        template <std::size_t K>
-        struct initializable : std::bool_constant<
-            aggregate_initializable_after_n_with_k_args<T, N, K>> {};
-        
-        template <std::size_t K>
-        struct not_initializable_m1 : std::negation<initializable<K-1>> {};
-    };
-
-    template <aggregate T, std::size_t N>
-    struct le_max_init_after_n : backward_search<
-        aggregate_field_inquiry2<T, N>::template initializable,
-        minimum_initialization_v<T>> {};
-
-    template <aggregate T, std::size_t N>
-    constexpr std::size_t le_max_init_after_n_v
-        = le_max_init_after_n<T, N>::value;
-
-    template <aggregate T, std::size_t N>
-    struct min_init_after_n : binary_search<
-        aggregate_field_inquiry2<T, N>::template not_initializable_m1,
-        1, 1 + le_max_init_after_n_v<T, N>> {};
-
-    template <aggregate T, std::size_t N>
-    constexpr std::size_t min_init_after_n_v = min_init_after_n<T, N>::value;
-
-    template <typename T, std::size_t N>
-    concept aggregate_field_n_init = aggregate<T> &&
-        requires { le_max_init_after_n<T, N>::value; };
-
-    template <aggregate T, std::size_t N, bool Initializable>
-    struct num_fields
-        : std::integral_constant<std::size_t, 1> {};
-
-    template <aggregate T, std::size_t N>
-    struct num_fields<T, N, true>
-        : std::integral_constant<std::size_t, std::max(
-            detail::minimum_initialization_v<T> - N
-            - detail::min_init_after_n_v<T, N>,
-            std::size_t(1))> {};
-}
-
-template <aggregate T, std::size_t N>
-struct num_fields_on_aggregate_field2 :
-    detail::num_fields<T, N,
-        detail::aggregate_field_n_init<T, N>> {};
-
-template <aggregate T, std::size_t N>
-constexpr std::size_t num_fields_on_aggregate_field2_v
-    = num_fields_on_aggregate_field2<T, N>::value;
-
-template <aggregate T, std::size_t N>
-struct num_fields_on_aggregate_field : std::conditional_t<
-    (N >= detail::minimum_initialization_v<T>),
-    num_fields_on_aggregate_field1<T, N>,
-    num_fields_on_aggregate_field2<T, N>> {};
-
-template <aggregate T, std::size_t N>
-constexpr std::size_t num_fields_on_aggregate_field_v
-    = num_fields_on_aggregate_field<T, N>::value;
-
-namespace detail
-{
-    template <std::size_t Val, std::size_t TotalFields>
-    constexpr auto detect_special_type =
-        Val > TotalFields ? 1 : Val;
-
-    template <aggregate T, std::size_t CurField,
-        std::size_t TotalFields, std::size_t CountUniqueFields>
-    struct unique_field_counter : unique_field_counter<T,
-        CurField + detect_special_type<
-            num_fields_on_aggregate_field_v<T, CurField>, TotalFields>,
-        TotalFields, CountUniqueFields + 1> {};
-
-    template <aggregate T, std::size_t Fields, std::size_t UniqueFields>
-    struct unique_field_counter<T, Fields, Fields, UniqueFields>
-        : std::integral_constant<std::size_t, UniqueFields> {};
-}
-
-template <aggregate T>
-struct num_aggregate_unique_fields
-    : detail::unique_field_counter<T, 0, num_aggregate_fields_v<T>, 0> {};
-
-template <aggregate T>
-constexpr std::size_t num_aggregate_unique_fields_v
-    = num_aggregate_unique_fields<T>::value;
-
-//////////////////////////////////////////////////////////////////////////////////////
-
-#pragma pack(push)
-#pragma pack(1)
-
-template<typename, typename = std::void_t<>>
-struct has_static_storage_type : std::false_type {};
-
-template<typename T>
-struct has_static_storage_type<T, std::void_t<typename T::static_storage_type>> : std::true_type {};
-
-template<typename T, bool HasStaticStorage>
-struct shader_pass_parameter_type {};
-
-template<typename T>
-struct shader_pass_parameter_type<T, false>
-{
-    u32 ParamCount = num_aggregate_fields_v<typename T::parameter_type>;
-	size_t ParamSize = sizeof(typename T::parameter_type);
-
-	bool HaveStaticStorage = false;
-
-	typename T::parameter_type Param;
-};
-
-template<typename T>
-struct shader_pass_parameter_type<T, true>
-{
-    u32 ParamCount = num_aggregate_fields_v<typename T::parameter_type>;
-	size_t ParamSize = sizeof(typename T::parameter_type);
-
-	bool HaveStaticStorage = true;
-
-	typename T::parameter_type Param;
-	typename T::static_storage_type StaticStorage;
-};
-
-template<typename context_type>
-using shader_parameter = shader_pass_parameter_type<context_type, has_static_storage_type<context_type>::value>;
-
-#pragma pack(pop)
-
 namespace utils
 {
 	namespace render_context
@@ -366,6 +83,7 @@ struct descriptor_param
 {
 	resource_type Type;
 	u32 Count = 0;
+	bool IsWritable = false;
 	image_type ImageType;
 	u32 ShaderToUse = 0;
 	barrier_state BarrierState;
@@ -378,82 +96,188 @@ struct shader_define
 	std::string Value;
 };
 
-struct buffer_descriptor
+// NOTE: this will be something that will be used to requirest the gpu resource
+#pragma pack(push, 1)
+struct resource_descriptor
 {
-	u64 ID;
-	u64 SubresourceIdx = SUBRESOURCES_ALL;
-	descriptor_resource_type Type;
+    std::string Name;
 
-	u64 Size;
-	u64 Count;
-	u32 Usage;
+    u64 ID;
+    u64 SubresourceIdx = SUBRESOURCES_ALL;
+    void* Data = nullptr;
+    resource_descriptor_type Type;
 
-	buffer_descriptor UseSubresource(u32 SubresourceIdxToUse) const
-	{
-		buffer_descriptor NewDescriptor = *this;
-		NewDescriptor.SubresourceIdx = SubresourceIdxToUse;
-		return NewDescriptor;
-	};
+    u64 Size;
+    u64 Count;
+    u32 Usage;
 
-	bool operator==(const buffer_descriptor& other) const
-	{
-		if(other.Type != descriptor_resource_type::buffer) return false;
+    u64 Width;
+    u64 Height;
+    u64 Depth;
+    utils::texture::input_data Info;
 
-        return other.ID == ID && other.hash() == hash();
-	}
+    resource_descriptor()
+        : Name(), ID(0), SubresourceIdx(SUBRESOURCES_ALL),
+          Data(nullptr), Type(), 
+		  Size(0), Count(0), Usage(0),
+          Width(0), Height(0), Depth(0), Info()
+    {}
 
-	size_t hash() const
-	{
-		size_t Result = 0;
-		std::hash_combine(Result, std::hash<u64>{}(Size * Count));
-		std::hash_combine(Result, std::hash<u32>{}(Usage));
-		return Result;
-	}
-};
+    resource_descriptor(const resource_descriptor& other)
+        : Name(other.Name), ID(other.ID), SubresourceIdx(other.SubresourceIdx),
+          Data(other.Data), Type(other.Type),
+          Size(other.Size), Count(other.Count), Usage(other.Usage),
+          Width(other.Width), Height(other.Height), Depth(other.Depth), Info(other.Info)
+    {}
 
-struct texture_descriptor
-{
-	u64 ID;
-	u64 SubresourceIdx = SUBRESOURCES_ALL;
-	descriptor_resource_type Type;
-
-	u64 Width;
-	u64 Height;
-	u64 Depth;
-	utils::texture::input_data Info;
-
-	texture_descriptor UseSubresource(u32 SubresourceIdxToUse) const
-	{
-		texture_descriptor NewDescriptor = *this;
-		NewDescriptor.SubresourceIdx = SubresourceIdxToUse;
-		return NewDescriptor;
-	};
-
-    bool operator==(const texture_descriptor& other) const
-	{
-        if (other.Type != descriptor_resource_type::texture)
-            return false;
-
-		return other.ID == ID && other.hash() == hash();
+    resource_descriptor(resource_descriptor&& other) noexcept
+        : Name(std::move(other.Name)), ID(std::move(other.ID)), SubresourceIdx(std::move(other.SubresourceIdx)),
+          Data(other.Data), Type(std::move(other.Type)),
+          Size(std::move(other.Size)), Count(std::move(other.Count)), Usage(std::move(other.Usage)),
+          Width(std::move(other.Width)), Height(std::move(other.Height)), Depth(std::move(other.Depth)), Info(std::move(other.Info))
+    {
+        other.Data = nullptr;
     }
 
-	size_t hash() const
+    resource_descriptor& operator=(const resource_descriptor& other)
+    {
+        if (this != &other)
+        {
+            Name = other.Name;
+            ID = other.ID;
+            SubresourceIdx = other.SubresourceIdx;
+            Data = other.Data;
+            Type = other.Type;
+            Size = other.Size;
+            Count = other.Count;
+            Usage = other.Usage;
+            Width = other.Width;
+            Height = other.Height;
+            Depth = other.Depth;
+            Info = other.Info;
+        }
+        return *this;
+    }
+
+    resource_descriptor& operator=(resource_descriptor&& other) noexcept
+    {
+        if (this != &other)
+        {
+            Name = std::move(other.Name);
+            ID = std::move(other.ID);
+            SubresourceIdx = std::move(other.SubresourceIdx);
+            Data = other.Data;
+            Type = std::move(other.Type);
+            Size = std::move(other.Size);
+            Count = std::move(other.Count);
+            Usage = std::move(other.Usage);
+            Width = std::move(other.Width);
+            Height = std::move(other.Height);
+            Depth = std::move(other.Depth);
+            Info = std::move(other.Info);
+
+            other.Data = nullptr;
+        }
+        return *this;
+    }
+
+    resource_descriptor UseSubresource(u32 SubresourceIdxToUse) const
+    {
+        resource_descriptor NewDescriptor = *this;
+        NewDescriptor.SubresourceIdx = SubresourceIdxToUse;
+        return NewDescriptor;
+    }
+};
+
+struct gpu_buffer
+{
+	u64 ID;
+	bool WithCounter = false;
+
+	gpu_buffer() = default;
+	gpu_buffer(const resource_descriptor& Desc)
 	{
-		size_t Result = 0;
-		std::hash_combine(Result, std::hash<u64>{}(Width));
-		std::hash_combine(Result, std::hash<u64>{}(Height));
-		std::hash_combine(Result, std::hash<u64>{}(Depth));
-		std::hash_combine(Result, std::hash<utils::texture::input_data>{}(Info));
-		return Result;
+		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		ID = Desc.ID;
+		WithCounter = RF_WithCounter & Desc.Usage;
+	}
+
+	gpu_buffer& operator=(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		ID = Desc.ID;
+		WithCounter = RF_WithCounter & Desc.Usage;
+		return *this;
 	}
 };
 
-struct reference_descriptor
+struct gpu_texture
 {
 	u64 ID;
-	u64 SubresourceIdx = SUBRESOURCES_ALL;
-	descriptor_resource_type Type;
+    u64 SubresourceIdx = SUBRESOURCES_ALL;
+
+	gpu_texture() = default;
+	gpu_texture(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		ID = Desc.ID;
+		SubresourceIdx = Desc.SubresourceIdx;
+	}
+	gpu_texture& operator=(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		ID = Desc.ID;
+		SubresourceIdx = Desc.SubresourceIdx;
+		return *this;
+	}
 };
+
+struct gpu_texture_array
+{
+	array<u64> IDs;
+    u64 SubresourceIdx = SUBRESOURCES_ALL;
+
+	gpu_texture_array() = default;
+	gpu_texture_array(const std::vector<resource_descriptor>& Vec)
+	{
+		IDs = array<u64>(Vec.size());
+		for(size_t Idx = 0; Idx < Vec.size(); Idx++)
+		{
+			assert(Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+			IDs[Idx] = Vec[Idx].ID;
+		}
+	}
+	gpu_texture_array(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		IDs = array<u64>(1);
+		IDs[0] = Desc.ID;
+		SubresourceIdx = Desc.SubresourceIdx;
+	}
+
+	gpu_texture_array& operator=(const std::vector<resource_descriptor>& Vec)
+	{
+		IDs = array<u64>(Vec.size());
+		for(size_t Idx = 0; Idx < Vec.size(); Idx++)
+		{
+			assert(Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+			IDs[Idx] = Vec[Idx].ID;
+		}
+		return *this;
+	}
+	gpu_texture_array& operator=(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		IDs = array<u64>(1);
+		IDs[0] = Desc.ID;
+		SubresourceIdx = Desc.SubresourceIdx;
+		return *this;
+	}
+
+	size_t size() { return IDs.size(); }
+    u64& operator[](size_t i) { return IDs[i]; }
+};
+#pragma pack(pop)
 
 struct renderer_backend
 {
@@ -481,13 +305,19 @@ public:
 	std::string Name;
 	pass_type Type;
 	std::map<u32, std::vector<descriptor_param>> ParameterLayout;
-
-	u32 ParamCount = 0;
-	u32 StaticStorageCount = 0;
 };
 
 struct buffer;
 struct texture;
+struct resource;
+struct binding_packet
+{
+	resource* Resource;
+	array<resource*> Resources;
+	u64 SubresourceIndex = SUBRESOURCES_ALL;
+	u64 Mips = SUBRESOURCES_ALL;
+};
+
 class render_context;
 class compute_context;
 struct command_list
@@ -534,7 +364,7 @@ struct command_list
 	virtual void SetDepthTarget(texture* Target, vec2 Clear = {1, 0}) = 0;
 	virtual void SetStencilTarget(texture* Target, vec2 Clear = {1, 0}) = 0;
 
-	virtual void BindShaderParameters(void* Data) = 0;
+	virtual void BindShaderParameters(const array<binding_packet>& Data) = 0;
 
 	virtual void DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount) = 0;
 	virtual void DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize) = 0;
@@ -542,6 +372,7 @@ struct command_list
 
 	virtual void FillBuffer(buffer* Buffer, u32 Value) = 0;
 	virtual void FillTexture(texture* Texture, vec4 Value) = 0;
+	virtual void FillTexture(texture* Texture, float Depth, u32 Stencil) = 0;
 
 	virtual void CopyImage(texture* Dst, texture* Src) = 0;
 
@@ -575,32 +406,20 @@ struct resource_binder
 	resource_binder(const resource_binder&) = delete;
 	resource_binder operator=(const resource_binder&) = delete;
 
-	virtual void AppendStaticStorage(general_context* Context, void* Data) = 0;
+	virtual void SetContext(general_context* ContextToUse) = 0;
+
+	virtual void AppendStaticStorage(general_context* Context, const array<binding_packet>& Data, u32 Offset) = 0;
 	virtual void BindStaticStorage(renderer_backend* GeneralBackend) = 0;
 
-	virtual void SetStorageBufferView(buffer* Buffer, u32 Set = 0) = 0;
-	virtual void SetUniformBufferView(buffer* Buffer, u32 Set = 0) = 0;
+	virtual void SetStorageBufferView(resource* Buffer, u32 Set = 0) = 0;
+	virtual void SetUniformBufferView(resource* Buffer, u32 Set = 0) = 0;
 
 	// TODO: Remove image layouts and move them inside texture structure
-	virtual void SetSampledImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetStorageImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
-	virtual void SetImageSampler(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetSampledImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetStorageImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+	virtual void SetImageSampler(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 };
 
-// TODO: Use custom containers instead of std::vector and std::string
-struct texture_ref
-{
-	u64 SubresourceIndex = SUBRESOURCES_ALL;
-	array<texture*> Handle;
-};
-
-// TODO: use the actual structure for the data.
-// Create one VkBuffer and then update the buffer when the structure is being actually updated
-// Destroy if actually stopped being used/haven't being used for some time
-struct buffer_ref
-{
-	buffer* Handle = nullptr;
-};
 
 // TODO: Use custom containers instead of std::vector and std::string
 struct shader_view_context
@@ -642,7 +461,9 @@ struct full_screen : public shader_graphics_view_context
 {
 };
 
+#pragma pack(push, 1)
 #include "general_view_functions.hpp"
+#pragma pack(pop)
 
 class render_context : public general_context
 {
@@ -727,15 +548,15 @@ struct buffer : resource
 
 	virtual void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) = 0;
 
-	u64  Size          = 0;
-	u64  Alignment     = 0;
-	u32  CounterOffset = 0;
+	u64 Size          = 0;
+	u64 Alignment     = 0;
+	u32 CounterOffset = 0;
 
-	u32 PrevShader     = PSF_TopOfPipe;
-	u32 CurrentLayout  = 0;
-	u32 Usage          = 0;
+	u32 PrevShader    = PSF_TopOfPipe;
+	u32 CurrentLayout = 0;
+	u32 Usage         = 0;
 
-	bool WithCounter   = false;
+	bool WithCounter  = false;
 };
 
 struct texture : resource

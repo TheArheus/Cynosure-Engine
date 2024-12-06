@@ -30,12 +30,16 @@ const wchar_t* CharToWChar(const char* ch)
 	return WideStrCopy;
 }
 
+#ifdef CE_DEBUG
 #define NAME_DX12_OBJECT_CSTR(x, NAME)					\
 {														\
     const wchar_t* WcharConverted = CharToWChar(NAME);	\
     x->SetName(WcharConverted);							\
     delete[] WcharConverted;							\
 }
+#else
+#define NAME_DX12_OBJECT_CSTR(x, NAME)
+#endif
 
 void MessageCallback(D3D12_MESSAGE_CATEGORY MessageType, D3D12_MESSAGE_SEVERITY Severity, D3D12_MESSAGE_ID MessageId, LPCSTR Desc, void* Context)
 {

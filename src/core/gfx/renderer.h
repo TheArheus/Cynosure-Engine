@@ -5,19 +5,27 @@ struct shader_pass
 	string Name;
 	pass_type Type;
 	void* Parameters;
-	bool HaveStaticStorage;
+	meta_descriptor* ReflectionData;
+
+	array<binding_packet> Bindings;
+
+	array<u64> Inputs;
+	array<u64> Outputs;
+	array<u64> Statics;
 };
 
+struct resource_lifetime
+{
+	size_t FirstUsagePassIndex = std::numeric_limits<size_t>::max();
+	size_t LastUsagePassIndex = 0;
+};
 
 class global_graphics_context
 {
 	global_graphics_context(const global_graphics_context&) = delete;
 	global_graphics_context& operator=(const global_graphics_context&) = delete;
 
-	using setup_func = std::function<void()>;
 	using execute_func = std::function<void(command_list*)>;
-
-	void ParseShaderParam(meta_descriptor* Descriptor, void* Parameters);
 
 public:
 	global_graphics_context() = default;
@@ -28,106 +36,6 @@ public:
 	global_graphics_context& operator=(global_graphics_context&& Oth) noexcept;
 
 	void DestroyObject();
-
-	// TODO: Get buffer_ref
-	buffer* PushBuffer(std::string DebugName, u64 DataSize, u64 Count, u32 Flags)
-	{
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_buffer(Backend, DebugName, DataSize, Count, Flags);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_buffer(Backend, DebugName, DataSize, Count, Flags);
-#endif
-			default:
-				return nullptr;
-		}
-	}
-
-	// TODO: Get buffer_ref
-	buffer* PushBuffer(std::string DebugName, void* Data, u64 DataSize, u64 Count, u32 Flags)
-	{
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_buffer(Backend, DebugName, Data, DataSize, Count, Flags);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_buffer(Backend, DebugName, Data, DataSize, Count, Flags);
-#endif
-			default:
-				return nullptr;
-		}
-	}
-
-	// TODO: Get texture_ref
-	texture* PushTexture(std::string DebugName, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
-	{
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_texture(Backend, DebugName, nullptr, Width, Height, Depth, InputData);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_texture(Backend, DebugName, nullptr, Width, Height, Depth, InputData);
-#endif
-			default:
-				return nullptr;
-		}
-	}
-
-	// TODO: Get texture_ref
-	texture* PushTexture(std::string DebugName, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
-	{
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_texture(Backend, DebugName, Data, Width, Height, Depth, InputData);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_texture(Backend, DebugName, Data, Width, Height, Depth, InputData);
-#endif
-			default:
-				return nullptr;
-		}
-	}
-
-	// TODO: Implement better resource handling
-	// Get the texture by texture_ref
-	texture_ref UseTextureArray(std::vector<texture*> ArrayOfTextures)
-	{
-		texture_ref NewRef;
-		NewRef.SubresourceIndex = SUBRESOURCES_ALL;
-		NewRef.Handle = array<texture*>(ArrayOfTextures.data(), ArrayOfTextures.size());
-		return NewRef;
-	}
-
-	// Get the texture by texture_ref
-	texture_ref UseTexture(texture* Texture)
-	{
-		texture_ref NewRef;
-		NewRef.SubresourceIndex = SUBRESOURCES_ALL;
-		NewRef.Handle = array<texture*>(&Texture, 1);
-		return NewRef;
-	}
-
-	// Get the texture by texture_ref
-	texture_ref UseTextureMip(texture* Texture, u32 Idx)
-	{
-		texture_ref NewRef;
-		NewRef.SubresourceIndex = Idx;
-		NewRef.Handle = array<texture*>(&Texture, 1);
-		return NewRef;
-	}
-
-	// Get the buffer by texture_ref
-	buffer_ref UseBuffer(buffer* Buffer)
-	{
-		buffer_ref NewRef;
-		NewRef.Handle = Buffer;
-		return NewRef;
-	}
 
 	resource_binder* CreateResourceBinder()
 	{
@@ -256,29 +164,29 @@ public:
 	//////////////////////////////////////////////////////
 	u32 BackBufferIndex = 0;
 
-	buffer* PoissonDiskBuffer;
-	buffer* RandomSamplesBuffer;
+	resource_descriptor PoissonDiskBuffer;
+	resource_descriptor RandomSamplesBuffer;
 
-	texture* GfxColorTarget[2];
-	texture* GfxDepthTarget;
-	texture* DebugCameraViewDepthTarget;
+	resource_descriptor GfxColorTarget[2];
+	resource_descriptor GfxDepthTarget;
+	resource_descriptor DebugCameraViewDepthTarget;
 
-	texture* VoxelGridTarget;
-	texture* VoxelGridNormal;
-	texture* HdrColorTarget;
-	texture* BrightTarget;
-	texture* TempBrTarget;
+	resource_descriptor VoxelGridTarget;
+	resource_descriptor VoxelGridNormal;
+	resource_descriptor HdrColorTarget;
+	resource_descriptor BrightTarget;
+	resource_descriptor TempBrTarget;
 
-	std::vector<texture*> GlobalShadow;
-	std::vector<texture*> GBuffer;
+	std::vector<resource_descriptor> GlobalShadow;
+	std::vector<resource_descriptor> GBuffer;
 
-	texture* AmbientOcclusionData;
-	texture* BlurTemp;
-	texture* DepthPyramid;
-	texture* RandomAnglesTexture;
-	texture* NoiseTexture;
+	resource_descriptor AmbientOcclusionData;
+	resource_descriptor BlurTemp;
+	resource_descriptor DepthPyramid;
+	resource_descriptor RandomAnglesTexture;
+	resource_descriptor NoiseTexture;
 
-	texture* VolumetricLightOut;
-	texture* IndirectLightOut;
-	texture* LightColor;
+	resource_descriptor VolumetricLightOut;
+	resource_descriptor IndirectLightOut;
+	resource_descriptor LightColor;
 };

@@ -4,50 +4,23 @@
 
 // TODO: A better code
 void vulkan_resource_binder::
-AppendStaticStorage(general_context* ContextToUse, void* Data)
+AppendStaticStorage(general_context* ContextToUse, const array<binding_packet>& Data, u32 Offset)
 {
-	if(!Data) return;
+	if(!Data.size()) return;
 	SetIndices.clear();
-	if(ContextToUse->Type == pass_type::graphics)
-	{
-		vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(ContextToUse);
-		PushDescriptors = ContextToBind->PushDescriptors;
-		Sets = ContextToBind->Sets;
-	}
-	else if(ContextToUse->Type == pass_type::compute)
-	{
-		vulkan_compute_context* ContextToBind = static_cast<vulkan_compute_context*>(ContextToUse);
-		PushDescriptors = ContextToBind->PushDescriptors;
-		Sets = ContextToBind->Sets;
-	}
 
-	void* It = Data;
-
-	u32 ParamCount = *(u32*)It;
-	It = (void*)((u8*)It + sizeof(u32));
-
-	size_t ParamOffset  = *(size_t*)It;
-	It = (void*)((u8*)It + sizeof(size_t));
-
-	u32 StaticStorageCount = 0;
-	bool HaveStaticStorage = *(bool*)It;
-	It = (void*)((u8*)It + sizeof(bool));
-
-	It = (void*)((u8*)It + ParamOffset);
 	for(u32 LayoutIdx = 1; LayoutIdx < ContextToUse->ParameterLayout.size(); ++LayoutIdx)
 	{
-		for(u32 ParamIdx = 0; ParamIdx < ContextToUse->ParameterLayout[LayoutIdx].size(); ++ParamIdx)
+		for(u32 ParamIdx = 0; ParamIdx < ContextToUse->ParameterLayout[LayoutIdx].size(); ++ParamIdx, ++Offset)
 		{
 			descriptor_param Parameter = ContextToUse->ParameterLayout[LayoutIdx][ParamIdx];
-			if(Parameter.Type == resource_type::buffer)
+			if(Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform)
 			{
 				assert(false && "Buffer in static storage. Currently is not available, use buffers in the inputs");
 			}
 			else if(Parameter.Type == resource_type::texture_sampler)
 			{
-				texture_ref TextureToBind = *(texture_ref*)It;
-				SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex, LayoutIdx);
-				It = (void*)((u8*)It + sizeof(texture_ref));
+				SetImageSampler(Parameter.Count, Data[Offset].Resources, Parameter.ImageType, Parameter.BarrierState, Data[Offset].SubresourceIndex, LayoutIdx);
 			}
 			else if(Parameter.Type == resource_type::texture_storage)
 			{
@@ -65,7 +38,7 @@ BindStaticStorage(renderer_backend* GeneralBackend)
 }
 
 void vulkan_resource_binder::
-SetStorageBufferView(buffer* Buffer, u32 Set)
+SetStorageBufferView(resource* Buffer, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
@@ -90,7 +63,7 @@ SetStorageBufferView(buffer* Buffer, u32 Set)
 	SetIndices[Set] += 1;
 	DescriptorInfos.push_back(BufferInfo);
 
-	if(Buffer->WithCounter)
+	if(Attachment->WithCounter)
 	{
 		descriptor_info* CounterBufferInfo = PushStruct(descriptor_info);
 		CounterBufferInfo->buffer = Attachment->Handle;
@@ -114,7 +87,7 @@ SetStorageBufferView(buffer* Buffer, u32 Set)
 }
 
 void vulkan_resource_binder::
-SetUniformBufferView(buffer* Buffer, u32 Set)
+SetUniformBufferView(resource* Buffer, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
@@ -139,7 +112,7 @@ SetUniformBufferView(buffer* Buffer, u32 Set)
 	SetIndices[Set] += 1;
 	DescriptorInfos.push_back(BufferInfo);
 
-	if(Buffer->WithCounter)
+	if(Attachment->WithCounter)
 	{
 		descriptor_info* CounterBufferInfo = PushStruct(descriptor_info);
 		CounterBufferInfo->buffer = Attachment->Handle;
@@ -163,7 +136,7 @@ SetUniformBufferView(buffer* Buffer, u32 Set)
 }
 
 void vulkan_resource_binder::
-SetSampledImage(u32 DescriptorCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetSampledImage(u32 DescriptorCount, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
@@ -207,7 +180,7 @@ SetSampledImage(u32 DescriptorCount, const array<texture*>& Textures, image_type
 }
 
 void vulkan_resource_binder::
-SetStorageImage(u32 DescriptorCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetStorageImage(u32 DescriptorCount, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
@@ -251,7 +224,7 @@ SetStorageImage(u32 DescriptorCount, const array<texture*>& Textures, image_type
 }
 
 void vulkan_resource_binder::
-SetImageSampler(u32 DescriptorCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetImageSampler(u32 DescriptorCount, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
@@ -668,10 +641,11 @@ SetStencilTarget(texture* Target, vec2 Clear)
 }
 
 // TODO: A better code
+// TODO: Move out pipeline barriers out of this function
 void vulkan_command_list::
-BindShaderParameters(void* Data)
+BindShaderParameters(const array<binding_packet>& Data)
 {
-	if(!Data) return;
+	if(!Data.size()) return;
 	vulkan_resource_binder Binder(Gfx, CurrentContext);
 
 	VkPipelineLayout Layout = {};
@@ -691,84 +665,64 @@ BindShaderParameters(void* Data)
 		Layout = ContextToBind->RootSignatureHandle;
 	}
 
-	void* It = Data;
-
-	u32 ParamCount = *(u32*)It;
-	It = (void*)((u8*)It + sizeof(u32));
-
-	size_t ParamOffset  = *(size_t*)It;
-	It = (void*)((u8*)It + sizeof(size_t));
-
-	u32 StaticStorageCount = 0;
-	bool HaveStaticStorage = *(bool*)It;
-	It = (void*)((u8*)It + sizeof(bool));
-
-	for(u32 ParamIdx = 0; ParamIdx < ParamCount; ++ParamIdx)
+	u32 Offset = 0;
+	u32 ParamCount = CurrentContext->ParameterLayout[0].size();
+	for(u32 ParamIdx = 0; ParamIdx < ParamCount; ++ParamIdx, ++Offset)
 	{
 		descriptor_param Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
-		if(Parameter.Type == resource_type::buffer)
+		if(Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform)
 		{
-			buffer* BufferToBind = *(buffer**)It;
-
+			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
 			Binder.SetStorageBufferView(BufferToBind);
 
 			BuffersToCommon.insert(BufferToBind);
 			AttachmentBufferBarriers.push_back({BufferToBind, Parameter.AspectMask, Parameter.ShaderToUse});
 
 			ParamIdx += BufferToBind->WithCounter;
-			ParamCount += BufferToBind->WithCounter;
-
-			It = (void*)((u8*)It + sizeof(buffer*));
 		}
 		else if(Parameter.Type == resource_type::texture_sampler)
 		{
-			texture_ref TextureToBind = *(texture_ref*)It;
-			u32 MipToUse = TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex;
-			Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
+			Binder.SetImageSampler(Parameter.Count, Data[Offset].Resources, Parameter.ImageType, Parameter.BarrierState, Data[Offset].SubresourceIndex);
 
-			for(texture* CurrentTexture : TextureToBind.Handle)
+			for(resource* CurrentResource : Data[Offset].Resources)
 			{
+				texture* CurrentTexture = (texture*)CurrentResource;
 				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Data[Offset].Mips, Parameter.ShaderToUse});
 			}
-
-			It = (void*)((u8*)It + sizeof(texture_ref));
 		}
 		else if(Parameter.Type == resource_type::texture_storage)
 		{
-			texture_ref TextureToBind = *(texture_ref*)It;
-			u32 MipToUse = TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex;
-			Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse);
+			Binder.SetStorageImage(Parameter.Count, Data[Offset].Resources, Parameter.ImageType, Parameter.BarrierState, Data[Offset].SubresourceIndex);
 
-			for(texture* CurrentTexture : TextureToBind.Handle)
+			for(resource* CurrentResource : Data[Offset].Resources)
 			{
+				texture* CurrentTexture = (texture*)CurrentResource;
 				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Data[Offset].Mips, Parameter.ShaderToUse});
 			}
-
-			It = (void*)((u8*)It + sizeof(texture_ref));
 		}
 	}
 
 	for(u32 LayoutIdx = 1; LayoutIdx < CurrentContext->ParameterLayout.size(); ++LayoutIdx)
 	{
-		for(u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx)
+		for(u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx, ++Offset)
 		{
 			descriptor_param Parameter = CurrentContext->ParameterLayout[LayoutIdx][ParamIdx];
-			if(Parameter.Type == resource_type::buffer)
+			if(Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform)
 			{
 				assert(false && "Buffer in static storage. Currently is not available, use buffers in the inputs");
 			}
 			else if(Parameter.Type == resource_type::texture_sampler)
 			{
-				texture_ref TextureToBind = *(texture_ref*)It;
-
-				for(texture* CurrentTexture : TextureToBind.Handle)
+				for(resource* CurrentResource : Data[Offset].Resources)
 				{
+					texture* CurrentTexture = (texture*)CurrentResource;
 					TexturesToCommon.insert(CurrentTexture);
-					AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+					AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Data[Offset].Mips, Parameter.ShaderToUse});
 				}
-				if(s32(Parameter.Count - TextureToBind.Handle.size()) > 0)
+				// TODO: How do I move this out?
+				if(s32(Parameter.Count - Data[Offset].Resources.size()) > 0)
 				{
 					if(Parameter.ImageType == image_type::Texture1D)
 						AttachmentImageBarriers.push_back({Binder.NullTexture1D, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
@@ -779,7 +733,6 @@ BindShaderParameters(void* Data)
 					else if(Parameter.ImageType == image_type::TextureCube)
 						AttachmentImageBarriers.push_back({Binder.NullTextureCube, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
 				}
-				It = (void*)((u8*)It + sizeof(texture_ref));
 			}
 			else if(Parameter.Type == resource_type::texture_storage)
 			{
@@ -1054,6 +1007,25 @@ FillTexture(texture* Texture, vec4 Value)
 }
 
 void vulkan_command_list::
+FillTexture(texture* Texture, float Depth, u32 Stencil)
+{
+	SetImageBarriers({{Texture, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
+
+	VkClearDepthStencilValue ClearDepthStencil = {};
+	ClearDepthStencil.depth = Depth;
+	ClearDepthStencil.stencil = Stencil;
+
+	VkImageSubresourceRange ClearRange = {};
+	ClearRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+	ClearRange.baseMipLevel = 0;
+	ClearRange.baseArrayLayer = 0;
+	ClearRange.levelCount = VK_REMAINING_MIP_LEVELS;
+	ClearRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+
+	vkCmdClearDepthStencilImage(CommandList, static_cast<vulkan_texture*>(Texture)->Handle, GetVKLayout(Texture->CurrentState[0]), &ClearDepthStencil, 1, &ClearRange);
+}
+
+void vulkan_command_list::
 CopyImage(texture* Dst, texture* Src)
 {
 	vulkan_texture* SrcTexture = static_cast<vulkan_texture*>(Src);
@@ -1265,6 +1237,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	std::map<VkDescriptorType, u32> DescriptorTypeCounts;
 	std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>> ShaderRootLayout;
 	std::map<u32, std::map<u32, image_type>> TextureTypes;
+	std::map<u32, std::map<u32, bool>> Writables;
 
 	std::string GlobalName;
 	for(const std::string Shader : ShaderList)
@@ -1278,7 +1251,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 		{
 			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::vertex, Writables, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
 
 			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_VERTEX_BIT;
 			HavePushConstant  |= UsingPushConstant;
@@ -1287,7 +1260,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 		{
 			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_control, Writables, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
 
 			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
 			HavePushConstant  |= UsingPushConstant;
@@ -1296,7 +1269,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 		{
 			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::tessellation_eval, Writables, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
 
 			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
 			HavePushConstant  |= UsingPushConstant;
@@ -1305,7 +1278,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 		{
 			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::geometry, Writables, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
 
 			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_GEOMETRY_BIT;
 			HavePushConstant  |= UsingPushConstant;
@@ -1314,7 +1287,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 		{
 			bool UsingPushConstant = false;
 			Stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
+			Stage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::fragment, Writables, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, UsingPushConstant, PushConstantSize, ShaderDefines);
 
 			PushConstantStage |= UsingPushConstant * VK_SHADER_STAGE_FRAGMENT_BIT;
 			HavePushConstant  |= UsingPushConstant;
@@ -1331,24 +1304,15 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 			DescriptorsSizes[LayoutIdx] += Parameter.descriptorCount;
 			Parameters[LayoutIdx].push_back(Parameter);
 
-			if(LayoutIdx == 0)
-			{
-				ParamCount++;
-			}
-			else
-			{
-				StaticStorageCount++;
-			}
-
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_uniform, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 		}
 	}
 
@@ -1577,11 +1541,13 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
     size_t LastDotPos = GlobalName.find_last_of('.');
     Name = GlobalName = GlobalName.substr(LastSlashPos + 1, LastDotPos - LastSlashPos - 1);
 
+#ifdef CE_DEBUG
 	VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 	DebugNameInfo.objectType = VK_OBJECT_TYPE_PIPELINE;
 	DebugNameInfo.objectHandle = (u64)Pipeline;
 	DebugNameInfo.pObjectName = Name.c_str();
 	vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
+#endif
 }
 
 vulkan_compute_context::
@@ -1593,13 +1559,14 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 
 	u32 PushConstantSize = 0;
 	bool HavePushConstant = false;
-	std::map<u32, std::map<u32, image_type>> TextureTypes;
-	std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>> ShaderRootLayout;
 	std::map<VkDescriptorType, u32> DescriptorTypeCounts;
+	std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>> ShaderRootLayout;
+	std::map<u32, std::map<u32, image_type>> TextureTypes;
+	std::map<u32, std::map<u32, bool>> Writables;
 
 	ComputeStage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
 	ComputeStage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
-	ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines, &BlockSizeX, &BlockSizeY, &BlockSizeZ);
+	ComputeStage.module = Gfx->LoadShaderModule(Shader.c_str(), shader_stage::compute, Writables, TextureTypes, ShaderRootLayout, DescriptorTypeCounts, HavePushConstant, PushConstantSize, ShaderDefines, &BlockSizeX, &BlockSizeY, &BlockSizeZ);
 	ComputeStage.pName  = "main";
 
 	std::vector<u32> DescriptorsSizes(ShaderRootLayout.size());
@@ -1611,24 +1578,15 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 			DescriptorsSizes[LayoutIdx] += Parameter.descriptorCount;
 			Parameters[LayoutIdx].push_back(Parameter);
 
-			if(LayoutIdx == 0)
-			{
-				ParamCount++;
-			}
-			else
-			{
-				StaticStorageCount++;
-			}
-
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer, Parameter.descriptorCount, image_type::Texture2D, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_uniform, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 		}
 	}
 
@@ -1702,9 +1660,11 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
     size_t LastDotPos = Shader.find_last_of('.');
 	Name = Shader.substr(LastSlashPos + 1, LastDotPos - LastSlashPos - 1);
 
+#ifdef CE_DEBUG
 	VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 	DebugNameInfo.objectType = VK_OBJECT_TYPE_PIPELINE;
 	DebugNameInfo.objectHandle = (u64)Pipeline;
 	DebugNameInfo.pObjectName = Name.c_str();
 	vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
+#endif
 }

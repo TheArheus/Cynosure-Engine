@@ -304,8 +304,11 @@ private:
             {
                 OutputFile << "    {0, meta_type::" << SanitizeName(Member.BaseTypeName) << ", \""
                            << Member.MemberName << "\", sizeof(" << Member.BaseTypeName << "), "
-                           //<< "offsetof(" << Class.QualifiedName << ", " << Member.MemberName << "), "
+#if 1
+                           << "offsetof(" << Class.QualifiedName << ", " << Member.MemberName << "), "
+#else
                            << Member.OffsetInBytes << ", "
+#endif
                            << Member.ArraySize << "},\n";
             }
             OutputFile << "};\n\n";

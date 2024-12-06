@@ -1,11 +1,7 @@
 
-void directx12_resource_binder::
-AppendStaticStorage(general_context* ContextToUse, void* Data)
-{
-}
 
 void directx12_resource_binder::
-SetStorageBufferView(buffer* Buffer, u32 Set)
+SetStorageBufferView(resource* Buffer, u32 Set)
 {
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
 
@@ -27,7 +23,7 @@ SetStorageBufferView(buffer* Buffer, u32 Set)
 	ResourceBindingIdx += 1;
 	SetIndices[Set] += 1;
 
-	if(Buffer->WithCounter)
+	if(ToBind->WithCounter)
 	{
 		DescriptorHandle = ResourceHeap->GetCpuHandle(ResourceBindingIdx);
 		if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
@@ -47,14 +43,14 @@ SetStorageBufferView(buffer* Buffer, u32 Set)
 }
 
 void directx12_resource_binder::
-SetUniformBufferView(buffer* Buffer, u32 Set)
+SetUniformBufferView(resource* Buffer, u32 Set)
 {
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
 	SetIndices[Set] += 1;
 }
 
 void directx12_resource_binder::
-SetSampledImage(u32 BindingCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetSampledImage(u32 BindingCount, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	BindingDescriptions.push_back({dx12_descriptor_type::sampler, SamplersHeap->GetGpuHandle(SamplersBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootSamplersBindingIdx += 1;
@@ -72,7 +68,7 @@ SetSampledImage(u32 BindingCount, const array<texture*>& Textures, image_type Ty
 }
 
 void directx12_resource_binder::
-SetStorageImage(u32 BindingCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetStorageImage(u32 BindingCount, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	BindingDescriptions.push_back({dx12_descriptor_type::unordered_access_table, ResourceHeap->GetGpuHandle(ResourceBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootResourceBindingIdx += 1;
@@ -90,7 +86,7 @@ SetStorageImage(u32 BindingCount, const array<texture*>& Textures, image_type Ty
 }
 
 void directx12_resource_binder::
-SetImageSampler(u32 BindingCount, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
+SetImageSampler(u32 BindingCount, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
 	BindingDescriptions.push_back({dx12_descriptor_type::shader_resource_table, ResourceHeap->GetGpuHandle(ResourceBindingIdx), {}, RootResourceBindingIdx + RootSamplersBindingIdx, (u32)Textures.size()});
 	RootResourceBindingIdx += 1;
@@ -511,43 +507,33 @@ SetStencilTarget(texture* StencilAttachment, vec2 Clear)
 };
 
 void directx12_command_list::
-BindShaderParameters(void* Data)
+BindShaderParameters(const array<binding_packet>& Data)
 {
-	if(!Data) return;
+	if(!Data.size()) return;
     directx12_resource_binder Binder(Gfx, CurrentContext);
-    void* It = Data;
 
-    u32 ParamCount = *(u32*)It;
-    It = (void*)((u8*)It + sizeof(u32));
-
-    size_t ParamOffset = *(size_t*)It;
-    It = (void*)((u8*)It + sizeof(size_t));
-
-    bool HaveStaticStorage = *(bool*)It;
-    It = (void*)((u8*)It + sizeof(bool));
-    void* StaticIt = HaveStaticStorage ? (void*)((u8*)It + ParamOffset) : nullptr;
-
-    auto DX12BindImageSampler = [&](texture_ref& TextureToBind, const descriptor_param& Parameter, u32 LayoutIdx) 
+	u32 Offset = 0;
+    auto DX12BindImageSampler = [&](const binding_packet& Packet, const descriptor_param& Parameter, u32 LayoutIdx) 
 	{
-        u32 MipToUse = TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex;
-        Binder.SetImageSampler(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse, LayoutIdx);
+        Binder.SetImageSampler(Parameter.Count, Packet.Resources, Parameter.ImageType, Parameter.BarrierState, Packet.SubresourceIndex, LayoutIdx);
 
-        for (texture* CurrentTexture : TextureToBind.Handle) 
+        for (resource* CurrentResource : Packet.Resources) 
 		{
+			texture* CurrentTexture = (texture*)CurrentResource;
             TexturesToCommon.insert(CurrentTexture);
-            AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+            AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Packet.Mips, Parameter.ShaderToUse});
         }
     };
 
-    auto DX12BindStorageTexture = [&](texture_ref& TextureToBind, const descriptor_param& Parameter, u32 LayoutIdx) 
+    auto DX12BindStorageTexture = [&](const binding_packet& Packet, const descriptor_param& Parameter, u32 LayoutIdx) 
 	{
-        u32 MipToUse = TextureToBind.SubresourceIndex == SUBRESOURCES_ALL ? 0 : TextureToBind.SubresourceIndex;
-        Binder.SetStorageImage(Parameter.Count, TextureToBind.Handle, Parameter.ImageType, Parameter.BarrierState, MipToUse, LayoutIdx);
+        Binder.SetStorageImage(Parameter.Count, Packet.Resources, Parameter.ImageType, Parameter.BarrierState, Packet.SubresourceIndex, LayoutIdx);
 
-        for (texture* CurrentTexture : TextureToBind.Handle) 
+        for (resource* CurrentResource : Packet.Resources) 
 		{
+			texture* CurrentTexture = (texture*)CurrentResource;
             TexturesToCommon.insert(CurrentTexture);
-            AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, TextureToBind.SubresourceIndex, Parameter.ShaderToUse});
+            AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Packet.Mips, Parameter.ShaderToUse});
         }
     };
 
@@ -588,51 +574,54 @@ BindShaderParameters(void* Data)
         }
     };
 
-    if (StaticIt) 
-	{
-        for (u32 LayoutIdx = 1; LayoutIdx < CurrentContext->ParameterLayout.size(); ++LayoutIdx) 
-		{
-            for (const auto& Parameter : CurrentContext->ParameterLayout[LayoutIdx]) 
-			{
-				if(Parameter.Type == resource_type::buffer)
-				{
-					assert(false && "Buffer in static storage. Currently is not available, use buffers in the inputs");
-				}
-				else if (Parameter.Type == resource_type::texture_sampler) 
-				{
-                    DX12BindImageSampler(*(texture_ref*)StaticIt, Parameter, LayoutIdx);
-                    StaticIt = (void*)((u8*)StaticIt + sizeof(texture_ref));
-                }
-				else if(Parameter.Type == resource_type::texture_storage)
-				{
-					assert(false && "Storage image in static storage. Check the shader bindings. Could be image sampler or buffer");
-				}
-            }
-        }
-    }
-
-    for (u32 ParamIdx = 0; ParamIdx < ParamCount; ++ParamIdx) 
+    for (u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[0].size(); ++ParamIdx, ++Offset) 
 	{
         const auto& Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
-        if (Parameter.Type == resource_type::buffer) 
+        if (Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform) 
 		{
-			buffer* BufferToBind = *(buffer**)It;
+			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
+            ParamIdx += BufferToBind->WithCounter;
+        } 
+    }
+
+	for (u32 LayoutIdx = 1; LayoutIdx < CurrentContext->ParameterLayout.size(); ++LayoutIdx) 
+	{
+		for(u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx, ++Offset)
+		{
+			const descriptor_param& Parameter = CurrentContext->ParameterLayout[LayoutIdx][ParamIdx];
+			if(Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform)
+			{
+				assert(false && "Buffer in static storage. Currently is not available, use buffers in the inputs");
+			}
+			else if (Parameter.Type == resource_type::texture_sampler) 
+			{
+				DX12BindImageSampler(Data[Offset], Parameter, LayoutIdx);
+			}
+			else if(Parameter.Type == resource_type::texture_storage)
+			{
+				assert(false && "Storage image in static storage. Check the shader bindings. Could be image sampler or buffer");
+			}
+		}
+	}
+
+	Offset = 0;
+    for (u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[0].size(); ++ParamIdx, ++Offset) 
+	{
+        const auto& Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
+        if (Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform) 
+		{
+			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
             DX12BindBuffer(BufferToBind, Parameter);
 
-            It = (void*)((u8*)It + sizeof(buffer*));
-
             ParamIdx += BufferToBind->WithCounter;
-			ParamCount += BufferToBind->WithCounter;
         } 
 		else if (Parameter.Type == resource_type::texture_sampler)
 		{
-            DX12BindImageSampler(*(texture_ref*)It, Parameter, 0);
-            It = (void*)((u8*)It + sizeof(texture_ref));
+            DX12BindImageSampler(Data[Offset], Parameter, 0);
         }
 		else if (Parameter.Type == resource_type::texture_storage)
 		{
-            DX12BindStorageTexture(*(texture_ref*)It, Parameter, 0);
-            It = (void*)((u8*)It + sizeof(texture_ref));
+            DX12BindStorageTexture(Data[Offset], Parameter, 0);
         }
     }
 
@@ -727,6 +716,11 @@ FillTexture(texture* Texture, vec4 Value)
 {
 	std::vector<vec4> Fill(Texture->Size / sizeof(vec4), Value);
 	Texture->Update(Fill.data(), this);
+}
+
+void directx12_command_list::
+FillTexture(texture* Texture, float Depth, u32 Stencil)
+{
 }
 
 void directx12_command_list::
@@ -956,7 +950,6 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
 			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
-			StaticStorageCount++;
 			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
 				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];
@@ -973,12 +966,12 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 			}
 		}
 	}
+
 	for(u32 LayoutIdx = 0; LayoutIdx < 1; LayoutIdx++)
 	{
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
 			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
-			ParamCount++;
 			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
 				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];
@@ -1112,7 +1105,6 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
 			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
-			StaticStorageCount++;
 			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
 				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];
@@ -1135,8 +1127,6 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
 		{
 			D3D12_ROOT_PARAMETER& Parameter0 = ShaderRootLayout[LayoutIdx][BindingIdx][0];
-			ParamCount++;
-
 			for(u32 ParamIdx = 0; ParamIdx < ShaderRootLayout[LayoutIdx][BindingIdx].size(); ++ParamIdx)
 			{
 				D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[LayoutIdx][BindingIdx][ParamIdx];

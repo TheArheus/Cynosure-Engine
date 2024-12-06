@@ -13,6 +13,8 @@ struct cube_scene : scene
 	{
 		IsInitialized = true;
 
+		// NOTE: maybe this should be a component too???
+		// Some scenes without actually using global lights
 		GlobalLightPos = vec3(-4, 4, 2);
 
 		entity CubeObject = Registry.CreateEntity();

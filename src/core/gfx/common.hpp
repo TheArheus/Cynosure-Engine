@@ -121,6 +121,7 @@ enum class image_format
 
 enum class image_type
 {
+	unknown,
 	Texture1D,
 	Texture2D,
 	Texture3D,
@@ -368,17 +369,18 @@ enum class barrier_state
 	transfer_dst,
 };
 
-enum class descriptor_resource_type
+enum class resource_descriptor_type
 {
 	buffer,
 	texture,
-	resource,
+	texture_array,
+	reference,
 };
 
 enum class resource_type
 {
-	buffer,
-	texture,
+	buffer_storage,
+	buffer_uniform,
 	texture_storage,
 	texture_sampler,
 };

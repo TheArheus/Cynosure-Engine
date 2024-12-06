@@ -2,22 +2,13 @@
 
 struct debug_raster : public shader_graphics_view_context
 {
-	struct parameter_type
-	{
-		buffer_ref WorldUpdateBuffer;
-		buffer_ref VertexBuffer;
-		buffer_ref MeshDrawCommandBuffer;
-		buffer_ref MeshMaterialsBuffer;
-		buffer_ref GeometryOffsets;
-	};
-
 	shader_input() parameters
 	{
-		global_world_data WorldUpdate;
-		buffer_ref VertexBuffer;
-		buffer_ref MeshDrawCommands;
-		buffer_ref MeshMaterials;
-		buffer_ref GeometryOffsets;
+		gpu_buffer WorldUpdateBuffer;
+		gpu_buffer VertexBuffer;
+		gpu_buffer MeshDrawCommandBuffer;
+		gpu_buffer MeshMaterialsBuffer;
+		gpu_buffer GeometryOffsets;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -48,35 +39,18 @@ struct debug_raster : public shader_graphics_view_context
 
 struct gbuffer_raster : public shader_graphics_view_context
 {
-	struct parameter_type
-	{
-		buffer_ref WorldUpdateBuffer;
-		buffer_ref VertexBuffer;
-		buffer_ref MeshDrawCommandBuffer;
-		buffer_ref MeshMaterialsBuffer;
-		buffer_ref GeometryOffsets;
-	};
-
-	struct static_storage_type
-	{
-		texture_ref DiffuseTextures;
-		texture_ref NormalTextures;
-		texture_ref SpecularTextures;
-		texture_ref HeightTextures;
-	};
-
 	shader_input() parameters
 	{
-		global_world_data WorldUpdate;
-		buffer_ref VertexBuffer;
-		buffer_ref MeshDrawCommands;
-		buffer_ref MeshMaterials;
-		buffer_ref GeometryOffsets;
+		gpu_buffer WorldUpdateBuffer;
+		gpu_buffer VertexBuffer;
+		gpu_buffer MeshDrawCommandBuffer;
+		gpu_buffer MeshMaterialsBuffer;
+		gpu_buffer GeometryOffsets;
 
-		texture_ref DiffuseTextures;
-		texture_ref NormalTextures;
-		texture_ref SpecularTextures;
-		texture_ref HeightTextures;
+		gpu_texture_array DiffuseTextures;
+		gpu_texture_array NormalTextures;
+		gpu_texture_array SpecularTextures;
+		gpu_texture_array HeightTextures;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -106,40 +80,21 @@ struct gbuffer_raster : public shader_graphics_view_context
 
 struct voxelization : public shader_graphics_view_context
 {
-	struct parameter_type
-	{
-		buffer_ref WorldUpdateBuffer;
-		buffer_ref VertexBuffer;
-		buffer_ref MeshDrawCommandBuffer;
-		buffer_ref MeshMaterialsBuffer;
-		buffer_ref GeometryOffsets;
-		buffer_ref LightSources;
-		texture_ref VoxelGrid;
-		texture_ref VoxelGridNormal;
-	};
-
-	struct static_storage_type
-	{
-		texture_ref DiffuseTextures;
-		texture_ref NormalTextures;
-		texture_ref SpecularTextures;
-		texture_ref HeightTextures;
-	};
-
 	shader_input() parameters
 	{
-		global_world_data WorldUpdate;
-		buffer_ref VertexBuffer;
-		buffer_ref MeshDrawCommands;
-		buffer_ref MeshMaterials;
-		buffer_ref GeometryOffsets;
-		buffer_ref LightSources;
-		texture_ref VoxelGrid;
+		gpu_buffer WorldUpdateBuffer;
+		gpu_buffer VertexBuffer;
+		gpu_buffer MeshDrawCommandBuffer;
+		gpu_buffer MeshMaterialsBuffer;
+		gpu_buffer GeometryOffsets;
+		gpu_buffer LightSources;
+		gpu_texture VoxelGrid;
+		gpu_texture VoxelGridNormal;
 
-		texture_ref DiffuseTextures;
-		texture_ref NormalTextures;
-		texture_ref SpecularTextures;
-		texture_ref HeightTextures;
+		gpu_texture_array DiffuseTextures;
+		gpu_texture_array NormalTextures;
+		gpu_texture_array SpecularTextures;
+		gpu_texture_array HeightTextures;
 	};
 
 	utils::render_context::input_data SetupPipelineState() override
@@ -162,49 +117,27 @@ struct voxelization : public shader_graphics_view_context
 
 struct color_pass : public shader_compute_view_context
 {
-	struct parameter_type
-	{
-		buffer_ref WorldUpdateBuffer;
-		buffer_ref LightSourcesBuffer;
-		buffer_ref PoissonDiskBuffer;
-		buffer_ref RandomSamplesBuffer;
-		texture_ref PrevColorTarget;
-		texture_ref GfxDepthTarget;
-		texture_ref VolumetricLightTexture;
-		texture_ref IndirectLightTexture;
-		texture_ref RandomAnglesTexture;
-		texture_ref GBuffer;
-		texture_ref AmbientOcclusionData;
-		texture_ref GlobalShadow;
-
-		texture_ref HdrOutput;
-		texture_ref BrightOutput;
-	};
-
-	struct static_storage_type
-	{
-		texture_ref LightShadows;
-		texture_ref PointLightShadows;
-	};
-
 	shader_input() parameters
 	{
-		global_world_data WorldUpdate;
-		light_source LightSources[LIGHT_SOURCES_MAX_COUNT];
-		vec2 PoissonDiskBuffer[64];
-		vec4 RandomSamplesBuffer[64];
+		gpu_buffer WorldUpdateBuffer;
+		gpu_buffer LightSourcesBuffer;
+		gpu_buffer PoissonDiskBuffer;
+		gpu_buffer RandomSamplesBuffer;
 
-		texture_ref PrevColorTarget;
-		texture_ref GfxDepthTarget;
-		texture_ref VolumetricLightTexture;
-		texture_ref IndirectLightTexture;
-		texture_ref RandomAnglesTexture;
-		texture_ref GBuffer;
-		texture_ref AmbientOcclusionData;
-		texture_ref GlobalShadow;
+		gpu_texture PrevColorTarget;
+		gpu_texture GfxDepthTarget;
+		gpu_texture VolumetricLightTexture;
+		gpu_texture IndirectLightTexture;
+		gpu_texture RandomAnglesTexture;
+		gpu_texture_array GBuffer;
+		gpu_texture AmbientOcclusionData;
+		gpu_texture_array GlobalShadow;
 
-		texture_ref HdrOutput;
-		texture_ref BrightOutput;
+		gpu_texture HdrOutput;
+		gpu_texture BrightOutput;
+
+		gpu_texture_array LightShadows;
+		gpu_texture_array PointLightShadows;
 	};
 
 	color_pass()
@@ -216,23 +149,14 @@ struct color_pass : public shader_compute_view_context
 
 struct voxel_indirect_light_calc : public shader_compute_view_context
 {
-	struct parameter_type
-	{
-		buffer_ref  WorldUpdateBuffer;
-		texture_ref DepthTarget;
-		texture_ref GBuffer;
-		texture_ref VoxelGrid;
-		texture_ref VoxelGridNormal;
-		texture_ref Out;
-	};
-
 	shader_input() parameters
 	{
-		global_world_data WorldUpdate;
-		texture_ref DepthTarget;
-		texture_ref GBuffer;
-		texture_ref VoxelGrid;
-		texture_ref Output;
+		gpu_buffer WorldUpdateBuffer;
+		gpu_texture DepthTarget;
+		gpu_texture_array GBuffer;
+		gpu_texture VoxelGrid;
+		gpu_texture VoxelGridNormal;
+		gpu_texture Out;
 	};
 
 	voxel_indirect_light_calc()
@@ -244,22 +168,13 @@ struct voxel_indirect_light_calc : public shader_compute_view_context
 
 struct volumetric_light_calc : public shader_compute_view_context
 {
-	struct parameter_type
-	{
-		buffer_ref  WorldUpdateBuffer;
-		texture_ref DepthTarget;
-		texture_ref GBuffer;
-		texture_ref GlobalShadow;
-		texture_ref Out;
-	};
-
 	shader_input() parameters
 	{
-		global_world_data WorldUpdate;
-		texture_ref DepthTarget;
-		texture_ref GBuffer;
-		texture_ref GlobalShadow;
-		texture_ref Output;
+		gpu_buffer WorldUpdateBuffer;
+		gpu_texture DepthTarget;
+		gpu_texture_array GBuffer;
+		gpu_texture_array GlobalShadow;
+		gpu_texture Output;
 	};
 
 	volumetric_light_calc()
@@ -271,19 +186,11 @@ struct volumetric_light_calc : public shader_compute_view_context
 
 struct textures_combine : public shader_compute_view_context
 {
-	struct parameter_type
-	{
-		texture_ref A;
-		texture_ref B;
-
-		texture_ref Out;
-	};
-
 	shader_input() parameters
 	{
-		texture_ref A;
-		texture_ref B;
-		texture_ref Output;
+		gpu_texture A;
+		gpu_texture B;
+		gpu_texture Output;
 	};
 
 	textures_combine()

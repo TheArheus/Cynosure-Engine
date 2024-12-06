@@ -55,12 +55,8 @@ struct vulkan_buffer : public buffer
 	vulkan_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 Flags)
 	{
 		CreateResource(Backend, DebugName, NewSize, Count, Flags);
-		Update(Backend, Data);
-	}
-
-	vulkan_buffer(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 Flags)
-	{
-		CreateResource(Backend, DebugName, NewSize, Count, Flags);
+		if(Data)
+			Update(Backend, Data);
 	}
 
 	void Update(renderer_backend* Backend, void* Data) override
@@ -132,12 +128,14 @@ struct vulkan_buffer : public buffer
 		Memory = AllocationInfo.deviceMemory;
 
 		Name = DebugName;
+#ifdef CE_DEBUG
 		std::string TempName = (DebugName + ".buffer");
 		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 		DebugNameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
 		DebugNameInfo.objectHandle = (u64)Handle;
 		DebugNameInfo.pObjectName = TempName.c_str();
 		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
+#endif
 
 		CreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		CreateInfo.size = Size;
@@ -155,12 +153,14 @@ struct vulkan_buffer : public buffer
 
 		vkBindBufferMemory(Device, Temp, TempMemory, 0);
 
+#ifdef CE_DEBUG
 		TempName += ".temp";
 		DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 		DebugNameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
 		DebugNameInfo.objectHandle = (u64)Temp;
 		DebugNameInfo.pObjectName = TempName.c_str();
 		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
+#endif
 
 		CommandQueue->Reset();
 		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
@@ -238,16 +238,19 @@ struct vulkan_texture : public texture
 
 	vulkan_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
-		Gfx = static_cast<vulkan_backend*>(Backend);
-
 		CreateResource(Backend, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
-		if(Data || Info.UseStagingBuffer)
+		if(Data)
 		{
 			CreateStagingResource();
-			if(Data) Update(Backend, Data);
+			Update(Backend, Data);
+			if(!Info.UseStagingBuffer)
+				DestroyStagingResource();
 		}
-		if(Data && !Info.UseStagingBuffer)
-			DestroyStagingResource();
+		else
+		{
+			if(Info.UseStagingBuffer)
+				CreateStagingResource();
+		}
 
 		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
 		ReductionMode.reductionMode = GetVKSamplerReductionMode(Info.SamplerInfo.ReductionMode);

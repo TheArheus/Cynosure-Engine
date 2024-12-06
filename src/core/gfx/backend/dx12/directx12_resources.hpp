@@ -49,12 +49,8 @@ struct directx12_buffer : public buffer
 	directx12_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 NewUsage)
 	{
 		CreateResource(Backend, DebugName, NewSize, Count, NewUsage);
-		Update(Backend, Data);
-	}
-
-	directx12_buffer(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage)
-	{
-		CreateResource(Backend, DebugName, NewSize, Count, NewUsage);
+		if(Data)
+			Update(Backend, Data);
 	}
 
 	~directx12_buffer() override { Gfx->Fence->Wait(); DestroyResource(); Gfx = nullptr; };
@@ -212,13 +208,18 @@ struct directx12_texture : public texture
 	directx12_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
 		CreateResource(Backend, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
-		if(Data || Info.UseStagingBuffer)
+		if(Data)
 		{
 			CreateStagingResource();
-			if(Data) Update(Backend, Data);
+			Update(Backend, Data);
+			if(!Info.UseStagingBuffer)
+				DestroyStagingResource();
 		}
-		if(Data && !Info.UseStagingBuffer)
-			DestroyStagingResource();
+		else
+		{
+			if(Info.UseStagingBuffer)
+				CreateStagingResource();
+		}
 
         D3D12_SAMPLER_DESC SamplerDesc = {};
         SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(Info.SamplerInfo.AddressMode);

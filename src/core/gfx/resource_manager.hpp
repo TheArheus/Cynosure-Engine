@@ -5,27 +5,71 @@ class gpu_memory_heap
 	renderer_backend* Gfx = nullptr;
 
 	std::unordered_map<u64, resource*> Resources;
-	//std::unordered_map<u64, resource_descriptor> Descriptors;
+	std::unordered_map<u64, resource_descriptor> Descriptors;
 	std::vector<u64> Unused;
 
-	u64 NextID = 1;
+	u64 NextID = 0;
+
+	buffer* AllocateBufferInternal(const resource_descriptor& Desc)
+	{
+		buffer* NewBuffer = nullptr;
+		switch(Gfx->Type)
+		{
+			case backend_type::vulkan:
+				NewBuffer = new vulkan_buffer(Gfx, Desc.Name, Desc.Data, Desc.Size, Desc.Count, Desc.Usage);
+				break;
+#if _WIN32
+			case backend_type::directx12:
+				NewBuffer = new directx12_buffer(Gfx, Desc.Name, Desc.Data, Desc.Size, Desc.Count, Desc.Usage);
+				break;
+#endif
+		}
+		Resources[Desc.ID] = NewBuffer;
+		return NewBuffer;
+	}
+
+	texture* AllocateTextureInternal(const resource_descriptor& Desc)
+	{
+		texture* NewTexture = nullptr;
+		switch(Gfx->Type)
+		{
+			case backend_type::vulkan:
+				NewTexture = new vulkan_texture(Gfx, Desc.Name, Desc.Data, Desc.Width, Desc.Height, Desc.Depth, Desc.Info);
+				break;
+#if _WIN32
+			case backend_type::directx12:
+				NewTexture = new directx12_texture(Gfx, Desc.Name, Desc.Data, Desc.Width, Desc.Height, Desc.Depth, Desc.Info);
+				break;
+#endif
+		}
+		Resources[Desc.ID] = NewTexture;
+		return NewTexture;
+	}
+
 
 public:
 	gpu_memory_heap(renderer_backend* Backend) : Gfx(Backend) {};
-	~gpu_memory_heap() = default;
-
-	// TODO: Need to think about how to manage the resources which are transient.
-	// Also I need to think how they should be: per-frame or per-pass. And when they will go out of the scope(frame or pass)
-	// I need to think how they will be managed: either they could be reused somehow or deleted in the end of the frame(but this one will be bad if I will allocate the very same buffer every frame)
-
-	// NOTE: this is persistent(per-program) resource management. 
-	// I think the API would be somethink like this.
-	// But, still, need some room for the better implementation
-
-	buffer_descriptor AllocateBuffer(u64 Size, u64 Count, u32 Usage)
+	~gpu_memory_heap() 
 	{
-		buffer* NewBuffer = nullptr;
-		buffer_descriptor Descriptor;
+        for (auto& [ID, Resource] : Resources)
+		{
+			delete Resource;
+        }
+
+        for (auto& [ID, Descriptor] : Descriptors)
+		{
+			if(Descriptor.Data) delete Descriptor.Data;
+			Descriptor.Data = nullptr;
+        }
+
+        Resources.clear();
+        Descriptors.clear();
+        Unused.clear();
+	}
+
+	resource_descriptor CreateBuffer(const std::string& Name, void* Data, u64 Size, u64 Count, u32 Usage)
+	{
+		resource_descriptor Descriptor;
 		if(!Unused.empty())
 		{
 			Descriptor.ID = Unused.back();
@@ -35,30 +79,20 @@ public:
 		{
 			Descriptor.ID = NextID++;
 		}
+		Descriptor.Name  = Name;
+		Descriptor.Data  = new char[Size * Count];
 		Descriptor.Size  = Size;
 		Descriptor.Count = Count;
 		Descriptor.Usage = Usage;
-		if(Resources.find(Descriptor.ID) != Resources.end())
-		{
-			return Descriptor;
-		}
-
-		switch(Gfx->Type)
-		{
-			case backend_type::vulkan:
-				NewBuffer = new vulkan_buffer(Gfx, "", Size, Count, Usage);
-#if _WIN32
-			case backend_type::directx12:
-				NewBuffer = new directx12_buffer(Gfx, "", Size, Count, Usage);
-#endif
-		}
+		Descriptor.Type  = resource_descriptor_type::buffer;
+		memcpy(Descriptor.Data, Data, Size * Count);
+		Descriptors[Descriptor.ID] = Descriptor;
 		return Descriptor;
 	}
 
-	buffer_descriptor AllocateBuffer(u64 Size, u64 Count, u32 Usage, void* Data)
+	resource_descriptor CreateBuffer(const std::string& Name, u64 Size, u64 Count, u32 Usage)
 	{
-		buffer* NewBuffer = nullptr;
-		buffer_descriptor Descriptor;
+		resource_descriptor Descriptor;
 		if(!Unused.empty())
 		{
 			Descriptor.ID = Unused.back();
@@ -68,30 +102,18 @@ public:
 		{
 			Descriptor.ID = NextID++;
 		}
+		Descriptor.Name  = Name;
 		Descriptor.Size  = Size;
 		Descriptor.Count = Count;
 		Descriptor.Usage = Usage;
-		if(Resources.find(Descriptor.ID) != Resources.end())
-		{
-			return Descriptor;
-		}
-
-		switch(Gfx->Type)
-		{
-			case backend_type::vulkan:
-				NewBuffer = new vulkan_buffer(Gfx, "", Data, Size, Count, Usage);
-#if _WIN32
-			case backend_type::directx12:
-				NewBuffer = new directx12_buffer(Gfx, "", Data, Size, Count, Usage);
-#endif
-		}
+		Descriptor.Type  = resource_descriptor_type::buffer;
+		Descriptors[Descriptor.ID] = Descriptor;
 		return Descriptor;
 	}
 
-	texture_descriptor AllocateTexture(u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData)
+	resource_descriptor CreateTexture(const std::string& Name, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& Info)
 	{
-		texture* NewTexture = nullptr;
-		texture_descriptor Descriptor;
+		resource_descriptor Descriptor;
 		if(!Unused.empty())
 		{
 			Descriptor.ID = Unused.back();
@@ -101,31 +123,20 @@ public:
 		{
 			Descriptor.ID = NextID++;
 		}
+		Descriptor.Name   = Name;
+		Descriptor.Data   = new char[Width * Height * Depth * GetPixelSize(Info.Format)];
 		Descriptor.Width  = Width;
 		Descriptor.Height = Height;
 		Descriptor.Depth  = Depth;
-		Descriptor.Info   = InputData;
-		if(Resources.find(Descriptor.ID) != Resources.end())
-		{
-			return Descriptor;
-		}
-
-		switch(Gfx->Type)
-		{
-			case backend_type::vulkan:
-				NewTexture = new vulkan_texture(Gfx, "", nullptr, Width, Height, Depth, InputData);
-#if _WIN32
-			case backend_type::directx12:
-				NewTexture = new directx12_texture(Gfx, "", nullptr, Width, Height, Depth, InputData);
-#endif
-		}
+		Descriptor.Info   = Info;
+		Descriptor.Type   = resource_descriptor_type::texture;
+		Descriptors[Descriptor.ID] = Descriptor;
 		return Descriptor;
 	}
 
-	texture_descriptor AllocateTexture(u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& InputData, void* Data)
+	resource_descriptor CreateTexture(const std::string& Name, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& Info)
 	{
-		texture* NewTexture = nullptr;
-		texture_descriptor Descriptor;
+		resource_descriptor Descriptor;
 		if(!Unused.empty())
 		{
 			Descriptor.ID = Unused.back();
@@ -135,46 +146,81 @@ public:
 		{
 			Descriptor.ID = NextID++;
 		}
+		Descriptor.Name   = Name;
 		Descriptor.Width  = Width;
 		Descriptor.Height = Height;
 		Descriptor.Depth  = Depth;
-		Descriptor.Info   = InputData;
-		if(Resources.find(Descriptor.ID) != Resources.end())
-		{
-			return Descriptor;
-		}
-
-		switch(Gfx->Type)
-		{
-			case backend_type::vulkan:
-				NewTexture = new vulkan_texture(Gfx, "", Data, Width, Height, Depth, InputData);
-#if _WIN32
-			case backend_type::directx12:
-				NewTexture = new directx12_texture(Gfx, "", Data, Width, Height, Depth, InputData);
-#endif
-		}
+		Descriptor.Info   = Info;
+		Descriptor.Type   = resource_descriptor_type::texture;
+		Descriptors[Descriptor.ID] = Descriptor;
 		return Descriptor;
 	}
 
-	[[nodiscard]] buffer* GetBuffer(const buffer_descriptor& Desc)
+	[[nodiscard]] resource_descriptor GetResourceDescriptor(u64 ID)
+	{
+		if(Descriptors.find(ID) != Descriptors.end())
+			return Descriptors[ID];
+		return {};
+	}
+
+	// TODO: if the texture is still not created, create it here so that gather would work correctly here
+	[[nodiscard]] buffer* GetBuffer(const resource_descriptor& Desc)
 	{
 		if(Resources.find(Desc.ID) != Resources.end())
 		{
 			return (buffer*)Resources[Desc.ID];
 		}
-		return nullptr;
+		return AllocateBufferInternal(Desc);
 	}
 
-	[[nodiscard]] texture* GetTexture(const texture_descriptor& Desc)
+	[[nodiscard]] buffer* GetBuffer(u64 ID)
+	{
+		if(Resources.find(ID) != Resources.end())
+		{
+			return (buffer*)Resources[ID];
+		}
+		return AllocateBufferInternal(GetResourceDescriptor(ID));
+	}
+
+	// TODO: if the texture is still not created, create it here so that gather would work correctly here
+	[[nodiscard]] texture* GetTexture(const resource_descriptor& Desc)
 	{
 		if(Resources.find(Desc.ID) != Resources.end())
 		{
 			return (texture*)Resources[Desc.ID];
 		}
-		return nullptr;
+		return AllocateTextureInternal(Desc);
 	}
 
-	void ReleaseBuffer(const buffer_descriptor& Desc)
+	[[nodiscard]] texture* GetTexture(u64 ID)
+	{
+		if(Resources.find(ID) != Resources.end())
+		{
+			return (texture*)Resources[ID];
+		}
+		return AllocateTextureInternal(GetResourceDescriptor(ID));
+	}
+
+	// TODO: if the texture is still not created, create it here so that gather would work correctly here
+	[[nodiscard]] std::vector<texture*> GetTexture(const std::vector<resource_descriptor>& Descs)
+	{
+		std::vector<texture*> Res(Descs.size());
+		for(int i = 0; i < Descs.size(); i++)
+		{
+			resource_descriptor Desc = Descs[i];
+			if(Resources.find(Desc.ID) != Resources.end())
+			{
+				Res[i] = (texture*)Resources[Desc.ID];
+			}
+			else
+			{
+				Res[i] = AllocateTextureInternal(Desc);
+			}
+		}
+		return Res;
+	}
+
+	void ReleaseBuffer(const resource_descriptor& Desc)
 	{
 		auto it = Resources.find(Desc.ID);
 		if(it != Resources.end())
@@ -183,7 +229,7 @@ public:
 		}
 	}
 
-	void ReleaseTexture(const texture_descriptor& Desc)
+	void ReleaseTexture(const resource_descriptor& Desc)
 	{
 		auto it = Resources.find(Desc.ID);
 		if(it != Resources.end())
@@ -192,7 +238,7 @@ public:
 		}
 	}
 
-	void FreeBuffer(const buffer_descriptor& Desc)
+	void FreeBuffer(const resource_descriptor& Desc)
 	{
 		auto it = Resources.find(Desc.ID);
 		if(it != Resources.end())
@@ -204,7 +250,7 @@ public:
 		}
 	}
 
-	void FreeTexture(const texture_descriptor& Desc)
+	void FreeTexture(const resource_descriptor& Desc)
 	{
 		auto it = Resources.find(Desc.ID);
 		if(it != Resources.end())

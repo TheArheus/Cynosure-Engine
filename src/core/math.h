@@ -206,7 +206,7 @@ struct v2
         return E[Idx];
     }
 
-    v2 operator+(const v2& rhs)
+    v2 operator+(const v2& rhs) const
     {
         v2 Result = {};
         Result.x = this->x + rhs.x;
@@ -214,7 +214,7 @@ struct v2
         return Result;
     }
 
-    v2 operator+(const float& rhs)
+    v2 operator+(const float& rhs) const
     {
         v2 Result = {};
         Result.x = this->x + rhs;
@@ -234,7 +234,7 @@ struct v2
         return *this;
     }
 
-	v2 operator-()
+	v2 operator-() const
 	{
         v2 Result = {};
         Result.x = -this->x;
@@ -242,7 +242,7 @@ struct v2
         return Result;
 	}
 
-    v2 operator-(const v2& rhs)
+    v2 operator-(const v2& rhs) const
     {
         v2 Result = {};
         Result.x = this->x - rhs.x;
@@ -250,7 +250,7 @@ struct v2
         return Result;
     }
 
-    v2 operator-(const float& rhs)
+    v2 operator-(const float& rhs) const
     {
         v2 Result = {};
         Result.x = this->x - rhs;
@@ -270,7 +270,7 @@ struct v2
         return *this;
     }
 
-    v2 operator*(const v2& rhs)
+    v2 operator*(const v2& rhs) const
     {
         v2 Result = {};
         Result.x = this->x * rhs.x;
@@ -278,7 +278,7 @@ struct v2
         return Result;
     }
 
-    v2 operator*(const float& rhs)
+    v2 operator*(const float& rhs) const
     {
         v2 Result = {};
         Result.x = this->x * rhs;
@@ -298,7 +298,7 @@ struct v2
         return *this;
     }
 
-    v2 operator/(const v2& rhs)
+    v2 operator/(const v2& rhs) const
     {
         v2 Result = {};
         Result.x = this->x / rhs.x;
@@ -306,7 +306,7 @@ struct v2
         return Result;
     }
 
-    v2 operator/(const float& rhs)
+    v2 operator/(const float& rhs) const
     {
         v2 Result = {};
         Result.x = this->x / rhs;
@@ -418,7 +418,7 @@ struct v3
         return E[Idx];
     }
 
-    v3 operator+(const v3& rhs)
+    v3 operator+(const v3& rhs) const
     {
         v3 Result = {};
         Result.x = this->x + rhs.x;
@@ -427,7 +427,7 @@ struct v3
         return Result;
     }
 
-    v3 operator+(const float& rhs)
+    v3 operator+(const float& rhs) const
     {
         v3 Result = {};
         Result.x = this->x + rhs;
@@ -448,7 +448,7 @@ struct v3
         return *this;
     }
 
-	v3 operator-()
+	v3 operator-() const
 	{
         v3 Result = {};
         Result.x = -this->x;
@@ -457,7 +457,7 @@ struct v3
         return Result;
 	}
 
-    v3 operator-(const v3& rhs)
+    v3 operator-(const v3& rhs) const
     {
         v3 Result = {};
         Result.x = this->x - rhs.x;
@@ -466,7 +466,7 @@ struct v3
         return Result;
     }
 
-    v3 operator-(const float& rhs)
+    v3 operator-(const float& rhs) const
     {
         v3 Result = {};
         Result.x = this->x - rhs;
@@ -487,7 +487,7 @@ struct v3
         return *this;
     }
 
-    v3 operator*(const v3& rhs)
+    v3 operator*(const v3& rhs) const
     {
         v3 Result = {};
         Result.x = this->x * rhs.x;
@@ -496,7 +496,7 @@ struct v3
         return Result;
     }
 
-    v3 operator*(const float& rhs)
+    v3 operator*(const float& rhs) const
     {
         v3 Result = {};
         Result.x = this->x * rhs;
@@ -517,7 +517,7 @@ struct v3
         return *this;
     }
 
-    v3 operator/(const v3& rhs)
+    v3 operator/(const v3& rhs) const
     {
         v3 Result = {};
         Result.x = this->x / rhs.x;
@@ -526,7 +526,7 @@ struct v3
         return Result;
     }
 
-    v3 operator/(const float& rhs)
+    v3 operator/(const float& rhs) const
     {
         v3 Result = {};
         Result.x = this->x / rhs;
@@ -671,12 +671,17 @@ struct v4
     v4& operator=(const swizzle_4d<v3<T>, 3, 3, 3, 3>& rhs) { x = rhs.E[3], y = rhs.E[3], z = rhs.E[3], w = rhs.E[3]; return *this; }
 	v4& operator=(const swizzle_4d<v3<T>, 0, 1, 2, 3>& rhs) { x = rhs.E[0], y = rhs.E[1], z = rhs.E[2], w = rhs.E[3]; return *this; }
 
+    v4<T> operator=(const v4<T>& rhs) { x = rhs.x; y = rhs.y; z = rhs.z; w = rhs.w; return *this; }
+
+    template<typename U>
+    v4 operator=(const v4<U>& rhs) { x = rhs.x; y = rhs.y; z = rhs.z; w = rhs.w; return *this; }
+
     T& operator[](uint32_t Idx)
     {
         return E[Idx];
     }
 
-    v4 operator+(const v4& rhs)
+    v4 operator+(const v4& rhs) const
     {
         v4 Result = {};
         Result.x = this->x + rhs.x;
@@ -686,7 +691,7 @@ struct v4
         return Result;
     }
 
-    v4 operator+(const float& rhs)
+    v4 operator+(const float& rhs) const
     {
         v4 Result = {};
         Result.x = this->x + rhs;
@@ -708,7 +713,7 @@ struct v4
         return *this;
     }
 
-	v4 operator-()
+	v4 operator-() const
 	{
         v4 Result = {};
         Result.x = -this->x;
@@ -718,7 +723,7 @@ struct v4
         return Result;
 	}
 
-    v4 operator-(const v4& rhs)
+    v4 operator-(const v4& rhs) const
     {
         v4 Result = {};
         Result.x = this->x - rhs.x;
@@ -728,7 +733,7 @@ struct v4
         return Result;
     }
 
-    v4 operator-(const float& rhs)
+    v4 operator-(const float& rhs) const
     {
         v4 Result = {};
         Result.x = this->x - rhs;
@@ -750,7 +755,7 @@ struct v4
         return *this;
     }
 
-    v4 operator*(const v4& rhs)
+    v4 operator*(const v4& rhs) const
     {
         v4 Result = {};
         Result.x = this->x * rhs.x;
@@ -760,7 +765,7 @@ struct v4
         return Result;
     }
 
-    v4 operator*(const float& rhs)
+    v4 operator*(const float& rhs) const
     {
         v4 Result = {};
         Result.x = this->x * rhs;
@@ -782,7 +787,7 @@ struct v4
         return *this;
     }
 
-    v4 operator/(const v4& rhs)
+    v4 operator/(const v4& rhs) const
     {
         v4 Result = {};
         Result.x = this->x / rhs.x;
@@ -792,7 +797,7 @@ struct v4
         return Result;
     }
 
-    v4 operator/(const float& rhs)
+    v4 operator/(const float& rhs) const
     {
         v4 Result = {};
         Result.x = this->x / rhs;
@@ -811,25 +816,6 @@ struct v4
     v4& operator/=(const float& rhs)
     {
         *this = *this / rhs;
-        return *this;
-    }
-
-    v4<T> operator=(const v4<T>& rhs)
-    {
-        this->x = rhs.x;
-        this->y = rhs.y;
-        this->z = rhs.z;
-        this->w = rhs.w;
-        return *this;
-    }
-
-    template<typename U>
-    v4 operator=(const v4<U>& rhs)
-    {
-        this->x = rhs.x;
-        this->y = rhs.y;
-        this->z = rhs.z;
-        this->w = rhs.w;
         return *this;
     }
 
@@ -1827,12 +1813,14 @@ struct quat
 	}
 };
 
-quat operator+(quat lhs, quat rhs)
+inline quat 
+operator+(quat lhs, quat rhs)
 {
 	return quat(lhs.v.x + rhs.v.x, lhs.v.y + rhs.v.y, lhs.v.z + rhs.v.z, lhs.v.w + rhs.v.w);
 }
 
-quat operator*(quat lhs, quat rhs)
+inline quat 
+operator*(quat lhs, quat rhs)
 {
 	vec3 lhsq = lhs.v.xyz;
 	vec3 rhsq = rhs.v.xyz;

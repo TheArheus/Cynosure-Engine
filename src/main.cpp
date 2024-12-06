@@ -28,6 +28,11 @@
 //			Buffers could live all the time only if they were empty created. If they were created via data type, then they could live only one game cycle?
 //		Basically, there will be 2 types of lifecycle resources: transient(per render-pass or per-frame) and persistent(throughout of the program)
 //		Garbage Collector-like system for those resources(transient to be destroyed if several frames wasn't used and persistent to be destroyed at the end of the program)
+//
+// TODO: Need to think about how to manage the resources which are transient.
+// Also I need to think how they should be: per-frame or per-pass. And when they will go out of the scope(frame or pass)
+// I need to think how they will be managed: either they could be reused somehow or deleted in the end of the frame(but this one will be bad if I will allocate the very same buffer every frame)
+
 
 // TODO: Sky
 // TODO: Image Based Lighting

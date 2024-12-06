@@ -63,7 +63,7 @@ struct directx12_command_list : public command_list
 	void SetDepthTarget(texture* Target, vec2 Clear = {1, 0}) override;
 	void SetStencilTarget(texture* Target, vec2 Clear = {1, 0}) override;
 
-	void BindShaderParameters(void* Data) override;
+	void BindShaderParameters(const array<binding_packet>& Data) override;
 
 	void DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount) override;
 	void DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize) override;
@@ -71,6 +71,7 @@ struct directx12_command_list : public command_list
 
 	void FillBuffer(buffer* Buffer, u32 Value) override;
 	void FillTexture(texture* Texture, vec4 Value) override;
+	void FillTexture(texture* Texture, float Depth, u32 Stencil) override;
 
 	void CopyImage(texture* Dst, texture* Src) override;
 
@@ -232,6 +233,18 @@ public:
 
 	directx12_resource_binder(renderer_backend* GeneralBackend, general_context* ContextToUse)
 	{
+		SetContext(ContextToUse);
+	}
+
+	directx12_resource_binder(const directx12_resource_binder&) = delete;
+	directx12_resource_binder operator=(const directx12_resource_binder&) = delete;
+
+	void DestroyObject() override 
+	{
+	}
+
+	void SetContext(general_context* ContextToUse) override
+	{
 		if(ContextToUse->Type == pass_type::graphics)
 		{
 			directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(ContextToUse);
@@ -254,22 +267,15 @@ public:
 		}
 	}
 
-	directx12_resource_binder(const directx12_resource_binder&) = delete;
-	directx12_resource_binder operator=(const directx12_resource_binder&) = delete;
-
-	void DestroyObject() override 
-	{
-	}
-
-	void AppendStaticStorage(general_context* Context, void* Data) override;
+	void AppendStaticStorage(general_context* Context, const array<binding_packet>& Data, u32 Offset) override {};
 	void BindStaticStorage(renderer_backend* GeneralBackend) override {};
 
-	void SetStorageBufferView(buffer* Buffer, u32 Set = 0) override;
-	void SetUniformBufferView(buffer* Buffer, u32 Set = 0) override;
+	void SetStorageBufferView(resource* Buffer, u32 Set = 0) override;
+	void SetUniformBufferView(resource* Buffer, u32 Set = 0) override;
 
-	void SetSampledImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetStorageImage(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-	void SetImageSampler(u32 Count, const array<texture*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetSampledImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetStorageImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
+	void SetImageSampler(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 
 	ID3D12Device6* Device = nullptr;
 	std::map<u32, u32> SetIndices;

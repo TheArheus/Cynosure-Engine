@@ -2,27 +2,16 @@
 
 struct ssao : public shader_compute_view_context
 {
-	struct parameter_type
-	{
-		buffer_ref WorldUpdateBuffer;
-		buffer_ref RandomSamplesBuffer;
-		texture_ref NoiseTexture;
-		texture_ref DepthTarget;
-		texture_ref GBuffer;
-		texture_ref Output;
-	};
-
-#if 1
 	shader_input() parameters
 	{
-		global_world_data WorldUpdate;
-		vec4 RandomSamples[64];
-		texture_ref NoiseTexture;
-		texture_ref DepthTarget;
-		texture_ref GBuffer;
-		texture_ref Output;
+		gpu_buffer  WorldUpdateBuffer;
+		gpu_buffer  RandomSamplesBuffer;
+		gpu_texture NoiseTexture;
+		gpu_texture DepthTarget;
+		gpu_texture_array GBuffer;
+		gpu_texture Output;
 	};
-#else
+#if 0
 	shader_input_begin(parameters)
 		shader_param_var(global_world_data, WorldUpdate);
 		shader_param_var(vec4, RandomSamples[64]);
