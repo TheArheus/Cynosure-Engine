@@ -47,7 +47,7 @@
 #define VK_NO_PROTOTYPES
 #endif
 //#include <vulkan/vulkan.h>
-#include <core/vendor/Volk/volk.h>
+#include <Volk/volk.h>
 
 // Initialization data, for ImGui_ImplVulkan_Init()
 // [Please zero-clear before use!]

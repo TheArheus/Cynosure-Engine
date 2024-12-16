@@ -1,11 +1,16 @@
 
+#include <D3D12MemAlloc.cpp>
+
 directx12_backend::
-directx12_backend(window* Window)
+directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 {
 	Type = backend_type::directx12;
 
+	imguiContext = _imguiContext;
+	ImGui::SetCurrentContext(imguiContext);
+
 	RECT WindowRect;
-	GetClientRect(Window->Handle, &WindowRect);
+	GetClientRect(Handle, &WindowRect);
 	u32 ClientWidth  = WindowRect.right - WindowRect.left;
 	u32 ClientHeight = WindowRect.bottom - WindowRect.top;
 
@@ -77,7 +82,7 @@ directx12_backend(window* Window)
 		SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		SwapChainDesc.SampleDesc.Count = 1;
 		SwapChainDesc.SampleDesc.Quality = 0;
-		Factory->CreateSwapChainForHwnd(CommandQueue->Handle.Get(), Window->Handle, &SwapChainDesc, nullptr, nullptr, &_SwapChain);
+		Factory->CreateSwapChainForHwnd(CommandQueue->Handle.Get(), Handle, &SwapChainDesc, nullptr, nullptr, &_SwapChain);
 		_SwapChain.As(&SwapChain);
 
 		SwapchainImages.resize(2);
@@ -88,6 +93,7 @@ directx12_backend(window* Window)
 	DepthStencilHeap = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 	ResourcesHeap    = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	SamplersHeap     = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+	UpdateHeap       = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 
 	ImGuiResourcesHeap = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
 
@@ -95,6 +101,7 @@ directx12_backend(window* Window)
 	NAME_DX12_OBJECT_CSTR(DepthStencilHeap->Handle.Get(), "GlobalDepthStencilHeap");
 	NAME_DX12_OBJECT_CSTR(ResourcesHeap->Handle.Get(), "GlobalResourcesHeap");
 	NAME_DX12_OBJECT_CSTR(SamplersHeap->Handle.Get(), "GlobalSamplersHeap");
+	NAME_DX12_OBJECT_CSTR(UpdateHeap->Handle.Get(), "GlobalUpdateHeap");
 
 	{
 		D3D12_RENDER_TARGET_VIEW_DESC ColorTargetViewDesc = {};
@@ -139,7 +146,10 @@ directx12_backend(window* Window)
 void directx12_backend::
 DestroyObject() 
 {
+	ImGui::SetCurrentContext(imguiContext);
     ImGui_ImplDX12_Shutdown();
+
+	imguiContext = nullptr;
 
 	delete ColorTargetHeap;
 	ColorTargetHeap = nullptr;
@@ -149,6 +159,8 @@ DestroyObject()
 	ResourcesHeap = nullptr;
 	delete SamplersHeap;
 	SamplersHeap = nullptr;
+	delete UpdateHeap;
+	UpdateHeap = nullptr;
 
 	delete ImGuiResourcesHeap;
 	ImGuiResourcesHeap = nullptr;
@@ -567,26 +579,30 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					DescriptorType = GetDXSpvDescriptorType(ShaderInfo, VariableType, ImageType, StorageClass, NonWritable);
 				}
 
-				ParameterLayout[Var.Set][Var.Binding].IsWritable = !NonWritable;
 				if(DescriptorType == dx12_descriptor_type::unordered_access)
 				{
 					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::buffer_storage;
+					ParameterLayout[Var.Set][Var.Binding].IsWritable = true;
 				}
 				else if(DescriptorType == dx12_descriptor_type::shader_resource || DescriptorType == dx12_descriptor_type::constant_buffer)
 				{
 					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::buffer_uniform;
+					ParameterLayout[Var.Set][Var.Binding].IsWritable = false;
 				}
 				else if(DescriptorType == dx12_descriptor_type::image)
 				{
 					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::texture_storage;
+					ParameterLayout[Var.Set][Var.Binding].IsWritable = true;
 				}
 				else if(DescriptorType == dx12_descriptor_type::sampler)
 				{
 					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
+					ParameterLayout[Var.Set][Var.Binding].IsWritable = false;
 				}
 				else if(DescriptorType == dx12_descriptor_type::combined_image_sampler)
 				{
 					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
+					ParameterLayout[Var.Set][Var.Binding].IsWritable = false;
 				}
 
 				if((DescriptorType == dx12_descriptor_type::image || 

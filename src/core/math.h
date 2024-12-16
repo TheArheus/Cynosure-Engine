@@ -364,6 +364,78 @@ struct vech2 : v2<uint16_t>
 };
 
 template<typename T>
+inline v2<T>
+operator+(const float& lhs, const v2<T>& rhs)
+{
+    v2<T> Result = {};
+    Result.x = rhs.x + lhs;
+    Result.y = rhs.y + lhs;
+    return Result;
+}
+
+template<typename T>
+inline v2<T>
+operator+=(const float& lhs, v2<T> rhs)
+{
+    lhs = lhs + rhs;
+    return lhs;
+}
+
+template<typename T>
+inline v2<T>
+operator-(const float& lhs, const v2<T>& rhs)
+{
+    v2<T> Result = {};
+    Result.x = rhs.x - lhs;
+    Result.y = rhs.y - lhs;
+    return Result;
+}
+
+template<typename T>
+inline v2<T>
+operator-=(const float& lhs, v2<T> rhs)
+{
+    lhs = lhs - rhs;
+    return lhs;
+}
+
+template<typename T>
+inline v2<T>
+operator*(const float& lhs, const v2<T>& rhs)
+{
+    v2<T> Result = {};
+    Result.x = rhs.x * lhs;
+    Result.y = rhs.y * lhs;
+    return Result;
+}
+
+template<typename T>
+inline v2<T>
+operator*=(const float& lhs, v2<T> rhs)
+{
+    lhs = lhs * rhs;
+    return lhs;
+}
+
+template<typename T>
+inline v2<T>
+operator/(const float& lhs, const v2<T>& rhs)
+{
+    v2<T> Result = {};
+    Result.x = rhs.x / lhs;
+    Result.y = rhs.y / lhs;
+    return Result;
+}
+
+template<typename T>
+inline v2<T>
+operator/=(const float& lhs, v2<T> rhs)
+{
+    lhs = lhs / rhs;
+    return lhs;
+}
+
+template<typename T>
 struct v4;
 template<typename T>
 struct v3
@@ -604,6 +676,82 @@ struct vech3 : v3<uint16_t>
         z = _z;
     }
 };
+
+template<typename T>
+inline v3<T>
+operator+(const float& lhs, const v3<T>& rhs)
+{
+    v3<T> Result = {};
+    Result.x = rhs.x + lhs;
+    Result.y = rhs.y + lhs;
+    Result.z = rhs.z + lhs;
+    return Result;
+}
+
+template<typename T>
+inline v3<T>
+operator+=(const float& lhs, v3<T> rhs)
+{
+    lhs = lhs + rhs;
+    return lhs;
+}
+
+template<typename T>
+inline v3<T>
+operator-(const float& lhs, const v3<T>& rhs)
+{
+    v3<T> Result = {};
+    Result.x = rhs.x - lhs;
+    Result.y = rhs.y - lhs;
+    Result.z = rhs.z - lhs;
+    return Result;
+}
+
+template<typename T>
+inline v3<T>
+operator-=(const float& lhs, v3<T> rhs)
+{
+    lhs = lhs - rhs;
+    return lhs;
+}
+
+template<typename T>
+inline v3<T>
+operator*(const float& lhs, const v3<T>& rhs)
+{
+    v3<T> Result = {};
+    Result.x = rhs.x * lhs;
+    Result.y = rhs.y * lhs;
+    Result.z = rhs.z * lhs;
+    return Result;
+}
+
+template<typename T>
+inline v3<T>
+operator*=(const float& lhs, v3<T> rhs)
+{
+    lhs = lhs * rhs;
+    return lhs;
+}
+
+template<typename T>
+inline v3<T>
+operator/(const float& lhs, const v3<T>& rhs)
+{
+    v3<T> Result = {};
+    Result.x = rhs.x / lhs;
+    Result.y = rhs.y / lhs;
+    Result.z = rhs.z / lhs;
+    return Result;
+}
+
+template<typename T>
+inline v3<T>
+operator/=(const float& lhs, v3<T> rhs)
+{
+    lhs = lhs / rhs;
+    return lhs;
+}
 
 template<typename T>
 struct v4
@@ -874,31 +1022,59 @@ struct vech4 : v4<uint16_t>
 
 template<typename T>
 inline v4<T>
-operator*(const v4<T>& lhs, const v4<T>& rhs)
+operator+(const float& lhs, const v4<T>& rhs)
 {
     v4<T> Result = {};
-    Result.x = lhs.x * rhs.x;
-    Result.y = lhs.y * rhs.y;
-    Result.z = lhs.z * rhs.z;
-    Result.w = lhs.w * rhs.w;
+    Result.x = rhs.x + lhs;
+    Result.y = rhs.y + lhs;
+    Result.z = rhs.z + lhs;
+    Result.w = rhs.w + lhs;
     return Result;
 }
 
 template<typename T>
 inline v4<T>
-operator*(const v4<T>& lhs, const float& rhs)
+operator+=(const float& lhs, v4<T> rhs)
+{
+    lhs = lhs + rhs;
+    return lhs;
+}
+
+template<typename T>
+inline v4<T>
+operator-(const float& lhs, const v4<T>& rhs)
 {
     v4<T> Result = {};
-    Result.x = lhs.x * rhs;
-    Result.y = lhs.y * rhs;
-    Result.z = lhs.z * rhs;
-    Result.w = lhs.w * rhs;
+    Result.x = rhs.x - lhs;
+    Result.y = rhs.y - lhs;
+    Result.z = rhs.z - lhs;
+    Result.w = rhs.w - lhs;
     return Result;
 }
 
 template<typename T>
 inline v4<T>
-operator*=(v4<T> lhs, const v4<T>& rhs)
+operator-=(const float& lhs, v4<T> rhs)
+{
+    lhs = lhs - rhs;
+    return lhs;
+}
+
+template<typename T>
+inline v4<T>
+operator*(const float& lhs, const v4<T>& rhs)
+{
+    v4<T> Result = {};
+    Result.x = rhs.x * lhs;
+    Result.y = rhs.y * lhs;
+    Result.z = rhs.z * lhs;
+    Result.w = rhs.w * lhs;
+    return Result;
+}
+
+template<typename T>
+inline v4<T>
+operator*=(const float& lhs, v4<T> rhs)
 {
     lhs = lhs * rhs;
     return lhs;
@@ -906,9 +1082,21 @@ operator*=(v4<T> lhs, const v4<T>& rhs)
 
 template<typename T>
 inline v4<T>
-operator*=(v4<T> lhs, const float& rhs)
+operator/(const float& lhs, const v4<T>& rhs)
 {
-    lhs = lhs * rhs;
+    v4<T> Result = {};
+    Result.x = rhs.x / lhs;
+    Result.y = rhs.y / lhs;
+    Result.z = rhs.z / lhs;
+    Result.w = rhs.w / lhs;
+    return Result;
+}
+
+template<typename T>
+inline v4<T>
+operator/=(const float& lhs, v4<T> rhs)
+{
+    lhs = lhs / rhs;
     return lhs;
 }
 

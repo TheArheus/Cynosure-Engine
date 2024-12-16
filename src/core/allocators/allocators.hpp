@@ -138,7 +138,7 @@ private:
 	std::vector<std::unique_ptr<linear_allocator>> MemoryBlocks;
 };
 
-static global_memory_allocator Allocator;
+inline global_memory_allocator Allocator;
 
 #define PushStructConstruct(Type, ...) new (Allocator.Allocate(sizeof(Type), alignof(Type))) Type(__VA_ARGS__)
 #define PushArrayConstruct(Type, Count, ...) \

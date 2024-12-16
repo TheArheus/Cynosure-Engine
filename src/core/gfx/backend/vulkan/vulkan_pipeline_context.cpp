@@ -952,13 +952,13 @@ SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight)
 {
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
 
-	VkViewport Viewport = {(float)StartX, (float)(RenderHeight - StartY), (float)RenderWidth, -(float)RenderHeight, 0, 1};
+	VkViewport Viewport = {(float)StartX, (float)(Gfx->Height - StartY), (float)RenderWidth, -(float)RenderHeight, 0, 1};
 	vkCmdSetViewport(CommandList, 0, 1, &Viewport);
 
-	VkRect2D Scissor = {{(s32)StartX, (s32)StartY}, {RenderWidth, RenderHeight}};
+	VkRect2D Scissor = {{(s32)StartX, (s32)(Gfx->Height - (RenderHeight + StartY))}, {RenderWidth, RenderHeight}};
 	vkCmdSetScissor(CommandList, 0, 1, &Scissor);
 
-	RenderingInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
+	RenderingInfo.renderArea = RenderPassInfo.renderArea = {{(s32)StartX, (s32)(Gfx->Height - (RenderHeight + StartY))}, {RenderWidth, RenderHeight}};
 	RenderingInfo.layerCount = 1;
 	//RenderingInfo.viewMask   = EnableMultiview * (1 << Face);
 	FramebufferCreateInfo.renderPass = Context->RenderPass;
@@ -966,8 +966,6 @@ SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight)
 	FramebufferCreateInfo.height = RenderHeight;
 	FramebufferCreateInfo.layers = 1;
 	RenderPassInfo.renderPass = Context->RenderPass;
-	RenderPassInfo.renderArea.extent.width = RenderWidth;
-	RenderPassInfo.renderArea.extent.height = RenderHeight;
 }
 
 void vulkan_command_list::
@@ -1306,9 +1304,9 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, false, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, true, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
 				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
@@ -1580,9 +1578,9 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, false, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, true, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
 				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)

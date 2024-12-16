@@ -235,7 +235,7 @@ Present()
 	Gfx->CommandQueue->Execute(&CommandList);
 	Gfx->Fence->Flush(Gfx->CommandQueue);
 
-	Gfx->SwapChain->Present(0, 0);
+	Gfx->SwapChain->Present(0, Gfx->TearingSupport * DXGI_PRESENT_ALLOW_TEARING);
 	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
 }
 
@@ -314,7 +314,6 @@ Update(texture* TextureToUpdate, void* Data)
 
 	void* CpuPtr = nullptr;
 	Texture->TempHandle->Map(0, nullptr, &CpuPtr);
-
 	for (u32 z = 0; z < Texture->Depth;  z++)
 	{
 		for (u32 y = 0; y < Texture->Height; y++)
@@ -324,7 +323,6 @@ Update(texture* TextureToUpdate, void* Data)
 		  memcpy(Dst, Src, GetPixelSize(Texture->Info.Format) * Texture->Width);
 		}
 	}
-
 	Texture->TempHandle->Unmap(0, 0);
 
 	D3D12_PLACED_SUBRESOURCE_FOOTPRINT TextureFootprint = {};
@@ -397,10 +395,10 @@ SetConstant(void* Data, size_t Size)
 void directx12_command_list::
 SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight)
 {
-	D3D12_VIEWPORT Viewport = {(r32)StartX, (r32)(RenderHeight - StartY), (r32)RenderWidth, -(r32)RenderHeight, 0, 1};
+	D3D12_VIEWPORT Viewport = {(r32)StartX, (r32)(Gfx->Height - StartY), (r32)RenderWidth, -(r32)RenderHeight, 0, 1};
 	CommandList->RSSetViewports(1, &Viewport);
 
-	D3D12_RECT Scissors = {(LONG)StartX, (LONG)StartY, (LONG)RenderWidth, (LONG)RenderHeight};
+	D3D12_RECT Scissors = {(LONG)StartX, (LONG)(Gfx->Height - (RenderHeight + StartY)), (LONG)RenderWidth, (LONG)RenderHeight};
 	CommandList->RSSetScissorRects(1, &Scissors);
 }
 
@@ -712,20 +710,51 @@ FillBuffer(buffer* Buffer, u32 Value)
 }
 
 void directx12_command_list::
-FillTexture(texture* Texture, vec4 Value)
+FillTexture(texture* TextureToFill, vec4 Value)
 {
-	std::vector<vec4> Fill(Texture->Size / sizeof(vec4), Value);
-	Texture->Update(Fill.data(), this);
+	SetImageBarriers({{TextureToFill, AF_ColorAttachmentWrite, barrier_state::color_attachment, SUBRESOURCES_ALL, 0}});
+	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToFill);
+	for(u32 MipIdx = 0; MipIdx < Texture->Info.MipLevels; MipIdx++)
+		CommandList->ClearRenderTargetView(Texture->RenderTargetViews[MipIdx], Value.E, 0, nullptr);
 }
 
 void directx12_command_list::
-FillTexture(texture* Texture, float Depth, u32 Stencil)
+FillTexture(texture* TextureToFill, float Depth, u32 Stencil)
 {
+	SetImageBarriers({{TextureToFill, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, 0}});
+	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToFill);
+	for(u32 MipIdx = 0; MipIdx < Texture->Info.MipLevels; MipIdx++)
+		CommandList->ClearDepthStencilView(DepthStencilTarget, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, Depth, Stencil, 0, nullptr);
 }
 
 void directx12_command_list::
 CopyImage(texture* Dst, texture* Src)
 {
+	directx12_texture* SrcTexture = static_cast<directx12_texture*>(Src);
+	directx12_texture* DstTexture = static_cast<directx12_texture*>(Dst);
+
+	SetImageBarriers({{SrcTexture, AF_TransferWrite, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}, 
+					  {DstTexture, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
+
+    D3D12_TEXTURE_COPY_LOCATION DstLocation = {};
+    DstLocation.pResource = DstTexture->Handle.Get();
+    DstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    DstLocation.SubresourceIndex = SUBRESOURCES_ALL;
+
+    D3D12_TEXTURE_COPY_LOCATION SrcLocation = {};
+    SrcLocation.pResource = SrcTexture->Handle.Get();
+    SrcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    SrcLocation.SubresourceIndex = SUBRESOURCES_ALL;
+
+    D3D12_BOX SrcBox = {};
+    SrcBox.left = 0;
+    SrcBox.top = 0;
+    SrcBox.front = 0;
+    SrcBox.right = static_cast<LONG>(Dst->Width);
+    SrcBox.bottom = static_cast<LONG>(Dst->Height);
+    SrcBox.back = static_cast<LONG>(Dst->Depth);
+
+    CommandList->CopyTextureRegion(&DstLocation, 0, 0, 0, &SrcLocation, &SrcBox);
 }
 
 void directx12_command_list::

@@ -178,6 +178,52 @@ struct reflect<generate_all::parameters>
     }
 };
 
+member_definition MembersOf__full_screen_pass_color_parameters[] = 
+{
+    {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(full_screen_pass_color::parameters, Vertices), 1},
+};
+
+template<>
+struct reflect<full_screen_pass_color::parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__full_screen_pass_color_parameters, sizeof(MembersOf__full_screen_pass_color_parameters)/sizeof(MembersOf__full_screen_pass_color_parameters[0]) };
+        return &Meta;
+    }
+};
+
+member_definition MembersOf__full_screen_pass_circle_parameters[] = 
+{
+    {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(full_screen_pass_circle::parameters, Vertices), 1},
+};
+
+template<>
+struct reflect<full_screen_pass_circle::parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__full_screen_pass_circle_parameters, sizeof(MembersOf__full_screen_pass_circle_parameters)/sizeof(MembersOf__full_screen_pass_circle_parameters[0]) };
+        return &Meta;
+    }
+};
+
+member_definition MembersOf__full_screen_pass_texture_parameters[] = 
+{
+    {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(full_screen_pass_texture::parameters, Vertices), 1},
+    {0, meta_type::gpu_texture, "Texture", sizeof(gpu_texture), offsetof(full_screen_pass_texture::parameters, Texture), 1},
+};
+
+template<>
+struct reflect<full_screen_pass_texture::parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__full_screen_pass_texture_parameters, sizeof(MembersOf__full_screen_pass_texture_parameters)/sizeof(MembersOf__full_screen_pass_texture_parameters[0]) };
+        return &Meta;
+    }
+};
+
 member_definition MembersOf__debug_raster_parameters[] = 
 {
     {0, meta_type::gpu_buffer, "WorldUpdateBuffer", sizeof(gpu_buffer), offsetof(debug_raster::parameters, WorldUpdateBuffer), 1},

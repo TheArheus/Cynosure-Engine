@@ -1,5 +1,9 @@
 #pragma once
 
+#include "common.hpp"
+#include "renderer_utils.hpp"
+#include "resource_manager.hpp"
+
 struct shader_pass
 {
 	string Name;
@@ -11,7 +15,6 @@ struct shader_pass
 
 	array<u64> Inputs;
 	array<u64> Outputs;
-	array<u64> Statics;
 };
 
 struct resource_lifetime
@@ -27,124 +30,42 @@ class global_graphics_context
 
 	using execute_func = std::function<void(command_list*)>;
 
-public:
-	global_graphics_context() = default;
-	global_graphics_context(renderer_backend* NewBackend);
-	~global_graphics_context() { DestroyObject(); };
-
-	global_graphics_context(global_graphics_context&& Oth) noexcept;
-	global_graphics_context& operator=(global_graphics_context&& Oth) noexcept;
-
-	void DestroyObject();
-
-	resource_binder* CreateResourceBinder()
-	{
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_resource_binder(Backend);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_resource_binder(Backend);
-#endif
-			default:
-				return nullptr;
-		}
-	}
-
-	command_list* CreateGlobalPipelineContext()
-	{
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_command_list(Backend);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_command_list(Backend);
-#endif
-			default:
-				return nullptr;
-		}
-	}
-
-	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList, const std::vector<texture*>& ColorTargets, 
-										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
-	{
-		std::vector<image_format> ColorTargetFormats;
-		for(u32 FormatIdx = 0; FormatIdx < ColorTargets.size(); ++FormatIdx)
-		{
-			ColorTargetFormats.push_back(ColorTargets[FormatIdx]->Info.Format);
-		}
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargetFormats, InputData, ShaderDefines);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargetFormats, InputData, ShaderDefines);
-#endif
-			default:
-				return nullptr;
-		}
-	}
+	resource_binder* CreateResourceBinder();
+	command_list* CreateGlobalPipelineContext();
 
 	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList, const std::vector<image_format>& ColorTargets, 
-										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
-	{
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, ColorTargets, InputData, ShaderDefines);
-#endif
-			default:
-				return nullptr;
-		}
-	}
+										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
+	compute_context* CreateComputeContext(const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
 
-	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList,
-										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {})
-	{
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_render_context(Backend, LoadOp, StoreOp, ShaderList, {}, InputData, ShaderDefines);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_render_context(Backend, LoadOp, StoreOp, ShaderList, {}, InputData, ShaderDefines);
-#endif
-			default:
-				return nullptr;
-		}
-	}
+public:
+	RENDERER_API global_graphics_context() = default;
 
-	compute_context* CreateComputeContext(const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {})
-	{
-		switch(Backend->Type)
-		{
-			case backend_type::vulkan:
-				return new vulkan_compute_context(Backend, Shader, ShaderDefines);
-#if _WIN32
-			case backend_type::directx12:
-				return new directx12_compute_context(Backend, Shader, ShaderDefines);
+#ifdef _WIN32
+	RENDERER_API global_graphics_context(backend_type _BackendType, HINSTANCE Instance, HWND Window, ImGuiContext* imguiContext);
+#else
+	RENDERER_API global_graphics_context(backend_type _BackendType, GLFWwindow* Window);
 #endif
-			default:
-				return nullptr;
-		}
-	}
 
-	general_context* GetOrCreateContext(shader_pass* Pass);
-	void SetContext(shader_pass* Pass, command_list* Context);
+	RENDERER_API ~global_graphics_context() { DestroyObject(); };
+
+	RENDERER_API global_graphics_context(global_graphics_context&& Oth) noexcept;
+	RENDERER_API global_graphics_context& operator=(global_graphics_context&& Oth) noexcept;
+
+	RENDERER_API void DestroyObject();
+
+	RENDERER_API general_context* GetOrCreateContext(shader_pass* Pass);
+	RENDERER_API void SetContext(shader_pass* Pass, command_list* Context);
 
 	template<typename context_type, typename param_type>
-	shader_pass* AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec);
+	RENDERER_API void AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec);
+	RENDERER_API void AddTransferPass(std::string Name, execute_func Exec);
 
-	shader_pass* AddTransferPass(std::string Name, execute_func Exec);
+	RENDERER_API void PushCircle(vec2 Pos, float Radius, vec3 Color);
+	RENDERER_API void PushRectangle(vec2 Pos, vec2 Dims, vec3 Color);
+	RENDERER_API void PushRectangle(vec2 Pos, vec2 Dims, resource_descriptor Texture);
 
-	void Compile();
-	void Execute(scene_manager& SceneManager);
+	RENDERER_API void Compile();
+	RENDERER_API void Execute();
 
 	renderer_backend* Backend;
 
@@ -164,29 +85,33 @@ public:
 	//////////////////////////////////////////////////////
 	u32 BackBufferIndex = 0;
 
-	resource_descriptor PoissonDiskBuffer;
-	resource_descriptor RandomSamplesBuffer;
+	resource_descriptor QuadVertexBuffer;
+	resource_descriptor QuadIndexBuffer;
 
 	resource_descriptor GfxColorTarget[2];
 	resource_descriptor GfxDepthTarget;
-	resource_descriptor DebugCameraViewDepthTarget;
-
-	resource_descriptor VoxelGridTarget;
-	resource_descriptor VoxelGridNormal;
-	resource_descriptor HdrColorTarget;
-	resource_descriptor BrightTarget;
-	resource_descriptor TempBrTarget;
-
-	std::vector<resource_descriptor> GlobalShadow;
-	std::vector<resource_descriptor> GBuffer;
-
-	resource_descriptor AmbientOcclusionData;
-	resource_descriptor BlurTemp;
-	resource_descriptor DepthPyramid;
-	resource_descriptor RandomAnglesTexture;
-	resource_descriptor NoiseTexture;
-
-	resource_descriptor VolumetricLightOut;
-	resource_descriptor IndirectLightOut;
-	resource_descriptor LightColor;
 };
+
+template<typename context_type, typename param_type>
+void global_graphics_context::
+AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec)
+{
+	shader_pass* NewPass = PushStruct(shader_pass);
+	NewPass->Name = string(Name);
+	NewPass->Type = Type;
+	NewPass->ReflectionData = reflect<param_type>::Get();
+
+	NewPass->Parameters = PushStruct(param_type);
+	*((param_type*)NewPass->Parameters) = Parameters;
+
+	Passes.push_back(NewPass);
+	Dispatches[NewPass] = Exec;
+	PassToContext.emplace(NewPass, std::type_index(typeid(context_type)));
+
+	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));
+
+	if(FindIt == ContextMap.end())
+	{
+		GeneralShaderViewMap[std::type_index(typeid(context_type))] = std::make_unique<context_type>();
+	}
+}

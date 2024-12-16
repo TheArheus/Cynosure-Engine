@@ -2,6 +2,16 @@
 
 #include "event_bus.hpp"
 
+struct collision_event : public event
+{
+	entity A;
+	entity B;
+	vec2 Normal;
+	float Depth;
+
+	collision_event(entity NewA, entity NewB, vec2 NewNormal, float NewDepth) : A(NewA), B(NewB), Normal(NewNormal), Depth(NewDepth) {}
+};
+
 struct key_down_event : public event
 {
 	u16 Code;

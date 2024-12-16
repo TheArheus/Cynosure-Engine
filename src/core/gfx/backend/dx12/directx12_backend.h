@@ -4,7 +4,8 @@
 class descriptor_heap
 {
 	u32 Size = 0;
-	u32 Next = 0;
+	u32 NextCpu = 0;
+	u32 NextGpu = 0;
 
 public:
 	descriptor_heap() = default;
@@ -24,7 +25,8 @@ public:
 
     descriptor_heap(descriptor_heap&& Other) noexcept
         : Size(Other.Size),
-          Next(Other.Next),
+          NextCpu(Other.NextCpu),
+          NextGpu(Other.NextGpu),
           AllocInc(Other.AllocInc),
           GpuHandle(Other.GpuHandle),
           GpuBegin(Other.GpuBegin),
@@ -46,7 +48,8 @@ public:
             }
 
             Size = Other.Size;
-            Next = Other.Next;
+            NextCpu = Other.NextCpu;
+            NextGpu = Other.NextGpu;
             AllocInc = Other.AllocInc;
             GpuHandle = Other.GpuHandle;
             GpuBegin = Other.GpuBegin;
@@ -87,9 +90,8 @@ public:
 
 	D3D12_GPU_DESCRIPTOR_HANDLE GetNextGpuHandle()
 	{
-		D3D12_GPU_DESCRIPTOR_HANDLE Result = {GpuBegin.ptr + Next * AllocInc};
-		assert(Next < Size);
-		Next++;
+		D3D12_GPU_DESCRIPTOR_HANDLE Result = {GpuBegin.ptr + NextGpu * AllocInc};
+		NextGpu = (NextGpu + 1) % Size;
 		return Result;
 	}
 
@@ -102,9 +104,8 @@ public:
 
 	D3D12_CPU_DESCRIPTOR_HANDLE GetNextCpuHandle()
 	{
-		D3D12_CPU_DESCRIPTOR_HANDLE Result = {CpuBegin.ptr + Next * AllocInc};
-		assert(Next < Size);
-		Next++;
+		D3D12_CPU_DESCRIPTOR_HANDLE Result = {CpuBegin.ptr + NextCpu * AllocInc};
+		NextCpu = (NextCpu + 1) % Size;
 		return Result;
 	}
 
@@ -112,7 +113,8 @@ public:
 	{
 		CpuBegin = CpuHandle;
 		GpuBegin = GpuHandle;
-		Next = 0;
+		NextCpu = 0;
+		NextGpu = 0;
 	}
 
 	u32 AllocInc;
@@ -142,7 +144,7 @@ struct directx12_backend : public renderer_backend
 		bool HaveDrawID;
 	};
 
-	directx12_backend(window* Window);
+	directx12_backend(HWND Handle, ImGuiContext* _imguiContext);
 	~directx12_backend() override { DestroyObject(); };
 	void DestroyObject() override;
 
@@ -165,6 +167,7 @@ struct directx12_backend : public renderer_backend
 	descriptor_heap* DepthStencilHeap;
 	descriptor_heap* ResourcesHeap;
 	descriptor_heap* SamplersHeap;
+	descriptor_heap* UpdateHeap;
 
 	descriptor_heap* ImGuiResourcesHeap;
 
@@ -183,6 +186,8 @@ struct directx12_backend : public renderer_backend
 	ComPtr<ID3D12InfoQueue1> InfoQueue;
 	ComPtr<ID3D12DeviceRemovedExtendedDataSettings> pDredSettings;
 #endif
+
+	ImGuiContext* imguiContext = nullptr;
 };
 
 #define RENDERER_DIRECTX_12_H_

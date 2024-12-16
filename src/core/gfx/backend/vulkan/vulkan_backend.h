@@ -1,6 +1,5 @@
 #pragma once
 
-
 struct vulkan_backend : public renderer_backend
 {
 	struct compiled_shader_info
@@ -15,7 +14,12 @@ struct vulkan_backend : public renderer_backend
 		bool HavePushConstant;
 	};
 
-	vulkan_backend(window* Window);
+#if _WIN32
+	vulkan_backend(HINSTANCE Inst, HWND Handle, ImGuiContext* imguiContext);
+#else
+	vulkan_backend(GLFWwindow* Handle);
+#endif
+
 	~vulkan_backend() override { DestroyObject(); };
 	void DestroyObject() override;
 
@@ -66,4 +70,6 @@ struct vulkan_backend : public renderer_backend
 	texture* NullTexture2D;
 	texture* NullTexture3D;
 	texture* NullTextureCube;
+
+	ImGuiContext* imguiContext = nullptr;
 };

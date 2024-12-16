@@ -1,5 +1,54 @@
 #pragma once
 
+#if defined(__clang__) || defined(__GNUC__)
+	#define shader_input(...) struct __attribute__((annotate("shader-input" #__VA_ARGS__)))
+	#define shader_param(...) __attribute__((annotate("shader-param;" #__VA_ARGS__)))
+#else
+	#define shader_input(...) struct
+	#define shader_param(...)
+#endif
+
+static u32 
+GetImageMipLevels(u32 Width, u32 Height)
+{
+	u32 Result = 1;
+
+	while(Width > 1 || Height > 1)
+	{
+		Result++;
+		Width  >>= 1;
+		Height >>= 1;
+	}
+
+	return Result;
+}
+
+static u32 
+PreviousPowerOfTwo(u32 x)
+{
+	x = x | (x >> 1);
+    x = x | (x >> 2);
+    x = x | (x >> 4);
+    x = x | (x >> 8);
+    x = x | (x >> 16);
+    return x - (x >> 1);
+}
+
+struct draw_indexed_indirect_command
+{
+    u32 IndexCount;
+    u32 InstanceCount;
+    u32 FirstIndex;
+    s32 VertexOffset;
+    u32 FirstInstance;
+};
+
+struct indirect_draw_indexed_command
+{
+	u32 DrawID;
+	draw_indexed_indirect_command DrawArg;
+};
+
 namespace utils
 {
 	namespace render_context
@@ -116,18 +165,20 @@ struct resource_descriptor
     u64 Depth;
     utils::texture::input_data Info;
 
+	bool IsInitialized;
+
     resource_descriptor()
-        : Name(), ID(0), SubresourceIdx(SUBRESOURCES_ALL),
+        : Name(), ID(~0ull), SubresourceIdx(SUBRESOURCES_ALL),
           Data(nullptr), Type(), 
 		  Size(0), Count(0), Usage(0),
-          Width(0), Height(0), Depth(0), Info()
+          Width(0), Height(0), Depth(0), Info(), IsInitialized(false)
     {}
 
     resource_descriptor(const resource_descriptor& other)
         : Name(other.Name), ID(other.ID), SubresourceIdx(other.SubresourceIdx),
           Data(other.Data), Type(other.Type),
           Size(other.Size), Count(other.Count), Usage(other.Usage),
-          Width(other.Width), Height(other.Height), Depth(other.Depth), Info(other.Info)
+          Width(other.Width), Height(other.Height), Depth(other.Depth), Info(other.Info), IsInitialized(other.IsInitialized)
     {}
 
     resource_descriptor(resource_descriptor&& other) noexcept
@@ -137,6 +188,8 @@ struct resource_descriptor
           Width(std::move(other.Width)), Height(std::move(other.Height)), Depth(std::move(other.Depth)), Info(std::move(other.Info))
     {
         other.Data = nullptr;
+		IsInitialized = true;
+		other.IsInitialized = false;
     }
 
     resource_descriptor& operator=(const resource_descriptor& other)
@@ -155,6 +208,7 @@ struct resource_descriptor
             Height = other.Height;
             Depth = other.Depth;
             Info = other.Info;
+			IsInitialized = other.IsInitialized;
         }
         return *this;
     }
@@ -177,6 +231,8 @@ struct resource_descriptor
             Info = std::move(other.Info);
 
             other.Data = nullptr;
+			IsInitialized = true;
+			other.IsInitialized = false;
         }
         return *this;
     }

@@ -1,4 +1,3 @@
-
 #ifndef WIN32_WINDOWS_H_
 
 #define NOMINMAX
@@ -10,6 +9,7 @@
 #define ProcFunc(name) LRESULT name(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)
 #define library_block HMODULE
 
+// TODO: implement XInput
 class window
 {
 private:
@@ -31,11 +31,11 @@ private:
 			UnregisterClass(Name, Inst);
 		}
 
-		HINSTANCE Inst;
-		bool IsRunning = true;
 		const char* Name = "Renderer Engine";
-
-		std::vector<std::string> WindowNames;
+		HINSTANCE Inst;
+		s32 WindowCount = 0;
+		bool IsWindowCreated = false;
+		bool IsRunning = true;
 	};
 
 public:
@@ -48,7 +48,11 @@ public:
 
 	void Create(unsigned int _Width, unsigned int _Height, const char* _Name);
 
-	void NewFrame() {ImGui_ImplWin32_NewFrame();};
+	void NewFrame()
+	{
+		ImGui::SetCurrentContext(imguiContext);
+		ImGui_ImplWin32_NewFrame();
+	};
 	void EmitEvents();
 
 	void InitVulkanGraphics();
@@ -59,6 +63,7 @@ public:
 
 	static std::optional<int> ProcessMessages();
 	static double GetTimestamp();
+	static void SleepFor(double Time);
 
 	static void* GetProcAddr(library_block& Library, const char* SourceName, const char* FuncName);
 	static void  FreeLoadedLibrary(library_block& Library);
@@ -90,6 +95,8 @@ private:
 	static LARGE_INTEGER TimerFrequency;
 
 	button Buttons[256] = {};
+
+	ImGuiContext* imguiContext = nullptr;
 };
 
 #define WIN32_WINDOWS_H_

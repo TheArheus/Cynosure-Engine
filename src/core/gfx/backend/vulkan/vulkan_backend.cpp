@@ -2,9 +2,18 @@
 #include <Volk/volk.c>
 
 vulkan_backend::
-vulkan_backend(window* Window)
+#if _WIN32
+vulkan_backend(HINSTANCE Inst, HWND Handle, ImGuiContext* _imguiContext)
+#else
+vulkan_backend(GLFWwindow* Handle)
+#endif
 {
 	Type = backend_type::vulkan;
+
+#if _WIN32
+	imguiContext = _imguiContext;
+	ImGui::SetCurrentContext(imguiContext);
+#endif
 
 	volkInitialize();
 
@@ -26,9 +35,11 @@ vulkan_backend(window* Window)
 	std::vector<const char*> InstanceExtensions;
 	std::vector<const char*> RequiredInstanceExtensions = 
 	{
-#if _WIN32
 		VK_KHR_SURFACE_EXTENSION_NAME,
+#if _WIN32
 		VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#elif __linux__
+		VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
 #endif
 		VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 		VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
@@ -253,11 +264,14 @@ vulkan_backend(window* Window)
 
 #if _WIN32
 	VkWin32SurfaceCreateInfoKHR SurfaceCreateInfo = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
-	SurfaceCreateInfo.hinstance = Window->WindowClass.Inst;
-	SurfaceCreateInfo.hwnd = Window->Handle;
+	SurfaceCreateInfo.hinstance = Inst;
+	SurfaceCreateInfo.hwnd = Handle;
 	VK_CHECK(vkCreateWin32SurfaceKHR(Instance, &SurfaceCreateInfo, 0, &Surface));
-#else
-	glfwCreateWindowSurface(Instance, Window->Handle, nullptr, &Surface);
+#elif defined(__linux__)
+	VkXlibSurfaceCreateInfoKHR SurfaceCreateInfo = {VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR};
+	SurfaceCreateInfo.dpy = glfwGetX11Display();
+	SurfaceCreateInfo.window = glfwGetX11Window(Handle);
+	VK_CHECK(vkCreateXlibSurfaceKHR(Instance, &SurfaceCreateInfo, nullptr, &Surface))
 #endif
 
 	SurfaceFormat = GetSwapchainFormat(PhysicalDevice, Surface);
@@ -287,7 +301,7 @@ vulkan_backend(window* Window)
 	SwapchainCreateInfo.pQueueFamilyIndices = &FamilyIndex;
 	SwapchainCreateInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 	SwapchainCreateInfo.compositeAlpha = CompositeAlpha;
-	SwapchainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+	SwapchainCreateInfo.presentMode = VK_PRESENT_MODE_MAILBOX_KHR; //VK_PRESENT_MODE_FIFO_KHR;
 	VK_CHECK(vkCreateSwapchainKHR(Device, &SwapchainCreateInfo, 0, &Swapchain));
 
 	u32 SwapchainImageCount = 0;
@@ -416,7 +430,16 @@ vulkan_backend(window* Window)
 void vulkan_backend::
 DestroyObject()
 {
+#if _WIN32
+	ImGui::SetCurrentContext(imguiContext);
+#endif
 	ImGui_ImplVulkan_Shutdown();
+	imguiContext = nullptr;
+
+	for(auto& [Hash, Module] : CompiledShaders)
+	{
+		vkDestroyShaderModule(Device, Module.Handle, nullptr);
+	}
 
     if (!Features13.dynamicRendering && ImGuiRenderPass != VK_NULL_HANDLE)
     {

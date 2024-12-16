@@ -1,214 +1,46 @@
 #pragma once
 
-
-struct child_entities_component
+struct transform
 {
-	std::vector<entity> Data;
+    vec2 Position;
+    vec2 Scale;
 
-	child_entities_component() = default;
-
-	void AddChild(entity& Entity)
-	{
-		Data.push_back(Entity);
-	}
+	transform(vec2 NewPos = vec2(0), vec2 NewScale = vec2(1)) : Position(NewPos), Scale(NewScale) {}
 };
 
-struct transform_component
+struct velocity
 {
-	vec4 Translate;
-	vec4 Scale;
-	vec4 Rotate;
+    vec2  Direction;
+    float Speed;
 
-	transform_component(vec4 NewTranslate = vec4(0), vec4 NewScale = vec4(0), vec4 NewRotate = vec4(0)) : 
-		Translate(NewTranslate), Scale(NewScale), Rotate(NewRotate)
-	{}
+	velocity(vec2 NewDir = vec2(0), float NewSpeed = 0.0f) : Direction(NewDir), Speed(NewSpeed) {}
 };
 
-struct color_component
+struct renderable
 {
-	vec3 Data;
-
-	color_component(vec3 NewColor = vec3(1, 1, 1)) : Data(NewColor) {}
 };
 
-// TODO: Make it point light source by default
-struct emmit_component
+struct mesh
 {
-	vec3  Data;
-	float Intensity;
-
-	emmit_component(vec3 NewColor = vec3(0, 0, 0), float NewIntensity = 1.0) : Data(NewColor), Intensity(NewIntensity) {}
 };
 
-struct camera_component
+struct circle
 {
-	union projection
-	{
-		struct
-		{
-			float FOV;
-			float NearZ;
-			float FarZ;
-			float Pad[3];
-		};
-		struct
-		{
-			float Left;
-			float Right;
-			float Top;
-			float Bottom;
-			float Near;
-			float Far;
-		};
-	};
-
-	projection ProjectionData;
-	u32   ProjectionType;
-	bool  IsLocked;
-
-	camera_component(float NewFOV = 45.0f, float NewNear = 0.01f, float NewFar = 100.0f, bool _IsLocked = false) : 
-		IsLocked(_IsLocked)
-	{
-		ProjectionData.FOV   = NewFOV;
-		ProjectionData.NearZ = NewNear;
-		ProjectionData.FarZ  = NewFar;
-	}
+	float Radius;
+	vec3 Color;
+	circle(float NewRadius = 1.0f, vec3 NewColor = vec3(1.0)) : Radius(NewRadius), Color(NewColor) {}
 };
 
-struct mesh_component
+struct rectangle
 {
-	mesh Data;
-
-	mesh_component() = default;
-
-	mesh_component(const std::string& Path, u32 BoundingGeneration = 0)
-	{
-		Data.Load(Path, BoundingGeneration);
-	}
-	
-	void LoadMesh(const std::string& Path, u32 BoundingGeneration = 0)
-	{
-		Data.Load(Path, BoundingGeneration);
-	}
+	vec2 Dims;
+	vec3 Color;
+	rectangle(vec2 NewDims = vec2(1.0), vec3 NewColor = vec3(1.0)) : Dims(NewDims), Color(NewColor) {}
 };
 
-struct debug_component
+struct rectangle_textured
 {
-	debug_component() = default;
-};
-
-// TODO: Instance ID's
-struct static_instances_component
-{
-	std::vector<u32> Visibility;
-	std::vector<mesh_draw_command> Data;
-
-	void AddInstance(vec4 Translate, vec4 Scale, bool IsVisible)
-	{
-		mesh_draw_command Command = {};
-		Command.Translate = Translate;
-		Command.Scale = Scale;
-		Data.push_back(Command);
-		Visibility.push_back(IsVisible);
-	}
-};
-
-// NOTE: this should reset every frame
-struct dynamic_instances_component
-{
-	std::vector<u32> Visibility;
-	std::vector<mesh_draw_command> Data;
-
-	// TODO: Have only this one
-	void AddInstance(vec4 Translate, vec4 Scale, bool IsVisible)
-	{
-		mesh_draw_command Command = {};
-		Command.Translate = Translate;
-		Command.Scale = Scale;
-		Data.push_back(Command);
-		Visibility.push_back(IsVisible);
-	}
-
-	void Reset()
-	{
-		Data.clear();
-	}
-};
-
-struct alignas(16) light_component
-{
-	vec4 Pos;
-	vec4 Dir;
-	vec4 Col;
-	u32  Type;
-
-	void PointLight(vec3 Position, float Radius, vec3 Color, float Intensity)
-	{
-		Pos  = vec4(Position, Radius);
-		Col  = vec4(Color, Intensity);
-		Type = light_type_point;
-	}
-
-	void SpotLight(vec3 Position, float Angle, vec3 Direction, vec3 Color, float Intensity)
-	{
-		Pos  = vec4(Position, Angle);
-		Dir  = vec4(Direction);
-		Col  = vec4(Color, Intensity);
-		Type = light_type_spot;
-	}
-
-	void DirectionalLight(vec3 Position, vec3 Direction, vec3 Color, float Intensity)
-	{
-		Pos  = vec4(Position);
-		Dir  = vec4(Direction);
-		Col  = vec4(Color, Intensity);
-		Type = light_type_directional;
-	}
-};
-
-struct particle_component
-{
-	vec3  Velocity;
-	vec3  Acceleration;
-	float Time;
-};
-
-struct diffuse_component
-{
-	const char* Data;
-
-	diffuse_component() = default;
-	diffuse_component(const char* Path)
-		: Data(Path)
-	{}
-};
-
-struct normal_map_component
-{
-	const char* Data;
-
-	normal_map_component() = default;
-	normal_map_component(const char* Path)
-		: Data(Path)
-	{}
-};
-
-struct specular_map_component
-{
-	const char* Data;
-
-	specular_map_component() = default;
-	specular_map_component(const char* Path)
-		: Data(Path)
-	{}
-};
-
-struct height_map_component
-{
-	const char* Data;
-
-	height_map_component() = default;
-	height_map_component(const char* Path)
-		: Data(Path)
-	{}
+	vec2 Dims;
+	resource_descriptor Texture;
+	rectangle_textured(vec2 NewDims = vec2(1.0), resource_descriptor NewTexture = {}) : Dims(NewDims), Texture(NewTexture) {}
 };

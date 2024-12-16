@@ -161,15 +161,6 @@ public:
 			}
 		}
 
-		for (auto& Stage : ShaderStages)
-		{
-			if (Stage.module != VK_NULL_HANDLE)
-			{
-				vkDestroyShaderModule(Device, Stage.module, nullptr);
-				Stage.module = VK_NULL_HANDLE;
-			}
-		}
-
 		if (RenderPass != VK_NULL_HANDLE)
 		{
 			vkDestroyRenderPass(Device, RenderPass, nullptr);

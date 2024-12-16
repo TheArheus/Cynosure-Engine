@@ -6,10 +6,12 @@
 #include <dxgidebug.h>
 #include <wrl.h>
 
+#include <dxc/dxcapi.h>
+
 using namespace Microsoft::WRL;
 
 #define  D3D12MA_D3D12_HEADERS_ALREADY_INCLUDED
-#include <core/vendor/D3D12MemAlloc.h>
+#include <D3D12MemAlloc.h>
 
 #include "directx12_utilities.hpp"
 

@@ -1,4 +1,4 @@
-#pragma once
+#ifndef OTH_WINDOWS_H_
 
 #include <time.h>
 #include <dlfcn.h>
@@ -12,6 +12,24 @@
 
 class window
 {
+	struct window_class
+	{
+		window_class()
+		{
+			glfwInit();
+			glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		}
+		~window_class()
+		{
+			glfwTerminate();
+		}
+
+		std::unordered_map<GLFWwindow*, window*> WindowInstances;
+		const char* Name = "Renderer Engine";
+		s32  WindowCount = 0;
+		bool IsWindowCreated = false;
+		bool IsRunning = true;
+	};
 public:
 
 	window() = default;
@@ -23,29 +41,31 @@ public:
 
 	void Create(unsigned int Width, unsigned int Height, const char* Name);
 
-	void NewFrame() {ImGui_ImplGlfw_NewFrame();};
+	void NewFrame()
+	{
+		ImGui::SetCurrentContext(imguiContext);
+		ImGui_ImplGlfw_NewFrame();
+	};
 	void EmitEvents();
+
 	void InitVulkanGraphics();
+	void InitDirectx12Graphics();
 
 	static std::optional<int> ProcessMessages();
 	static double GetTimestamp();
+	static void window::SleepFor(double Time);
 
 	void SetTitle(std::string& Title);
 
-	bool IsRunning(){return IsWindowRunning;}
+	bool IsRunning(){return WindowClass.IsRunning;}
 
 	static void* GetProcAddr(library_block& Library, const char* SourceName, const char* FuncName);
 	static void  FreeLoadedLibrary(library_block& Library);
 
-	global_graphics_context Gfx;
-
-	static button Buttons[256];
 	static event_bus EventsDispatcher;
 
-	static bool IsWindowRunning;
-
-	static GLFWwindow* Handle;
-	const char* Name;
+	GLFWwindow* Handle = nullptr;
+	const char* Name = nullptr;
 	u32 Width;
 	u32 Height;
 
@@ -54,9 +74,28 @@ public:
 	bool IsGfxPaused = false;
 	bool IsResizing  = false;
 
+	static window_class WindowClass;
+
+	global_graphics_context Gfx;
+
 private:
 	window(const window& rhs) = delete;
 	window& operator=(const window& rhs) = delete;
+
+	void DestroyObject()
+	{
+		if(Handle)
+		{
+			ImGui::SetCurrentContext(imguiContext);
+			Gfx.DestroyObject();
+			ImGui_ImplGlfw_Shutdown();
+			ImGui::DestroyContext(imguiContext);
+			glfwDestroyWindow(Handle);
+			WindowClass.WindowInstances.erase(Handle);
+			WindowClass.WindowCount--;
+			Handle = nullptr;
+		}
+	}
 
 	static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
     static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
@@ -64,7 +103,9 @@ private:
     static void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
     static void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
-	bool IsInited = false;
+	button Buttons[256] = {};
+
+	ImGuiContext* imguiContext = nullptr;
 };
 
 
@@ -224,3 +265,6 @@ u16 GetECCode(s32 KeyCode)
         default: return EC_UNKNOWN;
     }
 }
+
+#define OTH_WINDOWS_H_
+#endif

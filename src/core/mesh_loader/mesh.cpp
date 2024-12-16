@@ -254,11 +254,6 @@ GenerateNTBDebug(mesh& Mesh)
 	MeshIndex+=3;
 }
 
-void mesh::
-GenerateMeshlets()
-{
-}
-
 mesh::aabb mesh::
 GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords)
 {

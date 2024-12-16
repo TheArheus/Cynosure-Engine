@@ -55,8 +55,7 @@ struct vulkan_buffer : public buffer
 	vulkan_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 Flags)
 	{
 		CreateResource(Backend, DebugName, NewSize, Count, Flags);
-		if(Data)
-			Update(Backend, Data);
+		if(Data) Update(Backend, Data);
 	}
 
 	void Update(renderer_backend* Backend, void* Data) override
@@ -116,7 +115,7 @@ struct vulkan_buffer : public buffer
 			CreateInfo.usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		if(Flags & RF_StorageBuffer)
 			CreateInfo.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		if(Flags & RF_CopySrc)
+		//if(Flags & RF_CopySrc)
 			CreateInfo.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 		//if(Flags & RF_CopyDst)
 			CreateInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -239,18 +238,8 @@ struct vulkan_texture : public texture
 	vulkan_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
 		CreateResource(Backend, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
-		if(Data)
-		{
-			CreateStagingResource();
-			Update(Backend, Data);
-			if(!Info.UseStagingBuffer)
-				DestroyStagingResource();
-		}
-		else
-		{
-			if(Info.UseStagingBuffer)
-				CreateStagingResource();
-		}
+		CreateStagingResource();
+		if(Data) Update(Backend, Data);
 
 		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
 		ReductionMode.reductionMode = GetVKSamplerReductionMode(Info.SamplerInfo.ReductionMode);
@@ -327,7 +316,7 @@ struct vulkan_texture : public texture
 			CreateInfo.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
 		if(Info.Usage & image_flags::TF_Sampled)
 			CreateInfo.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-		if(Info.Usage & image_flags::TF_CopySrc)
+		//if(Info.Usage & image_flags::TF_CopySrc)
 			CreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 		//if(Info.Usage & image_flags::TF_CopyDst)
 			CreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -430,7 +419,7 @@ struct vulkan_texture : public texture
 
 		std::string TempName = (Name + ".buffer.temp");
 		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
-		DebugNameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
+		DebugNameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
 		DebugNameInfo.objectHandle = (u64)Temp;
 		DebugNameInfo.pObjectName = TempName.c_str();
 		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);

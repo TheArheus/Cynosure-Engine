@@ -1,5 +1,31 @@
 
-size_t base_component::NextID = 0;
+size_t GlobalNextID = 0;
+
+void entity::
+Kill()
+{
+	Registry->KillEntity(*this);
+}
+void entity::
+AddTag(const std::string& Tag)
+{
+	Registry->AddTagToEntity(*this, Tag);
+}
+bool entity::
+HasTag(const std::string& Tag)
+{
+	return Registry->EntityHasTag(*this, Tag);
+}
+void entity::
+AddToGroup(const std::string& Group)
+{
+	Registry->GroupEntity(*this, Group);
+}
+bool entity::
+BelongsToGroup(const std::string& Group)
+{
+	return Registry->EntityBelongsToGroup(*this, Group);
+}
 
 template<typename component_type, typename... args>
 component_type* entity::
@@ -23,7 +49,7 @@ HasComponent()
 }
 
 template<typename component_type>
-component_type* entity::GetComponent()
+component_type& entity::GetComponent()
 {
 	return Registry->GetComponent<component_type>(*this);
 }
@@ -44,85 +70,111 @@ template<typename component_type>
 void entity_system::
 RequireComponent()
 {
-	size_t ComponentID = 0;
-	auto FindIt = TypeMap.find(std::type_index(typeid(component_type)));
-
-	if(FindIt != TypeMap.end())
-		ComponentID = FindIt->second;
-	else
-	{
-		ComponentID = ComponentCount++; //component<component_type>::GetNextID();
-		TypeMap[std::type_index(typeid(component_type))] = ComponentID;
-	}
-
-	Signature.set(ComponentID);
+	Signature.set(GetTypeID<component_type>());
 }
 
 entity registry::
 CreateEntity()
 {
-	EntitiesCount++;
-	entity NewEntity(EntitiesCount, this);
-	Entities.push_back(NewEntity);
+    u64 NewEntityID;
 
-	if((NewEntity.Handle - 1) >= EntitiesComponentSignatures.size())
-	{
-		EntitiesComponentSignatures.resize(Entities.size());
-	}
+    if(FreeIDs.empty())
+    {
+        NewEntityID = EntitiesCount++;
+        if(NewEntityID >= EntitiesComponentSignatures.size())
+        {
+            EntitiesComponentSignatures.resize(NewEntityID + 1);
+        }
+    }
+    else
+    {
+        NewEntityID = FreeIDs.front();
+        FreeIDs.pop_front();
+    }
 
-	return NewEntity;
+    entity NewEntity(NewEntityID, this);
+    HotEntities.insert(NewEntity);
+
+    return NewEntity;
 }
 
 void registry::
-AddEntity(entity NewEntity)
+AddEntity(entity Entity)
 {
-	EntitiesCount++;
-	Entities.push_back(NewEntity);
-
-	if(NewEntity.Handle >= EntitiesComponentSignatures.size())
+	const signature& EntitySignature = EntitiesComponentSignatures[Entity.Handle];
+	for(auto& System : Systems)
 	{
-		EntitiesComponentSignatures.resize(Entities.size() + 1);
-	}
-}
-
-void registry::
-UpdateSystems()
-{
-	for(entity& Entity : Entities)
-	{
-		const signature& EntitySignature = EntitiesComponentSignatures[Entity.Handle - 1];
-		for(auto& System : Systems)
+		const signature& SystemSignature = System.second->Signature;
+		if((EntitySignature & SystemSignature) == SystemSignature)
 		{
-			const signature& SystemSignature = System.second->Signature;
-			if((EntitySignature & SystemSignature) == SystemSignature)
-			{
-				System.second->AddEntity(Entity);
-			}
+			System.second->AddEntity(Entity);
 		}
 	}
+}
+
+
+void registry::
+RemoveEntity(entity Entity)
+{
+    for(auto& System : Systems)
+    {
+        System.second->RemoveEntity(Entity);
+    }
+}
+
+void registry::
+KillEntity(entity Entity)
+{
+	ColdEntities.insert(Entity);
+}
+
+void registry::
+UpdateSystems(double dt)
+{
+	for(entity Entity : HotEntities)
+	{
+		AddEntity(Entity);
+	}
+
+	HotEntities.clear();
+
+    for(entity Entity : ColdEntities)
+    {
+        RemoveEntity(Entity);
+        EntitiesComponentSignatures[Entity.Handle].reset();
+
+        for(auto Pool : ComponentPools)
+        {
+            if(Pool) Pool->RemoveEntityFromPool(Entity.Handle);
+        }
+
+        FreeIDs.push_back(Entity.Handle);
+
+        RemoveEntityTag(Entity);
+        RemoveEntityFromGroup(Entity);
+    }
+
+    ColdEntities.clear();
+
+    for (auto& [Type, System] : Systems)
+	{
+		System->SubscribeOnEvents();
+        System->Update(dt);
+    }
 }
 
 template<typename component_type, typename ...args>
 component_type* registry::
 AddComponent(entity& Object, args&&... Args)
 {
-	const size_t EntityID = Object.Handle - 1;
-	size_t ComponentID = 0;
-
-	auto FindIt = TypeMap.find(std::type_index(typeid(component_type)));
-
-	if(FindIt != TypeMap.end())
-		ComponentID = FindIt->second;
-	else
-	{
-		ComponentID = ComponentCount++; //component<component_type>::GetNextID();
-		TypeMap[std::type_index(typeid(component_type))] = ComponentID;
-	}
+	const size_t ComponentID = GetTypeID<component_type>();
+	const size_t EntityID = Object.Handle;
 
 	if(ComponentID >= ComponentPools.size())
 	{
 		ComponentPools.resize(ComponentID + 1, nullptr);
 	}
+
 	if(ComponentPools[ComponentID] == nullptr)
 	{
 		std::shared_ptr<component_pool<component_type>> NewPool(new component_pool<component_type>());
@@ -147,8 +199,8 @@ template<typename component_type>
 void registry::
 RemoveComponent(entity& Object)
 {
-	const size_t EntityID = Object.Handle - 1;
-	const size_t ComponentID = TypeMap[std::type_index(typeid(component_type))];
+	const size_t ComponentID = GetTypeID<component_type>();
+	const size_t EntityID = Object.Handle;
 
 	EntitiesComponentSignatures[EntityID].set(ComponentID, false);
 }
@@ -157,46 +209,26 @@ template<typename component_type>
 bool registry::
 HasComponent(entity& Object)
 {
-	const size_t EntityID = Object.Handle - 1;
-	size_t ComponentID = 0;
-
-	auto FindIt = TypeMap.find(std::type_index(typeid(component_type)));
-
-	if(FindIt != TypeMap.end())
-		ComponentID = FindIt->second;
-	else
-		return false;
-
+	const size_t ComponentID = GetTypeID<component_type>();
+	const size_t EntityID = Object.Handle;
 	return EntitiesComponentSignatures[EntityID].test(ComponentID);
 }
 
 template<typename component_type>
-component_type* registry::
+component_type& registry::
 GetComponent(entity& Object)
 {
-	const size_t EntityID = Object.Handle - 1;
-
-	auto it = TypeMap.find(std::type_index(typeid(component_type)));
-	if(it == TypeMap.end()) 
-	{
-		return nullptr;
-	}
-
-	const size_t ComponentID = it->second;
-	if(HasComponent<component_type>(Object))
-	{
-		component_type* Component = &std::static_pointer_cast<component_pool<component_type>>(ComponentPools[ComponentID])->Get(EntityID);
-		return Component;
-	}
-
-	return nullptr;
+	const size_t ComponentID = GetTypeID<component_type>();
+	const size_t EntityID = Object.Handle;
+	std::shared_ptr<component_pool<component_type>> Component = std::static_pointer_cast<component_pool<component_type>>(ComponentPools[ComponentID]);
+	return Component->Get(EntityID);
 }
 
 template<typename system_type, typename ...args>
 std::shared_ptr<system_type> registry::
 AddSystem(args&&... Args)
 {
-	std::shared_ptr<system_type> NewSystem(new system_type(TypeMap, ComponentCount, std::forward<args>(Args)...));
+	std::shared_ptr<system_type> NewSystem(new system_type(std::forward<args>(Args)...));
 	Systems.insert(std::make_pair(std::type_index(typeid(system_type)), NewSystem));
 	return NewSystem;
 }

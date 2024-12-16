@@ -49,8 +49,7 @@ struct directx12_buffer : public buffer
 	directx12_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 NewUsage)
 	{
 		CreateResource(Backend, DebugName, NewSize, Count, NewUsage);
-		if(Data)
-			Update(Backend, Data);
+		if(Data) Update(Backend, Data);
 	}
 
 	~directx12_buffer() override { Gfx->Fence->Wait(); DestroyResource(); Gfx = nullptr; };
@@ -208,18 +207,8 @@ struct directx12_texture : public texture
 	directx12_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
 	{
 		CreateResource(Backend, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
-		if(Data)
-		{
-			CreateStagingResource();
-			Update(Backend, Data);
-			if(!Info.UseStagingBuffer)
-				DestroyStagingResource();
-		}
-		else
-		{
-			if(Info.UseStagingBuffer)
-				CreateStagingResource();
-		}
+		CreateStagingResource();
+		if(Data) Update(Backend, Data);
 
         D3D12_SAMPLER_DESC SamplerDesc = {};
         SamplerDesc.AddressU = SamplerDesc.AddressV = SamplerDesc.AddressW = GetDXAddressMode(Info.SamplerInfo.AddressMode);
@@ -314,7 +303,7 @@ struct directx12_texture : public texture
             ResourceDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 		}
 
-        if ((Info.Usage & image_flags::TF_ColorAttachment))
+        if (Info.Usage & image_flags::TF_ColorAttachment || Info.Usage & image_flags::TF_ColorTexture)
 		{
 			vec4 ClearColor = vec4(vec3(0), 1);
 			Clear = new D3D12_CLEAR_VALUE;
@@ -323,7 +312,7 @@ struct directx12_texture : public texture
             ResourceDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 		}
 
-		if(Info.Usage & image_flags::TF_Storage)
+		if (Info.Usage & image_flags::TF_Storage)
 			ResourceDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
         if (!(Info.Usage & image_flags::TF_Sampled) && !(Info.Usage & image_flags::TF_Storage))
@@ -335,6 +324,17 @@ struct directx12_texture : public texture
 		Gfx->AllocatorHandle->CreateResource(&AllocDesc, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, Clear, &Allocation, IID_PPV_ARGS(&Handle));
 		Size = Allocation->GetSize();
 		NAME_DX12_OBJECT_CSTR(Handle.Get(), DebugName.c_str());
+
+#if 0
+		u64 RequiredSize = 0;
+		u64 RowSize = 0;
+		u32 RowPitch = 0;
+
+		D3D12_PLACED_SUBRESOURCE_FOOTPRINT Footprint;
+		UINT NumRows;
+		Device->GetCopyableFootprints(&ResourceDesc, 0, 1, 0, &Footprint, &NumRows, &RowSize, &RequiredSize);
+		RowPitch = Footprint.Footprint.RowPitch;
+#endif
 
         if (Info.Usage & image_flags::TF_Sampled)
         {
@@ -444,7 +444,7 @@ struct directx12_texture : public texture
 			}
         }
 
-        if (Info.Usage & image_flags::TF_ColorAttachment)
+        if (Info.Usage & image_flags::TF_ColorAttachment || Info.Usage & image_flags::TF_ColorTexture)
         {
             // RTV
 
@@ -614,4 +614,6 @@ struct directx12_texture : public texture
 
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> RenderTargetViews;
 	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> DepthStencilViews;
+
+	std::vector<D3D12_GPU_DESCRIPTOR_HANDLE> GpuHandles;
 };

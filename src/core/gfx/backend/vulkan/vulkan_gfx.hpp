@@ -5,10 +5,12 @@
 
 #if _WIN32
 	#include <vulkan/vulkan_win32.h>
+#elif __linux__
+	#include <vulkan/vulkan_xlib.h>
 #endif
 
 #define  VMA_IMPLEMENTATION
-#include "core/vendor/vk_mem_alloc.h"
+#include <vk_mem_alloc.h>
 
 #include <Volk/volk.h>
 

@@ -19,23 +19,33 @@ enum class dx12_descriptor_type
 	sampler,
 };
 
-const wchar_t* CharToWChar(const char* ch)
+std::string WStringToString(const std::wstring& WideString)
 {
-	std::wstring_convert<std::codecvt_utf8<wchar_t>> Converter;
-	std::wstring                                     WideStr = Converter.from_bytes(ch);
+    if (WideString.empty()) return "";
 
-	wchar_t* WideStrCopy = new wchar_t[WideStr.size() + 1];
-	wcscpy_s(WideStrCopy, WideStr.size() + 1, WideStr.c_str());
+    int SizeNeeded = WideCharToMultiByte(CP_UTF8, 0, &WideString[0], (int)WideString.size(), nullptr, 0, nullptr, nullptr);
+    std::string Result(SizeNeeded, 0);
+    WideCharToMultiByte(CP_UTF8, 0, &WideString[0], (int)WideString.size(), &Result[0], SizeNeeded, nullptr, nullptr);
 
-	return WideStrCopy;
+    return Result;
+}
+
+std::wstring StringToWString(const std::string& NarrowString)
+{
+    if (NarrowString.empty()) return L"";
+
+    int SizeNeeded = MultiByteToWideChar(CP_UTF8, 0, &NarrowString[0], (int)NarrowString.size(), nullptr, 0);
+    std::wstring Result(SizeNeeded, 0);
+    MultiByteToWideChar(CP_UTF8, 0, &NarrowString[0], (int)NarrowString.size(), &Result[0], SizeNeeded);
+
+    return Result;
 }
 
 #ifdef CE_DEBUG
 #define NAME_DX12_OBJECT_CSTR(x, NAME)					\
 {														\
-    const wchar_t* WcharConverted = CharToWChar(NAME);	\
-    x->SetName(WcharConverted);							\
-    delete[] WcharConverted;							\
+	std::wstring WcharConverted = StringToWString(NAME);	\
+    x->SetName(WcharConverted.c_str());					\
 }
 #else
 #define NAME_DX12_OBJECT_CSTR(x, NAME)
@@ -65,8 +75,7 @@ void GetDevice(IDXGIFactory6* Factory, IDXGIAdapter1** AdapterResult, bool HighP
 
 		if(SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device6), nullptr)))
 		{
-			std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> Converter;
-			std::cout << "Current gpu is: " << Converter.to_bytes(Desc.Description) << std::endl;
+			std::cout << "Current gpu is: " << WStringToString(Desc.Description) << std::endl;
 			*AdapterResult = pAdapter.Detach();
 			break;
 		}
