@@ -203,6 +203,12 @@ RemoveComponent(entity& Object)
 	const size_t EntityID = Object.Handle;
 
 	EntitiesComponentSignatures[EntityID].set(ComponentID, false);
+
+	if (ComponentPools[ComponentID])
+	{
+		auto ComponentPool = std::static_pointer_cast<component_pool<component_type>>(ComponentPools[ComponentID]);
+		ComponentPool->Remove(EntityID);
+	}
 }
 
 template<typename component_type>

@@ -2,6 +2,12 @@
 // TODO: something better with full screen passes
 struct full_screen_pass_color : public shader_graphics_view_context
 {
+	shader_input() raster_parameters
+	{
+		gpu_index_buffer IndexBuffer;
+		gpu_color_target ColorTarget;
+	};
+
 	shader_input() parameters
 	{
 		gpu_buffer Vertices;
@@ -30,6 +36,12 @@ struct full_screen_pass_color : public shader_graphics_view_context
 // TODO: something better with full screen passes
 struct full_screen_pass_circle : public shader_graphics_view_context
 {
+	shader_input() raster_parameters
+	{
+		gpu_index_buffer IndexBuffer;
+		gpu_color_target ColorTarget;
+	};
+
 	shader_input() parameters
 	{
 		gpu_buffer Vertices;
@@ -58,6 +70,12 @@ struct full_screen_pass_circle : public shader_graphics_view_context
 // TODO: something better with full screen passes
 struct full_screen_pass_texture : public shader_graphics_view_context
 {
+	shader_input() raster_parameters
+	{
+		gpu_index_buffer IndexBuffer;
+		gpu_color_target ColorTarget;
+	};
+
 	shader_input() parameters
 	{
 		gpu_buffer Vertices;

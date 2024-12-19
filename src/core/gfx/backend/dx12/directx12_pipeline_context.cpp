@@ -218,6 +218,7 @@ End()
 	PlaceEndOfFrameBarriers();
 	Gfx->CommandQueue->Execute(&CommandList);
 	Gfx->Fence->Flush(Gfx->CommandQueue);
+	CurrentContext = nullptr;
 }
 
 void directx12_command_list::
@@ -226,6 +227,7 @@ EndOneTime()
 	PlaceEndOfFrameBarriers();
 	Gfx->CommandQueue->ExecuteAndRemove(&CommandList);
 	Gfx->Fence->Flush(Gfx->CommandQueue);
+	CurrentContext = nullptr;
 }
 
 void directx12_command_list::
@@ -235,13 +237,16 @@ Present()
 	Gfx->CommandQueue->Execute(&CommandList);
 	Gfx->Fence->Flush(Gfx->CommandQueue);
 
-	Gfx->SwapChain->Present(0, Gfx->TearingSupport * DXGI_PRESENT_ALLOW_TEARING);
+	//Gfx->SwapChain->Present(0, Gfx->TearingSupport * DXGI_PRESENT_ALLOW_TEARING);
+	Gfx->SwapChain->Present(0, 0);
 	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
+	CurrentContext = nullptr;
 }
 
 void directx12_command_list::
 Update(buffer* BufferToUpdate, void* Data)
 {
+	if(!Data) return;
 	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToUpdate);
 	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
 
@@ -256,6 +261,7 @@ Update(buffer* BufferToUpdate, void* Data)
 void directx12_command_list::
 UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 {
+	if(!Data) return;
 	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToUpdate);
 
 	if(UpdateByteSize == 0) return;
@@ -274,6 +280,7 @@ UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 void directx12_command_list::
 ReadBack(buffer* BufferToRead, void* Data)
 {
+	if(!Data) return;
 	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
 
@@ -288,6 +295,7 @@ ReadBack(buffer* BufferToRead, void* Data)
 void directx12_command_list::
 ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 {
+	if(!Data) return;
 	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
 
@@ -302,6 +310,7 @@ ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 void directx12_command_list::
 Update(texture* TextureToUpdate, void* Data)
 {
+	if(!Data) return;
 	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToUpdate);
 	SetImageBarriers({{TextureToUpdate, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
 
@@ -345,6 +354,7 @@ Update(texture* TextureToUpdate, void* Data)
 void directx12_command_list::
 ReadBack(texture* TextureToRead, void* Data)
 {
+	if(!Data) return;
 	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToRead);
 	SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
 
@@ -356,23 +366,31 @@ ReadBack(texture* TextureToRead, void* Data)
 	Texture->TempHandle->Unmap(0, 0);
 }
 
-void directx12_command_list::
+bool directx12_command_list::
 SetGraphicsPipelineState(render_context* Context)
 {
+	assert(Context->Type == pass_type::graphics);
+	if(Context == CurrentContext) return false;
+
 	CurrentContext = Context;
 	directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(Context);
 	CommandList->SetGraphicsRootSignature(ContextToBind->RootSignatureHandle.Get());
 	CommandList->SetPipelineState(ContextToBind->Pipeline.Get());
 	CommandList->IASetPrimitiveTopology(ContextToBind->PipelineTopology);
+	return true;
 }
 
-void directx12_command_list::
+bool directx12_command_list::
 SetComputePipelineState(compute_context* Context)
 {
+	assert(Context->Type == pass_type::compute);
+	if(Context == CurrentContext) return false;
+
 	CurrentContext = Context;
 	directx12_compute_context* ContextToBind = static_cast<directx12_compute_context*>(Context);
 	CommandList->SetComputeRootSignature(ContextToBind->RootSignatureHandle.Get());
 	CommandList->SetPipelineState(ContextToBind->Pipeline.Get());
+	return true;
 }
 
 void directx12_command_list::
@@ -453,7 +471,6 @@ SetColorTarget(const std::vector<texture*>& ColorAttachments, vec4 Clear)
 		{
 			texture* ColorTarget = ColorAttachments[i];
 			directx12_texture* Attachment = static_cast<directx12_texture*>(ColorTarget);
-			SetImageBarriers({{ColorTarget, AF_ColorAttachmentWrite, barrier_state::color_attachment, SUBRESOURCES_ALL, PSF_ColorAttachment}});
 			TexturesToCommon.insert(Attachment);
 			ColorTargets.push_back(Attachment->RenderTargetViews[0]);
 			if(Context->LoadOp == load_op::clear)
@@ -473,7 +490,6 @@ SetDepthTarget(texture* DepthAttachment, vec2 Clear)
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
 
 	directx12_texture* Attachment = static_cast<directx12_texture*>(DepthAttachment);
-	SetImageBarriers({{DepthAttachment, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, PSF_EarlyFragment}});
 	TexturesToCommon.insert(Attachment);
 
 	DepthStencilTarget = Attachment->DepthStencilViews[0];
@@ -519,7 +535,6 @@ BindShaderParameters(const array<binding_packet>& Data)
 		{
 			texture* CurrentTexture = (texture*)CurrentResource;
             TexturesToCommon.insert(CurrentTexture);
-            AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Packet.Mips, Parameter.ShaderToUse});
         }
     };
 
@@ -531,7 +546,6 @@ BindShaderParameters(const array<binding_packet>& Data)
 		{
 			texture* CurrentTexture = (texture*)CurrentResource;
             TexturesToCommon.insert(CurrentTexture);
-            AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Packet.Mips, Parameter.ShaderToUse});
         }
     };
 
@@ -644,23 +658,29 @@ BindShaderParameters(const array<binding_packet>& Data)
 }
 
 void directx12_command_list::
-DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount)
+BeginRendering(u32 RenderWidth, u32 RenderHeight)
 {
-	assert(CurrentContext->Type == pass_type::graphics);
+	if(CurrentContext->Type != pass_type::graphics) return;
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
 
-	SetBufferBarriers(AttachmentBufferBarriers);
-	SetImageBarriers(AttachmentImageBarriers);
-
 	CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
+}
 
-	CommandList->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
+void directx12_command_list::
+EndRendering()
+{
+	if(CurrentContext->Type != pass_type::graphics) return;
 
 	ColorTargets.clear();
 	DepthStencilTarget = {};
+}
 
-	AttachmentImageBarriers.clear();
-	AttachmentBufferBarriers.clear();
+void directx12_command_list::
+DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount)
+{
+	assert(CurrentContext->Type == pass_type::graphics);
+
+	CommandList->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 }
 
 void directx12_command_list::
@@ -669,22 +689,11 @@ DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructure
 	assert(CurrentContext->Type == pass_type::graphics);
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
 
-	BuffersToCommon.insert(IndirectCommands);
-	AttachmentBufferBarriers.push_back({IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
-
-	SetBufferBarriers(AttachmentBufferBarriers);
-	SetImageBarriers(AttachmentImageBarriers);
-
-	CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
+	//BuffersToCommon.insert(IndirectCommands);
+	//AttachmentBufferBarriers.push_back({IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
 
 	directx12_buffer* Indirect = static_cast<directx12_buffer*>(IndirectCommands);
 	CommandList->ExecuteIndirect(Context->IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), !Context->HaveDrawID * 4, Indirect->CounterHandle.Get(), 0);
-
-	ColorTargets.clear();
-	DepthStencilTarget = {};
-
-	AttachmentImageBarriers.clear();
-	AttachmentBufferBarriers.clear();
 }
 
 void directx12_command_list::
@@ -758,19 +767,19 @@ CopyImage(texture* Dst, texture* Src)
 }
 
 void directx12_command_list::
-SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData)
+SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 {
 	std::vector<CD3DX12_RESOURCE_BARRIER> TransitionBarriers;
 	std::vector<CD3DX12_RESOURCE_BARRIER> UavBarriers;
 
-	for(const std::tuple<buffer*, u32, u32>& Data : BarrierData)
+	for(const buffer_barrier& Data : BarrierData)
 	{
-		directx12_buffer* Buffer = static_cast<directx12_buffer*>(std::get<0>(Data));
+		directx12_buffer* Buffer = static_cast<directx12_buffer*>(Data.Buffer);
 
 		u32 ResourceLayoutPrev = Buffer->CurrentLayout;
-		u32 ResourceLayoutNext = std::get<1>(Data);
+		u32 ResourceLayoutNext = Data.Aspect;
 		u32 BufferPrevShader = Buffer->PrevShader;
-		u32 BufferNextShader = std::get<2>(Data);
+		u32 BufferNextShader = Data.Shader;
 		Buffer->PrevShader = BufferNextShader;
 		Buffer->CurrentLayout = ResourceLayoutNext;
 
@@ -798,22 +807,22 @@ SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData)
 }
 
 void directx12_command_list::
-SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>>& BarrierData)
+SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 {
 	std::vector<CD3DX12_RESOURCE_BARRIER> TransitionBarriers;
 	std::vector<CD3DX12_RESOURCE_BARRIER> UavBarriers;
 
-	for(const std::tuple<texture*, u32, barrier_state, u32, u32>& Data : BarrierData)
+	for(const texture_barrier& Data : BarrierData)
 	{
-		directx12_texture* Texture = static_cast<directx12_texture*>(std::get<0>(Data));
+		directx12_texture* Texture = static_cast<directx12_texture*>(Data.Texture);
 
-		u32 ResourceLayoutNext = std::get<1>(Data);
-		barrier_state ResourceStateNext = std::get<2>(Data);
+		u32 ResourceLayoutNext = Data.Aspect;
+		barrier_state ResourceStateNext = Data.State;
 		u32 TexturePrevShader = Texture->PrevShader;
-		u32 TextureNextShader = std::get<4>(Data);
+		u32 TextureNextShader = Data.Shader;
 		Texture->PrevShader = TextureNextShader;
 
-		u32 MipToUse = std::get<3>(Data);
+		u32 MipToUse = Data.Mips;
 		if(MipToUse == SUBRESOURCES_ALL)
 		{
 			bool AreAllSubresourcesInSameState = true;

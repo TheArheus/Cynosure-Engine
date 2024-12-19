@@ -22,17 +22,33 @@ gpu_memory_heap::
 }
 
 buffer* gpu_memory_heap::
-AllocateBufferInternal(const resource_descriptor& Desc)
+AllocateBufferInternal(const resource_descriptor& Desc, command_list* CommandList)
 {
 	buffer* NewBuffer = nullptr;
 	switch(Gfx->Type)
 	{
 		case backend_type::vulkan:
-			NewBuffer = new vulkan_buffer(Gfx, Desc.Name, Desc.Data, Desc.Size, Desc.Count, Desc.Usage);
+			if(CommandList)
+			{
+				NewBuffer = new vulkan_buffer(Gfx, Desc.Name, nullptr, Desc.Size, Desc.Count, Desc.Usage);
+				NewBuffer->Update(Desc.Data, CommandList);
+			}
+			else
+			{
+				NewBuffer = new vulkan_buffer(Gfx, Desc.Name, Desc.Data, Desc.Size, Desc.Count, Desc.Usage);
+			}
 			break;
 #if _WIN32
 		case backend_type::directx12:
-			NewBuffer = new directx12_buffer(Gfx, Desc.Name, Desc.Data, Desc.Size, Desc.Count, Desc.Usage);
+			if(CommandList)
+			{
+				NewBuffer = new directx12_buffer(Gfx, Desc.Name, nullptr, Desc.Size, Desc.Count, Desc.Usage);
+				NewBuffer->Update(Desc.Data, CommandList);
+			}
+			else
+			{
+				NewBuffer = new directx12_buffer(Gfx, Desc.Name, Desc.Data, Desc.Size, Desc.Count, Desc.Usage);
+			}
 			break;
 #endif
 	}
@@ -41,17 +57,33 @@ AllocateBufferInternal(const resource_descriptor& Desc)
 }
 
 texture* gpu_memory_heap::
-AllocateTextureInternal(const resource_descriptor& Desc)
+AllocateTextureInternal(const resource_descriptor& Desc, command_list* CommandList)
 {
 	texture* NewTexture = nullptr;
 	switch(Gfx->Type)
 	{
 		case backend_type::vulkan:
-			NewTexture = new vulkan_texture(Gfx, Desc.Name, Desc.Data, Desc.Width, Desc.Height, Desc.Depth, Desc.Info);
+			if(CommandList)
+			{
+				NewTexture = new vulkan_texture(Gfx, Desc.Name, nullptr, Desc.Width, Desc.Height, Desc.Depth, Desc.Info);
+				NewTexture->Update(Desc.Data, CommandList);
+			}
+			else
+			{
+				NewTexture = new vulkan_texture(Gfx, Desc.Name, Desc.Data, Desc.Width, Desc.Height, Desc.Depth, Desc.Info);
+			}
 			break;
 #if _WIN32
 		case backend_type::directx12:
-			NewTexture = new directx12_texture(Gfx, Desc.Name, Desc.Data, Desc.Width, Desc.Height, Desc.Depth, Desc.Info);
+			if(CommandList)
+			{
+				NewTexture = new directx12_texture(Gfx, Desc.Name, nullptr, Desc.Width, Desc.Height, Desc.Depth, Desc.Info);
+				NewTexture->Update(Desc.Data, CommandList);
+			}
+			else
+			{
+				NewTexture = new directx12_texture(Gfx, Desc.Name, Desc.Data, Desc.Width, Desc.Height, Desc.Depth, Desc.Info);
+			}
 			break;
 #endif
 	}
@@ -182,6 +214,26 @@ GetBuffer(u64 ID)
 	return AllocateBufferInternal(GetResourceDescriptor(ID));
 }
 
+[[nodiscard]] buffer* gpu_memory_heap::
+GetBuffer(command_list* CommandList, const resource_descriptor& Desc)
+{
+	if(Resources.find(Desc.ID) != Resources.end())
+	{
+		return (buffer*)Resources[Desc.ID];
+	}
+	return AllocateBufferInternal(Desc, CommandList);
+}
+
+[[nodiscard]] buffer* gpu_memory_heap::
+GetBuffer(command_list* CommandList, u64 ID)
+{
+	if(Resources.find(ID) != Resources.end())
+	{
+		return (buffer*)Resources[ID];
+	}
+	return AllocateBufferInternal(GetResourceDescriptor(ID), CommandList);
+}
+
 // TODO: if the texture is still not created, create it here so that gather would work correctly here
 [[nodiscard]] texture* gpu_memory_heap::
 GetTexture(const resource_descriptor& Desc)
@@ -201,6 +253,26 @@ GetTexture(u64 ID)
 		return (texture*)Resources[ID];
 	}
 	return AllocateTextureInternal(GetResourceDescriptor(ID));
+}
+
+[[nodiscard]] texture* gpu_memory_heap::
+GetTexture(command_list* CommandList, const resource_descriptor& Desc)
+{
+	if(Resources.find(Desc.ID) != Resources.end())
+	{
+		return (texture*)Resources[Desc.ID];
+	}
+	return AllocateTextureInternal(Desc, CommandList);
+}
+
+[[nodiscard]] texture* gpu_memory_heap::
+GetTexture(command_list* CommandList, u64 ID)
+{
+	if(Resources.find(ID) != Resources.end())
+	{
+		return (texture*)Resources[ID];
+	}
+	return AllocateTextureInternal(GetResourceDescriptor(ID), CommandList);
 }
 
 void gpu_memory_heap::

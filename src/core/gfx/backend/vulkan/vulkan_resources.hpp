@@ -94,7 +94,6 @@ struct vulkan_buffer : public buffer
 	{
 		Usage = Flags;
 		Gfx = static_cast<vulkan_backend*>(Backend);
-		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 		WithCounter = Flags & RF_WithCounter;
 		PrevShader = PSF_TopOfPipe;
 
@@ -160,32 +159,6 @@ struct vulkan_buffer : public buffer
 		DebugNameInfo.pObjectName = TempName.c_str();
 		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
 #endif
-
-		CommandQueue->Reset();
-		VkCommandBuffer CommandList = CommandQueue->AllocateCommandList();
-
-		void* CpuPtr;
-		vkMapMemory(Device, TempMemory, 0, NewSize, 0, &CpuPtr);
-		memset(CpuPtr, 0, NewSize);
-		vkUnmapMemory(Device, TempMemory);
-
-		VkBufferCopy Region = {0, 0, VkDeviceSize(Size)};
-		vkCmdCopyBuffer(CommandList, Temp, Handle, 1, &Region);
-
-		VkBufferMemoryBarrier CopyBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-		CopyBarrier.buffer = Handle;
-		CopyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-		CopyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		CopyBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		CopyBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		CopyBarrier.offset = 0;
-		CopyBarrier.size = Size;
-
-		vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1, &CopyBarrier, 0, 0);
-
-		CommandQueue->ExecuteAndRemove(&CommandList);
-
-		VK_CHECK(vkDeviceWaitIdle(Device));
 	}
 
 	void DestroyResource() override
@@ -277,7 +250,6 @@ struct vulkan_texture : public texture
 	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
 	{
 		Gfx = static_cast<vulkan_backend*>(Backend);
-		vulkan_command_queue* CommandQueue = static_cast<vulkan_backend*>(Backend)->CommandQueue;
 
 		CurrentLayout.resize(InputData.MipLevels);
 		CurrentState.resize(InputData.MipLevels);

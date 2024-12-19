@@ -63,8 +63,8 @@ static float Clamp(float Value, float MinVal, float MaxVal)
 
 static bool CircleRectCollision(const vec2& CirclePos, float Radius, const vec2& RectPos, const vec2& RectSize, vec2& Normal, float& Depth)
 {
-    float HalfWidth  = RectSize.x / 2.0f;
-    float HalfHeight = RectSize.y / 2.0f;
+    float HalfWidth  = RectSize.x * 0.5f;
+    float HalfHeight = RectSize.y * 0.5f;
 
     float Left   = RectPos.x - HalfWidth;
     float Right  = RectPos.x + HalfWidth;
@@ -85,8 +85,7 @@ static bool CircleRectCollision(const vec2& CirclePos, float Radius, const vec2&
     if (Distance != 0.0f)
 	{
         Normal = vec2(DistanceX / Distance, DistanceY / Distance);
-		Normal = Normal.Normalize();
-        Depth = Radius - Distance;
+        Depth  = Radius - Distance;
     }
     else
 	{
@@ -143,7 +142,7 @@ struct collision_system : public entity_system
 
 			BallTrans.Position += Event.Normal * Event.Depth;
 
-			BallVel.Direction = BallVel.Direction - 2 * Dot(BallVel.Direction, Event.Normal) * Event.Normal;
+			BallVel.Direction = BallVel.Direction - 2.0f * Dot(BallVel.Direction, Event.Normal) * Event.Normal;
 			BallVel.Direction = BallVel.Direction.Normalize();
 
             Event.B.Kill();
@@ -155,7 +154,7 @@ struct collision_system : public entity_system
 
 			BallTrans.Position += Event.Normal * Event.Depth;
 
-            float HitPos = (BallTrans.Position.x - PaddleTrans.Position.x) / (PaddleInfo.Dims.x / 2.0f);
+            float HitPos = (BallTrans.Position.x - PaddleTrans.Position.x) / (0.5f * PaddleInfo.Dims.x);
             HitPos = Clamp(HitPos, -1.0f, 1.0f);
 
             float Angle = HitPos * (75.0f * (3.14159f / 180.0f)); // 75 degrees max angle
@@ -179,7 +178,7 @@ struct collision_system : public entity_system
 			}
 			if (BallTrans.Position.y - BallDesc.Radius <= 0.0f)
 			{
-				BallTrans.Position = vec2(FrameWidth / 2.0f, 150.0f);
+				BallTrans.Position = vec2(FrameWidth * 0.5f, 150.0f);
 				BallVel.Direction = vec2(0.0f, 0.0f);
 				BallVel.Speed = 0.0f;
 			}

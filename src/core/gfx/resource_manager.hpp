@@ -11,8 +11,8 @@ class gpu_memory_heap
 
 	u64 NextID = 0;
 
-	buffer* AllocateBufferInternal(const resource_descriptor& Desc);
-	texture* AllocateTextureInternal(const resource_descriptor& Desc);
+	buffer* AllocateBufferInternal(const resource_descriptor& Desc, command_list* CommandList = nullptr);
+	texture* AllocateTextureInternal(const resource_descriptor& Desc, command_list* CommandList = nullptr);
 
 public:
 	RENDERER_API gpu_memory_heap(renderer_backend* Backend);
@@ -28,9 +28,13 @@ public:
 
 	[[nodiscard]] RENDERER_API buffer* GetBuffer(const resource_descriptor& Desc);
 	[[nodiscard]] RENDERER_API buffer* GetBuffer(u64 ID);
+	[[nodiscard]] RENDERER_API buffer* GetBuffer(command_list* CommandList, const resource_descriptor& Desc);
+	[[nodiscard]] RENDERER_API buffer* GetBuffer(command_list* CommandList, u64 ID);
 
 	[[nodiscard]] RENDERER_API texture* GetTexture(const resource_descriptor& Desc);
 	[[nodiscard]] RENDERER_API texture* GetTexture(u64 ID);
+	[[nodiscard]] RENDERER_API texture* GetTexture(command_list* CommandList, const resource_descriptor& Desc);
+	[[nodiscard]] RENDERER_API texture* GetTexture(command_list* CommandList, u64 ID);
 
 	RENDERER_API void ReleaseBuffer(const resource_descriptor& Desc);
 	RENDERER_API void ReleaseTexture(const resource_descriptor& Desc);

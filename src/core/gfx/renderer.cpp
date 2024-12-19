@@ -53,7 +53,7 @@ global_graphics_context(backend_type _BackendType, GLFWwindow* Window)
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
-	TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled | TF_CopySrc;
+	TextureInputData.Usage     = TF_ColorAttachment | TF_Sampled;
 	GfxColorTarget[0] = GpuMemoryHeap->CreateTexture("ColorTarget0", Backend->Width, Backend->Height, 1, TextureInputData);
 	GfxColorTarget[1] = GpuMemoryHeap->CreateTexture("ColorTarget1", Backend->Width, Backend->Height, 1, TextureInputData);
 	TextureInputData.Format    = image_format::D32_SFLOAT;
@@ -264,17 +264,17 @@ GetOrCreateContext(shader_pass* Pass)
     return NewContext;
 }
 
-void global_graphics_context::
+bool global_graphics_context::
 SetContext(shader_pass* Pass, command_list* Context)
 {
     CurrentContext = GetOrCreateContext(Pass);
     if (Pass->Type == pass_type::graphics)
     {
-        Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
+        return Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
     }
     else if (Pass->Type == pass_type::compute)
     {
-        Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
+        return Context->SetComputePipelineState(static_cast<compute_context*>(CurrentContext));
     }
 }
 
@@ -285,16 +285,24 @@ PushRectangle(vec2 Pos, vec2 Dims, vec3 Color)
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string("Rectangle draw");
 	NewPass->Type = pass_type::graphics;
-	NewPass->ReflectionData = reflect<full_screen_pass_color::parameters>::Get();
+
+	full_screen_pass_color::raster_parameters RasterParameters = {};
+	RasterParameters.ColorTarget = GfxColorTarget[BackBufferIndex];
+	RasterParameters.IndexBuffer = QuadIndexBuffer;
 
 	full_screen_pass_color::parameters Parameters = {};
 	Parameters.Vertices = QuadVertexBuffer;
 
-	NewPass->Parameters = PushStruct(full_screen_pass_color::parameters);
-	*((full_screen_pass_color::parameters*)NewPass->Parameters) = Parameters;
+	NewPass->ShaderReflection = reflect<full_screen_pass_color::parameters>::Get();
+	NewPass->ShaderParameters = PushStruct(full_screen_pass_color::parameters);
+	*((full_screen_pass_color::parameters*)NewPass->ShaderParameters) = Parameters;
+
+	NewPass->RasterReflection = reflect<full_screen_pass_color::raster_parameters>::Get();
+	NewPass->RasterParameters = PushStruct(full_screen_pass_color::raster_parameters);
+	*((full_screen_pass_color::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
 
 	Passes.push_back(NewPass);
-	Dispatches[NewPass] = [Pos, Dims, Color, QuadIndices = GpuMemoryHeap->GetBuffer(QuadIndexBuffer), ColorTarget = GpuMemoryHeap->GetTexture(GfxColorTarget[BackBufferIndex])]
+	Dispatches[NewPass] = [Pos, Dims, Color, ColorTarget = GfxColorTarget[BackBufferIndex]]
 	(command_list* Cmd)
 	{
 		struct transform
@@ -304,14 +312,12 @@ PushRectangle(vec2 Pos, vec2 Dims, vec3 Color)
 			vec3 Color;
 		};
 		transform Transform = {};
-		Transform.Pos = (Pos / vec2(ColorTarget->Width, ColorTarget->Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Dim = Dims / vec2(ColorTarget->Width, ColorTarget->Height);
+		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
+		Transform.Dim = Dims / vec2(ColorTarget.Width, ColorTarget.Height);
 		Transform.Color = Color;
 
-		Cmd->SetViewport(0, 0, ColorTarget->Width, ColorTarget->Height);
-		Cmd->SetColorTarget({ColorTarget});
+		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
 
-		Cmd->SetIndexBuffer(QuadIndices);
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
 	};
@@ -328,22 +334,30 @@ PushRectangle(vec2 Pos, vec2 Dims, vec3 Color)
 
 // TODO: move to instanced draw
 void global_graphics_context::
-PushRectangle(vec2 Pos, vec2 Dims, resource_descriptor Texture)
+PushRectangle(vec2 Pos, vec2 Dims, resource_descriptor& Texture)
 {
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string("Textured rectangle draw");
 	NewPass->Type = pass_type::graphics;
-	NewPass->ReflectionData = reflect<full_screen_pass_texture::parameters>::Get();
+
+	full_screen_pass_texture::raster_parameters RasterParameters = {};
+	RasterParameters.ColorTarget = GfxColorTarget[BackBufferIndex];
+	RasterParameters.IndexBuffer = QuadIndexBuffer;
 
 	full_screen_pass_texture::parameters Parameters = {};
 	Parameters.Vertices = QuadVertexBuffer;
 	Parameters.Texture  = Texture;
 
-	NewPass->Parameters = PushStruct(full_screen_pass_texture::parameters);
-	*((full_screen_pass_texture::parameters*)NewPass->Parameters) = Parameters;
+	NewPass->ShaderReflection = reflect<full_screen_pass_texture::parameters>::Get();
+	NewPass->ShaderParameters = PushStruct(full_screen_pass_texture::parameters);
+	*((full_screen_pass_texture::parameters*)NewPass->ShaderParameters) = Parameters;
+
+	NewPass->RasterReflection = reflect<full_screen_pass_texture::raster_parameters>::Get();
+	NewPass->RasterParameters = PushStruct(full_screen_pass_texture::raster_parameters);
+	*((full_screen_pass_texture::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
 
 	Passes.push_back(NewPass);
-	Dispatches[NewPass] = [Pos, Dims, QuadIndices = GpuMemoryHeap->GetBuffer(QuadIndexBuffer), ColorTarget = GpuMemoryHeap->GetTexture(GfxColorTarget[BackBufferIndex])]
+	Dispatches[NewPass] = [Pos, Dims, ColorTarget = GfxColorTarget[BackBufferIndex]]
 	(command_list* Cmd)
 	{
 		struct transform
@@ -352,13 +366,11 @@ PushRectangle(vec2 Pos, vec2 Dims, resource_descriptor Texture)
 			vec2 Dim;
 		};
 		transform Transform = {};
-		Transform.Pos = (Pos / vec2(ColorTarget->Width, ColorTarget->Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Dim = Dims / vec2(ColorTarget->Width, ColorTarget->Height);
+		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
+		Transform.Dim = Dims / vec2(ColorTarget.Width, ColorTarget.Height);
 
-		Cmd->SetViewport(0, 0, ColorTarget->Width, ColorTarget->Height);
-		Cmd->SetColorTarget({ColorTarget});
+		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
 
-		Cmd->SetIndexBuffer(QuadIndices);
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
 	};
@@ -380,16 +392,24 @@ PushCircle(vec2 Pos, float Radius, vec3 Color)
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string("Circle draw");
 	NewPass->Type = pass_type::graphics;
-	NewPass->ReflectionData = reflect<full_screen_pass_circle::parameters>::Get();
+
+	full_screen_pass_circle::raster_parameters RasterParameters = {};
+	RasterParameters.ColorTarget = GfxColorTarget[BackBufferIndex];
+	RasterParameters.IndexBuffer = QuadIndexBuffer;
 
 	full_screen_pass_circle::parameters Parameters = {};
 	Parameters.Vertices = QuadVertexBuffer;
 
-	NewPass->Parameters = PushStruct(full_screen_pass_circle::parameters);
-	*((full_screen_pass_circle::parameters*)NewPass->Parameters) = Parameters;
+	NewPass->ShaderReflection = reflect<full_screen_pass_circle::parameters>::Get();
+	NewPass->ShaderParameters = PushStruct(full_screen_pass_circle::parameters);
+	*((full_screen_pass_circle::parameters*)NewPass->ShaderParameters) = Parameters;
+
+	NewPass->RasterReflection = reflect<full_screen_pass_circle::raster_parameters>::Get();
+	NewPass->RasterParameters = PushStruct(full_screen_pass_circle::raster_parameters);
+	*((full_screen_pass_circle::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
 
 	Passes.push_back(NewPass);
-	Dispatches[NewPass] = [Pos, Radius, Color, QuadIndices = GpuMemoryHeap->GetBuffer(QuadIndexBuffer), ColorTarget = GpuMemoryHeap->GetTexture(GfxColorTarget[BackBufferIndex])]
+	Dispatches[NewPass] = [Pos, Radius, Color, ColorTarget = GfxColorTarget[BackBufferIndex]]
 	(command_list* Cmd)
 	{
 		struct transform
@@ -399,14 +419,12 @@ PushCircle(vec2 Pos, float Radius, vec3 Color)
 			vec3 Color;
 		};
 		transform Transform = {};
-		Transform.Pos = (Pos / vec2(ColorTarget->Width, ColorTarget->Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Dim = vec2(2.0 * Radius) / vec2(ColorTarget->Width, ColorTarget->Height);
+		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
+		Transform.Dim = vec2(2.0 * Radius) / vec2(ColorTarget.Width, ColorTarget.Height);
 		Transform.Color = Color;
 
-		Cmd->SetViewport(0, 0, ColorTarget->Width, ColorTarget->Height);
-		Cmd->SetColorTarget({ColorTarget});
+		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
 
-		Cmd->SetIndexBuffer(QuadIndices);
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
 	};
@@ -427,7 +445,8 @@ AddTransferPass(std::string Name, execute_func Exec)
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string(Name);
 	NewPass->Type = pass_type::transfer;
-	NewPass->Parameters = nullptr;
+	NewPass->ShaderParameters = nullptr;
+	NewPass->RasterParameters = nullptr;
 
 	Passes.push_back(NewPass);
 	Dispatches[NewPass] = Exec;
@@ -441,15 +460,13 @@ AddTransferPass(std::string Name, execute_func Exec)
 	}
 }
 
-
-// TODO: Prepass and postpass barriers (postpass barrier is for when the resource is not fully in the same state, for example, after mip generation etc)
-//       Move barrier generation to here?
 // TODO: Command parallelization maybe
-// TODO: Prepass barrier generation and optimization
 void global_graphics_context::
 Compile()
 {
 	std::unordered_map<u64, resource_lifetime> Lifetimes;
+	std::unordered_map<u64, resource_state> LastKnownResourceStates;
+	std::vector<u64> CurrParamsToBind;
 
 	for(u32 PassIndex = 0; PassIndex < Passes.size(); PassIndex++)
 	{
@@ -461,11 +478,15 @@ Compile()
 		u32   MemberIdx  = 0;
 		u32   StaticOffs = 0;
 		bool  HaveStatic = UseContext->ParameterLayout.size() > 1;
-		void* ParametersToParse = Pass->Parameters;
+		void* ShaderParameters = Pass->ShaderParameters;
 		member_definition* Member = nullptr;
 
 		// TODO: remove this vectors
+		std::vector<buffer_barrier> AttachmentBufferBarriers;
+		std::vector<texture_barrier> AttachmentImageBarriers;
+
 		std::vector<binding_packet> Packets;
+		std::vector<u64> ParamsToBind;
 		std::vector<u64> InputIDs;
 		std::vector<u64> OutputIDs;
 
@@ -473,10 +494,10 @@ Compile()
 		for(u32 ParamIdx = 0; ParamIdx < UseContext->ParameterLayout[0].size(); ParamIdx++, MemberIdx++, StaticOffs++)
 		{
 			descriptor_param Parameter = UseContext->ParameterLayout[0][ParamIdx];
-			Member = Pass->ReflectionData->Data + MemberIdx;
+			Member = Pass->ShaderReflection->Data + MemberIdx;
 			if(Member->Type == meta_type::gpu_buffer)
 			{
-				gpu_buffer* Data = (gpu_buffer*)((uptr)ParametersToParse + Member->Offset);
+				gpu_buffer* Data = (gpu_buffer*)((uptr)ShaderParameters + Member->Offset);
 
 				auto& Lifetime = Lifetimes[Data->ID];
 				Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
@@ -486,6 +507,20 @@ Compile()
 				NewPacket.Resource = GpuMemoryHeap->GetBuffer(Data->ID);
 				Packets.push_back(NewPacket);
 
+				resource_state NewState;
+				NewState.IsWritable = Parameter.IsWritable;
+				NewState.ShaderStageAccess = Parameter.ShaderToUse;
+				NewState.ShaderAspect = Parameter.AspectMask;
+				NewState.Valid = true;
+				auto& LastState = LastKnownResourceStates[Data->ID];
+
+				if(!LastState.Valid || LastState != NewState)
+				{
+					AttachmentBufferBarriers.push_back({(buffer*)NewPacket.Resource, Parameter.AspectMask, Parameter.ShaderToUse});
+				}
+				LastState = NewState;
+
+				ParamsToBind.push_back(Data->ID);
 				if(!Parameter.IsWritable)
 				{
 					InputIDs.push_back(Data->ID);
@@ -499,7 +534,7 @@ Compile()
 			}
 			else if(Member->Type == meta_type::gpu_texture)
 			{
-				gpu_texture* Data = (gpu_texture*)((uptr)ParametersToParse + Member->Offset);
+				gpu_texture* Data = (gpu_texture*)((uptr)ShaderParameters + Member->Offset);
 
 				auto& Lifetime = Lifetimes[Data->ID];
 				Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
@@ -512,6 +547,22 @@ Compile()
 				NewPacket.Mips = Data->SubresourceIdx;
 				Packets.push_back(NewPacket);
 
+				resource_state NewState;
+				NewState.IsWritable = Parameter.IsWritable;
+				NewState.State = Parameter.BarrierState;
+				NewState.ShaderStageAccess = Parameter.ShaderToUse;
+				NewState.ShaderAspect = Parameter.AspectMask;
+				NewState.Valid = true;
+				auto& LastState = LastKnownResourceStates[Data->ID];
+
+				if(!LastState.Valid || LastState != NewState)
+				{
+					texture* CurrentTexture = (texture*)NewPacket.Resources[0];
+					AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, NewPacket.Mips, Parameter.ShaderToUse});
+				}
+				LastState = NewState;
+
+				ParamsToBind.push_back(Data->ID);
 				if(!Parameter.IsWritable)
 				{
 					InputIDs.push_back(Data->ID);
@@ -523,7 +574,7 @@ Compile()
 			}
 			else if(Member->Type == meta_type::gpu_texture_array)
 			{
-				gpu_texture_array* Data = (gpu_texture_array*)((uptr)ParametersToParse + Member->Offset);
+				gpu_texture_array* Data = (gpu_texture_array*)((uptr)ShaderParameters + Member->Offset);
 
 				binding_packet NewPacket;
 				NewPacket.Resources = array<resource*>(Data->IDs.size());
@@ -532,19 +583,36 @@ Compile()
 
 				for(size_t i = 0; i < Data->IDs.size(); i++)
 				{
-					auto& Lifetime = Lifetimes[(*Data)[i]];
+					u64 ID = (*Data)[i];
+					auto& Lifetime = Lifetimes[ID];
 					Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
 					Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
 
-					NewPacket.Resources[i] = GpuMemoryHeap->GetTexture((*Data)[i]);
+					NewPacket.Resources[i] = GpuMemoryHeap->GetTexture(ID);
 
+					resource_state NewState;
+					NewState.IsWritable = Parameter.IsWritable;
+					NewState.State = Parameter.BarrierState;
+					NewState.ShaderStageAccess = Parameter.ShaderToUse;
+					NewState.ShaderAspect = Parameter.AspectMask;
+					NewState.Valid = true;
+					auto& LastState = LastKnownResourceStates[ID];
+
+					if(!LastState.Valid || LastState != NewState)
+					{
+						texture* CurrentTexture = (texture*)NewPacket.Resources[i];
+						AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, NewPacket.Mips, Parameter.ShaderToUse});
+					}
+					LastState = NewState;
+
+					ParamsToBind.push_back(ID);
 					if(!Parameter.IsWritable)
 					{
-						InputIDs.push_back((*Data)[i]);
+						InputIDs.push_back(ID);
 					}
 					else
 					{
-						OutputIDs.push_back((*Data)[i]);
+						OutputIDs.push_back(ID);
 					}
 				}
 				Packets.push_back(NewPacket);
@@ -561,10 +629,10 @@ Compile()
 			for(u32 ParamIdx = 0; ParamIdx < UseContext->ParameterLayout[LayoutIdx].size(); ParamIdx++, MemberIdx++)
 			{
 				descriptor_param Parameter = UseContext->ParameterLayout[LayoutIdx][ParamIdx];
-				Member = Pass->ReflectionData->Data + MemberIdx;
+				Member = Pass->ShaderReflection->Data + MemberIdx;
 				if(Member->Type == meta_type::gpu_texture_array)
 				{
-					gpu_texture_array* Data = (gpu_texture_array*)((uptr)ParametersToParse + Member->Offset);
+					gpu_texture_array* Data = (gpu_texture_array*)((uptr)ShaderParameters + Member->Offset);
 
 					binding_packet NewPacket;
 					NewPacket.Resources = array<resource*>(Data->IDs.size());
@@ -578,14 +646,24 @@ Compile()
 						Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
 
 						NewPacket.Resources[i] = GpuMemoryHeap->GetTexture((*Data)[i]);
+
+						//texture* CurrentTexture = (texture*)NewPacket.Resources[i];
+						//AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, NewPacket.Mips, Parameter.ShaderToUse});
 					}
 					Packets.push_back(NewPacket);
 				}
 			}
 		}
 
+		Pass->ParamsChanged = (ParamsToBind.size() != CurrParamsToBind.size()) ||
+							  !std::equal(CurrParamsToBind.begin(), CurrParamsToBind.end(), ParamsToBind.begin());
+
+		CurrParamsToBind = ParamsToBind;
+
 		Pass->Inputs  = array<u64>(InputIDs.data() , InputIDs.size());
 		Pass->Outputs = array<u64>(OutputIDs.data(), OutputIDs.size());
+		Pass->BufferBarriers = array<buffer_barrier>(AttachmentBufferBarriers.data(), AttachmentBufferBarriers.size());
+		Pass->TextureBarriers = array<texture_barrier>(AttachmentImageBarriers.data(), AttachmentImageBarriers.size());
 
 		Pass->Bindings = array<binding_packet>(Packets.data(), Packets.size());
 		if(HaveStatic)
@@ -604,19 +682,157 @@ Execute()
 {
 	ExecutionContext->AcquireNextImage();
 	ExecutionContext->Begin();
-	texture* ColorTarget = GpuMemoryHeap->GetTexture(GfxColorTarget[BackBufferIndex]);
-	ExecutionContext->FillTexture(ColorTarget, vec4(vec3(0), 1.0f));
+
+	texture* CurrentColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, GfxColorTarget[BackBufferIndex]);
+	ExecutionContext->FillTexture(CurrentColorTarget, vec4(vec3(0), 1.0f));
+
+	// NOTE: Little binding cache for some of the resources:
+	buffer*  BoundVertexBuffer = nullptr;
+	buffer*  BoundIndexBuffer = nullptr;
+	std::vector<texture*> BoundColorTargets;
+	texture* BoundDepthTarget = nullptr;
+
+	bool RenderingActive = false;
 	for(u32 PassIndex = 0; PassIndex < Passes.size(); PassIndex++)
 	{
 		shader_pass* Pass = Passes[PassIndex];
-		SetContext(Pass, ExecutionContext);
+		bool ShouldRebind = SetContext(Pass, ExecutionContext) || Pass->ParamsChanged;
+
+        if (ShouldRebind)
+        {
+            if (RenderingActive)
+            {
+                ExecutionContext->EndRendering();
+                RenderingActive = false;
+            }
+        }
+
+        if (Pass->RasterReflection && ShouldRebind)
+        {
+            void* RasterParameters = Pass->RasterParameters;
+            std::vector<texture*> DesiredColorTargets; 
+            texture* DesiredDepthTarget = nullptr;
+
+            for (u32 RasterParamIdx = 0; RasterParamIdx < Pass->RasterReflection->Size; ++RasterParamIdx)
+            {
+                member_definition* Member = Pass->RasterReflection->Data + RasterParamIdx;
+
+                if (Member->Type == meta_type::gpu_index_buffer)
+                {
+                    gpu_index_buffer* Data = (gpu_index_buffer*)((uptr)RasterParameters + Member->Offset);
+                    buffer* IndexBuffer = GpuMemoryHeap->GetBuffer(ExecutionContext, Data->ID);
+
+                    if (ShouldRebind || BoundIndexBuffer != IndexBuffer)
+                    {
+                        ExecutionContext->AttachmentBufferBarriers.push_back({IndexBuffer, RF_IndexBuffer, PSF_VertexShader});
+                        ExecutionContext->SetIndexBuffer(IndexBuffer);
+                        BoundIndexBuffer = IndexBuffer;
+                    }
+                }
+                else if (Member->Type == meta_type::gpu_color_target)
+                {
+                    gpu_color_target* Data = (gpu_color_target*)((uptr)RasterParameters + Member->Offset);
+                    DesiredColorTargets.clear();
+                    DesiredColorTargets.reserve(Data->IDs.size());
+
+                    for (size_t i = 0; i < Data->IDs.size(); i++)
+                    {
+                        u64 ID = (*Data)[i];
+                        texture* ColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ID);
+                        DesiredColorTargets.push_back(ColorTarget);
+                    }
+                }
+#if 0
+                else if (Member->Type == meta_type::gpu_depth_target)
+                {
+                    gpu_depth_target* Data = (gpu_depth_target*)((uptr)RasterParameters + Member->Offset);
+                    texture* DepthTarget = GpuMemoryHeap->GetTexture(ExecutionContext, (*Data)[0]);
+                    DesiredDepthTarget = DepthTarget;
+                }
+#endif
+            }
+
+            // Decide if we need to rebind color targets:
+            bool ColorTargetsChanged = 
+                (BoundColorTargets.size() != DesiredColorTargets.size()) ||
+                !std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin());
+
+            // Decide if we need to rebind depth targets:
+            bool DepthTargetChanged = (BoundDepthTarget != DesiredDepthTarget);
+
+            // If ShouldRebind is true, we rebind even if they haven't changed
+            if (ShouldRebind || ColorTargetsChanged)
+            {
+                for (texture* ColorTarget : DesiredColorTargets)
+                {
+                    ExecutionContext->AttachmentImageBarriers.push_back({
+                        ColorTarget, 
+                        AF_ColorAttachmentWrite, 
+                        barrier_state::color_attachment, 
+                        SUBRESOURCES_ALL, 
+                        PSF_ColorAttachment
+                    });
+                }
+                ExecutionContext->SetColorTarget(DesiredColorTargets);
+                BoundColorTargets = DesiredColorTargets;
+            }
+
+#if 0
+            if (ShouldRebind || DepthTargetChanged)
+            {
+                if (DesiredDepthTarget)
+                {
+                    ExecutionContext->AttachmentImageBarriers.push_back({
+                        DesiredDepthTarget, 
+                        AF_DepthStencilAttachmentWrite, 
+                        barrier_state::depth_stencil_attachment, 
+                        SUBRESOURCES_ALL, 
+                        PSF_EarlyFragment
+                    });
+                    ExecutionContext->SetDepthTarget(DesiredDepthTarget);
+                }
+                BoundDepthTarget = DesiredDepthTarget;
+            }
+#endif
+        }
+
+		ExecutionContext->AttachmentBufferBarriers.insert(ExecutionContext->AttachmentBufferBarriers.end(), Pass->BufferBarriers.begin(), Pass->BufferBarriers.end());
+		ExecutionContext->AttachmentImageBarriers.insert(ExecutionContext->AttachmentImageBarriers.end(), Pass->TextureBarriers.begin(), Pass->TextureBarriers.end());
+
+		ExecutionContext->SetBufferBarriers(ExecutionContext->AttachmentBufferBarriers);
+		ExecutionContext->SetImageBarriers(ExecutionContext->AttachmentImageBarriers);
+
 		ExecutionContext->BindShaderParameters(Pass->Bindings);
+
+        if (ShouldRebind)
+        {
+            ExecutionContext->BeginRendering(Backend->Width, Backend->Height);
+            RenderingActive = true;
+        }
+        else
+        {
+            if (!RenderingActive)
+            {
+                ExecutionContext->BeginRendering(Backend->Width, Backend->Height);
+                RenderingActive = true;
+            }
+        }
+
 		Dispatches[Pass](ExecutionContext);
+
+		ExecutionContext->AttachmentBufferBarriers.clear();
+		ExecutionContext->AttachmentImageBarriers.clear();
+	}
+
+	if(RenderingActive)
+	{
+		ExecutionContext->EndRendering();
+		RenderingActive = false;
 	}
 
 	// TODO: Think about how to implement this properly now
 #if 0
-	ExecutionContext->DebugGuiBegin(GpuMemoryHeap->GetTexture(GfxColorTarget[BackBufferIndex]));
+	ExecutionContext->DebugGuiBegin(CurrentColorTarget);
 	ImGui::NewFrame();
 
 	SceneManager.RenderUI();
@@ -643,7 +859,7 @@ Execute()
 	ExecutionContext->DebugGuiEnd();
 #endif
 
-	ExecutionContext->EmplaceColorTarget(ColorTarget);
+	ExecutionContext->EmplaceColorTarget(CurrentColorTarget);
 	ExecutionContext->Present();
 
 	for(shader_pass* Pass : Passes)

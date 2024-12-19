@@ -25,9 +25,11 @@ private:
 			Class.lpfnWndProc = InitWindowProc;
 
 			RegisterClass(&Class);
+			timeBeginPeriod(1);
 		}
 		~window_class()
 		{
+			timeEndPeriod(1);
 			UnregisterClass(Name, Inst);
 		}
 

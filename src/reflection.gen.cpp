@@ -2,6 +2,8 @@ enum class meta_type
 {
     unknown = 0,
     gpu_buffer,
+    gpu_color_target,
+    gpu_index_buffer,
     gpu_texture,
     gpu_texture_array,
 };
@@ -178,6 +180,22 @@ struct reflect<generate_all::parameters>
     }
 };
 
+member_definition MembersOf__full_screen_pass_color_raster_parameters[] = 
+{
+    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(full_screen_pass_color::raster_parameters, IndexBuffer), 1},
+    {0, meta_type::gpu_color_target, "ColorTarget", sizeof(gpu_color_target), offsetof(full_screen_pass_color::raster_parameters, ColorTarget), 1},
+};
+
+template<>
+struct reflect<full_screen_pass_color::raster_parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__full_screen_pass_color_raster_parameters, sizeof(MembersOf__full_screen_pass_color_raster_parameters)/sizeof(MembersOf__full_screen_pass_color_raster_parameters[0]) };
+        return &Meta;
+    }
+};
+
 member_definition MembersOf__full_screen_pass_color_parameters[] = 
 {
     {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(full_screen_pass_color::parameters, Vertices), 1},
@@ -193,6 +211,22 @@ struct reflect<full_screen_pass_color::parameters>
     }
 };
 
+member_definition MembersOf__full_screen_pass_circle_raster_parameters[] = 
+{
+    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(full_screen_pass_circle::raster_parameters, IndexBuffer), 1},
+    {0, meta_type::gpu_color_target, "ColorTarget", sizeof(gpu_color_target), offsetof(full_screen_pass_circle::raster_parameters, ColorTarget), 1},
+};
+
+template<>
+struct reflect<full_screen_pass_circle::raster_parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__full_screen_pass_circle_raster_parameters, sizeof(MembersOf__full_screen_pass_circle_raster_parameters)/sizeof(MembersOf__full_screen_pass_circle_raster_parameters[0]) };
+        return &Meta;
+    }
+};
+
 member_definition MembersOf__full_screen_pass_circle_parameters[] = 
 {
     {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(full_screen_pass_circle::parameters, Vertices), 1},
@@ -204,6 +238,22 @@ struct reflect<full_screen_pass_circle::parameters>
     static meta_descriptor* Get()
     {
         static meta_descriptor Meta{ MembersOf__full_screen_pass_circle_parameters, sizeof(MembersOf__full_screen_pass_circle_parameters)/sizeof(MembersOf__full_screen_pass_circle_parameters[0]) };
+        return &Meta;
+    }
+};
+
+member_definition MembersOf__full_screen_pass_texture_raster_parameters[] = 
+{
+    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(full_screen_pass_texture::raster_parameters, IndexBuffer), 1},
+    {0, meta_type::gpu_color_target, "ColorTarget", sizeof(gpu_color_target), offsetof(full_screen_pass_texture::raster_parameters, ColorTarget), 1},
+};
+
+template<>
+struct reflect<full_screen_pass_texture::raster_parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__full_screen_pass_texture_raster_parameters, sizeof(MembersOf__full_screen_pass_texture_raster_parameters)/sizeof(MembersOf__full_screen_pass_texture_raster_parameters[0]) };
         return &Meta;
     }
 };

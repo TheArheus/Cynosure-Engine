@@ -245,9 +245,127 @@ struct resource_descriptor
     }
 };
 
+struct gpu_vertex_buffer
+{
+	u64 ID = ~0ull;
+
+	gpu_vertex_buffer() = default;
+	gpu_vertex_buffer(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		ID = Desc.ID;
+	}
+
+	gpu_vertex_buffer& operator=(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		ID = Desc.ID;
+		return *this;
+	}
+};
+
+struct gpu_index_buffer
+{
+	u64 ID = ~0ull;
+
+	gpu_index_buffer() = default;
+	gpu_index_buffer(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		ID = Desc.ID;
+	}
+
+	gpu_index_buffer& operator=(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		ID = Desc.ID;
+		return *this;
+	}
+};
+
+struct gpu_indirect_buffer
+{
+	u64 ID = ~0ull;
+
+	gpu_indirect_buffer() = default;
+	gpu_indirect_buffer(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		ID = Desc.ID;
+	}
+
+	gpu_indirect_buffer& operator=(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		ID = Desc.ID;
+		return *this;
+	}
+};
+
+struct gpu_color_target
+{
+	array<u64> IDs;
+
+	gpu_color_target() = default;
+	gpu_color_target(const std::vector<resource_descriptor>& Vec)
+	{
+		IDs = array<u64>(Vec.size());
+		for(size_t Idx = 0; Idx < Vec.size(); Idx++)
+		{
+			assert(Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+			IDs[Idx] = Vec[Idx].ID;
+		}
+	}
+	gpu_color_target(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		IDs = array<u64>(1);
+		IDs[0] = Desc.ID;
+	}
+
+	gpu_color_target& operator=(const std::vector<resource_descriptor>& Vec)
+	{
+		IDs = array<u64>(Vec.size());
+		for(size_t Idx = 0; Idx < Vec.size(); Idx++)
+		{
+			assert(Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+			IDs[Idx] = Vec[Idx].ID;
+		}
+		return *this;
+	}
+	gpu_color_target& operator=(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		IDs = array<u64>(1);
+		IDs[0] = Desc.ID;
+		return *this;
+	}
+
+	size_t size() { return IDs.size(); }
+    u64& operator[](size_t i) { return IDs[i]; }
+};
+
+struct gpu_depth_target
+{
+	u64 ID = ~0ull;
+
+	gpu_depth_target() = default;
+	gpu_depth_target(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		ID = Desc.ID;
+	}
+	gpu_depth_target& operator=(const resource_descriptor& Desc)
+	{
+		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		ID = Desc.ID;
+		return *this;
+	}
+};
+
 struct gpu_buffer
 {
-	u64 ID;
+	u64 ID = ~0ull;
 	bool WithCounter = false;
 
 	gpu_buffer() = default;
@@ -269,7 +387,7 @@ struct gpu_buffer
 
 struct gpu_texture
 {
-	u64 ID;
+	u64 ID = ~0ull;
     u64 SubresourceIdx = SUBRESOURCES_ALL;
 
 	gpu_texture() = default;
@@ -374,6 +492,22 @@ struct binding_packet
 	u64 Mips = SUBRESOURCES_ALL;
 };
 
+struct buffer_barrier
+{
+	buffer* Buffer;
+	u32 Aspect;
+	u32 Shader;
+};
+
+struct texture_barrier
+{
+	texture* Texture;
+	u32 Aspect;
+	barrier_state State;
+	u64 Mips;
+	u32 Shader;
+};
+
 class render_context;
 class compute_context;
 struct command_list
@@ -404,8 +538,8 @@ struct command_list
 	virtual void Update(texture* TextureToUpdate, void* Data) = 0;
 	virtual void ReadBack(texture* TextureToUpdate, void* Data) = 0;
 
-	virtual void SetGraphicsPipelineState(render_context* Context) = 0;
-	virtual void SetComputePipelineState(compute_context* Context) = 0;
+	virtual bool SetGraphicsPipelineState(render_context* Context) = 0;
+	virtual bool SetComputePipelineState(compute_context* Context) = 0;
 
 	virtual void SetConstant(void* Data, size_t Size) = 0;
 
@@ -422,6 +556,9 @@ struct command_list
 
 	virtual void BindShaderParameters(const array<binding_packet>& Data) = 0;
 
+	virtual void BeginRendering(u32 RenderWidth, u32 RenderHeight) = 0;
+	virtual void EndRendering() = 0;
+
 	virtual void DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount) = 0;
 	virtual void DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize) = 0;
 	virtual void Dispatch(u32 X = 1, u32 Y = 1, u32 Z = 1) = 0;
@@ -435,21 +572,23 @@ struct command_list
 	virtual void SetMemoryBarrier(u32 SrcAccess, u32 DstAccess, 
 								  u32 SrcStageMask, u32 DstStageMask) = 0;
 
-	virtual void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData) = 0;
-	virtual void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>>& BarrierData) = 0;
+	virtual void SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData) = 0;
+	virtual void SetImageBarriers(const std::vector<texture_barrier>& BarrierData) = 0;
 
 	virtual void DebugGuiBegin(texture* RenderTarget) = 0;
 	virtual void DebugGuiEnd()   = 0;
 
 	u32 BackBufferIndex = 0;
+	u32 GfxWidth;
+	u32 GfxHeight;
 
-	general_context* CurrentContext;
+	general_context* CurrentContext = nullptr;
 
 	std::unordered_set<buffer*>  BuffersToCommon;
 	std::unordered_set<texture*> TexturesToCommon;
 
-	std::vector<std::tuple<buffer*, u32, u32>> AttachmentBufferBarriers;
-	std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>> AttachmentImageBarriers;
+	std::vector<buffer_barrier> AttachmentBufferBarriers;
+	std::vector<texture_barrier> AttachmentImageBarriers;
 };
 
 struct resource_binder

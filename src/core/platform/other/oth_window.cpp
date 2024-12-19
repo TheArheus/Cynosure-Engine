@@ -222,5 +222,10 @@ double window::GetTimestamp()
 void window::SleepFor(double Time)
 {
     if (Time <= 0.0) return;
-	usleep(static_cast<useconds_t>(Time * 1000.0));
+
+    struct timespec req;
+    req.tv_sec  = static_cast<time_t>(Time / 1000.0);
+    req.tv_nsec = static_cast<long>((Time - (req.tv_sec * 1000)) * 1e6);
+
+    nanosleep(&req, nullptr);
 }

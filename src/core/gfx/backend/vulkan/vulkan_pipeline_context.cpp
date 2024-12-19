@@ -387,6 +387,7 @@ End()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	CommandQueue->Execute(&CommandList);
+	CurrentContext = nullptr;
 }
 
 void vulkan_command_list::
@@ -394,6 +395,7 @@ EndOneTime()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	CommandQueue->ExecuteAndRemove(&CommandList);
+	CurrentContext = nullptr;
 }
 
 void vulkan_command_list::
@@ -410,6 +412,7 @@ Present()
 	PresentInfo.pSwapchains = &Gfx->Swapchain;
 	PresentInfo.pImageIndices = &BackBufferIndex;
 	vkQueuePresentKHR(CommandQueue->Handle, &PresentInfo);
+	CurrentContext = nullptr;
 }
 
 
@@ -438,6 +441,7 @@ EmplaceColorTarget(texture* RenderTexture)
 void vulkan_command_list::
 Update(buffer* BufferToUpdate, void* Data)
 {
+	if(!Data) return;
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToUpdate);
 	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
 
@@ -453,6 +457,7 @@ Update(buffer* BufferToUpdate, void* Data)
 void vulkan_command_list::
 UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 {
+	if(!Data) return;
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToUpdate);
 
 	if(UpdateByteSize == 0) return;
@@ -472,6 +477,7 @@ UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 void vulkan_command_list::
 ReadBack(buffer* BufferToRead, void* Data)
 {
+	if(!Data) return;
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToRead);
 
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
@@ -488,6 +494,7 @@ ReadBack(buffer* BufferToRead, void* Data)
 void vulkan_command_list::
 ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 {
+	if(!Data) return;
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToRead);
 
 	if (UpdateByteSize == 0) return;
@@ -507,6 +514,7 @@ ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 void vulkan_command_list::
 Update(texture* TextureToUpdate, void* Data)
 {
+	if(!Data) return;
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureToUpdate);
 	SetImageBarriers({{TextureToUpdate, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
 
@@ -531,6 +539,7 @@ Update(texture* TextureToUpdate, void* Data)
 void vulkan_command_list::
 ReadBack(texture* TextureToRead, void* Data)
 {
+	if(!Data) return;
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureToRead);
 	SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
 
@@ -563,10 +572,8 @@ SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 	VkRenderingAttachmentInfoKHR* ColorInfo = PushArray(VkRenderingAttachmentInfoKHR, ColorTargets.size());
 	for(u32 AttachmentIdx = 0; AttachmentIdx < ColorTargets.size(); ++AttachmentIdx)
 	{
-		AttachmentImageBarriers.push_back({ColorTargets[AttachmentIdx], AF_ColorAttachmentWrite, barrier_state::color_attachment, SUBRESOURCES_ALL, PSF_ColorAttachment});
-		TexturesToCommon.insert(ColorTargets[AttachmentIdx]);
-
 		vulkan_texture* Attachment = static_cast<vulkan_texture*>(ColorTargets[AttachmentIdx]);
+		TexturesToCommon.insert(ColorTargets[AttachmentIdx]);
 
 		ColorInfo[AttachmentIdx].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
 		ColorInfo[AttachmentIdx].pNext = nullptr;
@@ -590,8 +597,6 @@ void vulkan_command_list::
 SetDepthTarget(texture* Target, vec2 Clear)
 {
 	assert(CurrentContext->Type == pass_type::graphics);
-
-	AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, PSF_EarlyFragment});
 	TexturesToCommon.insert(Target);
 
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
@@ -674,10 +679,7 @@ BindShaderParameters(const array<binding_packet>& Data)
 		{
 			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
 			Binder.SetStorageBufferView(BufferToBind);
-
 			BuffersToCommon.insert(BufferToBind);
-			AttachmentBufferBarriers.push_back({BufferToBind, Parameter.AspectMask, Parameter.ShaderToUse});
-
 			ParamIdx += BufferToBind->WithCounter;
 		}
 		else if(Parameter.Type == resource_type::texture_sampler)
@@ -688,7 +690,6 @@ BindShaderParameters(const array<binding_packet>& Data)
 			{
 				texture* CurrentTexture = (texture*)CurrentResource;
 				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Data[Offset].Mips, Parameter.ShaderToUse});
 			}
 		}
 		else if(Parameter.Type == resource_type::texture_storage)
@@ -699,7 +700,6 @@ BindShaderParameters(const array<binding_packet>& Data)
 			{
 				texture* CurrentTexture = (texture*)CurrentResource;
 				TexturesToCommon.insert(CurrentTexture);
-				AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Data[Offset].Mips, Parameter.ShaderToUse});
 			}
 		}
 	}
@@ -719,9 +719,8 @@ BindShaderParameters(const array<binding_packet>& Data)
 				{
 					texture* CurrentTexture = (texture*)CurrentResource;
 					TexturesToCommon.insert(CurrentTexture);
-					AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, Data[Offset].Mips, Parameter.ShaderToUse});
 				}
-				// TODO: How do I move this out?
+				// TODO: How do I move this out? Remove this even!
 				if(s32(Parameter.Count - Data[Offset].Resources.size()) > 0)
 				{
 					if(Parameter.ImageType == image_type::Texture1D)
@@ -744,57 +743,21 @@ BindShaderParameters(const array<binding_packet>& Data)
 	vkCmdPushDescriptorSetKHR(CommandList, BindPoint, Layout, 0, Binder.PushDescriptorBindings.size(), Binder.PushDescriptorBindings.data());
 }
 
-#if 0
-void vulkan_render_context::
-Draw(buffer* VertexBuffer, u32 FirstVertex, u32 VertexCount)
-{
-	vulkan_buffer* VertexAttachment = static_cast<vulkan_buffer*>(VertexBuffer);
-
-	vkCmdPushDescriptorSetKHR(*PipelineContext->CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, RootSignatureHandle, 0, PushDescriptorBindings.size(), PushDescriptorBindings.data());
-	if(UseFramebuffer)
-	{
-		FramebufferCreateInfo.attachmentCount = AttachmentViews.size();
-		FramebufferCreateInfo.pAttachments    = AttachmentViews.data();
-		RenderPassInfo.clearValueCount        = RenderTargetClears.size();
-		RenderPassInfo.pClearValues           = RenderTargetClears.data();
-
-		VkFramebuffer& FrameBuffer = FrameBuffers[FrameBufferIdx];
-		if(!FrameBuffer)
-			vkCreateFramebuffer(Device, &FramebufferCreateInfo, nullptr, &FrameBuffer);
-		FrameBufferIdx++;
-
-		RenderPassInfo.framebuffer = FrameBuffer;
-		vkCmdBeginRenderPass(*PipelineContext->CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
-		vkCmdEndRenderPass(*PipelineContext->CommandList);
-	}
-	else
-	{
-		vkCmdBeginRenderingKHR(*PipelineContext->CommandList, &RenderingInfo);
-		vkCmdDraw(*PipelineContext->CommandList, VertexCount, 1, FirstVertex, 0);
-		vkCmdEndRenderingKHR(*PipelineContext->CommandList);
-	}
-
-	AttachmentViews.clear();
-	RenderTargetClears.clear();
-	RenderingAttachmentInfos.clear();
-
-	AttachmentBufferBarriers.clear();
-	AttachmentImageBarriers.clear();
-
-	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
-	RenderPassInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-	FramebufferCreateInfo = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-}
-#endif
-
 void vulkan_command_list::
-DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount)
+BeginRendering(u32 RenderWidth, u32 RenderHeight)
 {
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
 
-	SetBufferBarriers(AttachmentBufferBarriers);
-	SetImageBarriers(AttachmentImageBarriers);
+	if(Context->Type != pass_type::graphics) return;
+
+	RenderingInfo.renderArea = RenderPassInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
+	RenderingInfo.layerCount = 1;
+	//RenderingInfo.viewMask   = EnableMultiview * (1 << Face);
+	FramebufferCreateInfo.renderPass = Context->RenderPass;
+	FramebufferCreateInfo.width  = RenderWidth;
+	FramebufferCreateInfo.height = RenderHeight;
+	FramebufferCreateInfo.layers = 1;
+	RenderPassInfo.renderPass = Context->RenderPass;
 
 	if(!Gfx->Features13.dynamicRendering)
 	{
@@ -810,13 +773,24 @@ DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance,
 
 		RenderPassInfo.framebuffer = FrameBuffer;
 		vkCmdBeginRenderPass(CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdDrawIndexed(CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
-		vkCmdEndRenderPass(CommandList);
 	}
 	else
 	{
 		vkCmdBeginRenderingKHR(CommandList, &RenderingInfo);
-		vkCmdDrawIndexed(CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
+	}
+}
+
+void vulkan_command_list::
+EndRendering()
+{
+	if(CurrentContext->Type != pass_type::graphics) return;
+
+	if(!Gfx->Features13.dynamicRendering)
+	{
+		vkCmdEndRenderPass(CommandList);
+	}
+	else
+	{
 		vkCmdEndRenderingKHR(CommandList);
 	}
 
@@ -824,12 +798,35 @@ DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance,
 	RenderTargetClears.clear();
 	RenderingAttachmentInfos.clear();
 
-	AttachmentBufferBarriers.clear();
-	AttachmentImageBarriers.clear();
-
 	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
 	RenderPassInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
 	FramebufferCreateInfo = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+}
+
+#if 0
+void vulkan_render_context::
+Draw(u32 FirstVertex, u32 VertexCount, u32 FirstInstance, u32 InstanceCount)
+{
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
+	assert(CurrentContext->Type == pass_type::graphics);
+
+	SetBufferBarriers(AttachmentBufferBarriers);
+	SetImageBarriers(AttachmentImageBarriers);
+
+	vkCmdDraw(*PipelineContext->CommandList, VertexCount, InstanceCount, FirstVertex, FirstInstance);
+
+	AttachmentBufferBarriers.clear();
+	AttachmentImageBarriers.clear();
+}
+#endif
+
+void vulkan_command_list::
+DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount)
+{
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
+	assert(CurrentContext->Type == pass_type::graphics);
+
+	vkCmdDrawIndexed(CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 }
 
 void vulkan_command_list::
@@ -840,46 +837,10 @@ DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructure
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
 	vulkan_buffer* IndirectCommandsAttachment = static_cast<vulkan_buffer*>(IndirectCommands);
 
-	BuffersToCommon.insert(IndirectCommands);
-	AttachmentBufferBarriers.push_back({IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
+	//BuffersToCommon.insert(IndirectCommands);
+	//AttachmentBufferBarriers.push_back({IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
 
-	SetBufferBarriers(AttachmentBufferBarriers);
-	SetImageBarriers(AttachmentImageBarriers);
-
-	if(!Gfx->Features13.dynamicRendering)
-	{
-		FramebufferCreateInfo.attachmentCount = AttachmentViews.size();
-		FramebufferCreateInfo.pAttachments    = AttachmentViews.data();
-		RenderPassInfo.clearValueCount        = RenderTargetClears.size();
-		RenderPassInfo.pClearValues           = RenderTargetClears.data();
-
-		VkFramebuffer& FrameBuffer = Context->FrameBuffers[Context->FrameBufferIdx];
-		if(!FrameBuffer)
-			vkCreateFramebuffer(Device, &FramebufferCreateInfo, nullptr, &FrameBuffer);
-		Context->FrameBufferIdx++;
-
-		RenderPassInfo.framebuffer = FrameBuffer;
-		vkCmdBeginRenderPass(CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdDrawIndexedIndirectCount(CommandList, IndirectCommandsAttachment->Handle, 4, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
-		vkCmdEndRenderPass(CommandList);
-	}
-	else
-	{
-		vkCmdBeginRenderingKHR(CommandList, &RenderingInfo);
-		vkCmdDrawIndexedIndirectCount(CommandList, IndirectCommandsAttachment->Handle, 4, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
-		vkCmdEndRenderingKHR(CommandList);
-	}
-
-	AttachmentViews.clear();
-	RenderTargetClears.clear();
-	RenderingAttachmentInfos.clear();
-
-	AttachmentBufferBarriers.clear();
-	AttachmentImageBarriers.clear();
-
-	RenderingInfo = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
-	RenderPassInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-	FramebufferCreateInfo = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+	vkCmdDrawIndexedIndirectCount(CommandList, IndirectCommandsAttachment->Handle, 4, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
 }
 
 void vulkan_command_list::
@@ -895,12 +856,14 @@ Dispatch(u32 X, u32 Y, u32 Z)
 
 	AttachmentImageBarriers.clear();
 	AttachmentBufferBarriers.clear();
-	RenderingAttachmentInfos.clear();
 }
 
-void vulkan_command_list::
+bool vulkan_command_list::
 SetGraphicsPipelineState(render_context* Context)
 {
+	assert(Context->Type == pass_type::graphics);
+	if(Context == CurrentContext) return false;
+
 	CurrentContext = Context;
 	vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(Context);
 	vkCmdBindPipeline(CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, ContextToBind->Pipeline);
@@ -913,11 +876,16 @@ SetGraphicsPipelineState(render_context* Context)
 
 	if(SetsToBind.size())
 		vkCmdBindDescriptorSets(CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, ContextToBind->RootSignatureHandle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
+
+	return true;
 }
 
-void vulkan_command_list::
+bool vulkan_command_list::
 SetComputePipelineState(compute_context* Context)
 {
+	assert(Context->Type == pass_type::compute);
+	if(Context == CurrentContext) return false;
+
 	CurrentContext = Context;
 	vulkan_compute_context* ContextToBind = static_cast<vulkan_compute_context*>(Context);
 	vkCmdBindPipeline(CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, ContextToBind->Pipeline);
@@ -930,6 +898,8 @@ SetComputePipelineState(compute_context* Context)
 
 	if(SetsToBind.size())
 		vkCmdBindDescriptorSets(CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, ContextToBind->RootSignatureHandle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
+
+	return true;
 }
 
 void vulkan_command_list::
@@ -957,15 +927,6 @@ SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight)
 
 	VkRect2D Scissor = {{(s32)StartX, (s32)(Gfx->Height - (RenderHeight + StartY))}, {RenderWidth, RenderHeight}};
 	vkCmdSetScissor(CommandList, 0, 1, &Scissor);
-
-	RenderingInfo.renderArea = RenderPassInfo.renderArea = {{(s32)StartX, (s32)(Gfx->Height - (RenderHeight + StartY))}, {RenderWidth, RenderHeight}};
-	RenderingInfo.layerCount = 1;
-	//RenderingInfo.viewMask   = EnableMultiview * (1 << Face);
-	FramebufferCreateInfo.renderPass = Context->RenderPass;
-	FramebufferCreateInfo.width  = RenderWidth;
-	FramebufferCreateInfo.height = RenderHeight;
-	FramebufferCreateInfo.layers = 1;
-	RenderPassInfo.renderPass = Context->RenderPass;
 }
 
 void vulkan_command_list::
@@ -1054,21 +1015,21 @@ SetMemoryBarrier(u32 SrcAccess, u32 DstAccess,
 }
 
 void vulkan_command_list::
-SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData)
+SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 {
 	std::vector<VkBufferMemoryBarrier> Barriers;
 	u32 DstStageMask = 0;
 	u32 SrcStageMask = 0;
 
-	for(const std::tuple<buffer*, u32, u32>& Data : BarrierData)
+	for(const buffer_barrier& Data : BarrierData)
 	{
-		vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(std::get<0>(Data));
+		vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(Data.Buffer);
 
 		u32 BufferPrevShader = Buffer->PrevShader;
 		    BufferPrevShader = BufferPrevShader & PSF_BottomOfPipe ? PSF_TopOfPipe : BufferPrevShader;
-		u32 BufferNextShader = std::get<2>(Data);
+		u32 BufferNextShader = Data.Shader;
 		u32 ResourceLayoutPrev = BufferPrevShader & PSF_TopOfPipe ? 0 : Buffer->CurrentLayout;
-		u32 ResourceLayoutNext = BufferNextShader & PSF_BottomOfPipe ? 0 : std::get<1>(Data);
+		u32 ResourceLayoutNext = BufferNextShader & PSF_BottomOfPipe ? 0 : Data.Aspect;
 		Buffer->CurrentLayout = ResourceLayoutNext;
 		Buffer->PrevShader = BufferNextShader;
 
@@ -1087,32 +1048,33 @@ SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData)
 		Barriers.push_back(Barrier);
 	}
 
-	vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), VK_DEPENDENCY_BY_REGION_BIT, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
+	if(Barriers.size())
+		vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), VK_DEPENDENCY_BY_REGION_BIT, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
 }
 
 void vulkan_command_list::
-SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>>& BarrierData)
+SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 {
 	std::vector<VkImageMemoryBarrier> Barriers;
 	u32 SrcStageMask = 0;
 	u32 DstStageMask = 0;
 
-	for(const std::tuple<texture*, u32, barrier_state, u32, u32>& Data : BarrierData)
+	for(const texture_barrier& Data : BarrierData)
 	{
-		vulkan_texture* Texture = static_cast<vulkan_texture*>(std::get<0>(Data));
+		vulkan_texture* Texture = static_cast<vulkan_texture*>(Data.Texture);
 
-		barrier_state ResourceStateNext = std::get<2>(Data);
+		barrier_state ResourceStateNext = Data.State;
 
 		u32 TexturePrevShader = Texture->PrevShader;
 		    TexturePrevShader = TexturePrevShader & PSF_BottomOfPipe ? PSF_TopOfPipe : TexturePrevShader;
-		u32 TextureNextShader = std::get<4>(Data);
-		u32 ResourceLayoutNext = TextureNextShader & PSF_BottomOfPipe ? 0 : std::get<1>(Data);
+		u32 TextureNextShader = Data.Shader;
+		u32 ResourceLayoutNext = TextureNextShader & PSF_BottomOfPipe ? 0 : Data.Aspect;
 		Texture->PrevShader = TextureNextShader;
 
 		SrcStageMask |= TexturePrevShader;
 		DstStageMask |= TextureNextShader;
 
-		u32 MipToUse = std::get<3>(Data);
+		u32 MipToUse = Data.Mips;
 		VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
 		Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, TextureNextShader);
 		Barrier.newLayout = GetVKLayout(ResourceStateNext);
@@ -1175,11 +1137,9 @@ SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32,
 	}
 
 	if(Barriers.size())
-	{
 		vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 
 							 VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 
 							 (u32)Barriers.size(), Barriers.data());
-	}
 }
 
 void vulkan_command_list::

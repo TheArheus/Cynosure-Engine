@@ -8,19 +8,57 @@ struct shader_pass
 {
 	string Name;
 	pass_type Type;
-	void* Parameters;
-	meta_descriptor* ReflectionData;
+
+	void* ShaderParameters;
+	meta_descriptor* ShaderReflection;
+
+	void* RasterParameters;
+	meta_descriptor* RasterReflection;
 
 	array<binding_packet> Bindings;
+	array<buffer_barrier> BufferBarriers;
+	array<texture_barrier> TextureBarriers;
 
 	array<u64> Inputs;
 	array<u64> Outputs;
+
+	bool ParamsChanged = false;
 };
 
 struct resource_lifetime
 {
 	size_t FirstUsagePassIndex = std::numeric_limits<size_t>::max();
 	size_t LastUsagePassIndex = 0;
+};
+
+struct resource_state
+{
+    // For simplicity, we track:
+    // - IsWritable: whether resource was last used for writing
+    // - BarrierState: the pipeline barrier layout/state
+    // - ShaderStageAccess: which stages accessed it (bitmask)
+    bool IsWritable = false;
+    barrier_state State = barrier_state::undefined;
+    u32 ShaderStageAccess = 0; 
+	u32 ShaderAspect = 0;
+    bool Valid = false; // Indicates if we have a recorded state
+    
+    bool operator==(const resource_state& Oth) const
+    {
+        // Define what "matching" means. For example:
+        // - Same barrier state?
+        // - Same read/write usage?
+        // - Same shader stages involved?
+        return (IsWritable == Oth.IsWritable) &&
+               (State == Oth.State) &&
+			   (ShaderAspect == Oth.ShaderAspect) && 
+               (ShaderStageAccess == Oth.ShaderStageAccess);
+    }
+
+	bool operator!=(const resource_state& Oth) const
+	{
+		return !(*this == Oth);
+	}
 };
 
 class global_graphics_context
@@ -54,7 +92,7 @@ public:
 	RENDERER_API void DestroyObject();
 
 	RENDERER_API general_context* GetOrCreateContext(shader_pass* Pass);
-	RENDERER_API void SetContext(shader_pass* Pass, command_list* Context);
+	RENDERER_API bool SetContext(shader_pass* Pass, command_list* Context);
 
 	template<typename context_type, typename param_type>
 	RENDERER_API void AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec);
@@ -62,7 +100,7 @@ public:
 
 	RENDERER_API void PushCircle(vec2 Pos, float Radius, vec3 Color);
 	RENDERER_API void PushRectangle(vec2 Pos, vec2 Dims, vec3 Color);
-	RENDERER_API void PushRectangle(vec2 Pos, vec2 Dims, resource_descriptor Texture);
+	RENDERER_API void PushRectangle(vec2 Pos, vec2 Dims, resource_descriptor& Texture);
 
 	RENDERER_API void Compile();
 	RENDERER_API void Execute();
@@ -99,10 +137,13 @@ AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Ex
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string(Name);
 	NewPass->Type = Type;
-	NewPass->ReflectionData = reflect<param_type>::Get();
+	NewPass->ShaderReflection = reflect<param_type>::Get();
 
-	NewPass->Parameters = PushStruct(param_type);
-	*((param_type*)NewPass->Parameters) = Parameters;
+	NewPass->ShaderParameters = PushStruct(param_type);
+	*((param_type*)NewPass->ShaderParameters) = Parameters;
+
+	NewPass->RasterReflection = nullptr;
+	NewPass->RasterParameters = nullptr;
 
 	Passes.push_back(NewPass);
 	Dispatches[NewPass] = Exec;

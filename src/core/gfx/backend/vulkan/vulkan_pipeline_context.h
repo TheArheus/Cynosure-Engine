@@ -50,8 +50,8 @@ struct vulkan_command_list : public command_list
 	void Update(texture* TextureToUpdate, void* Data) override;
 	void ReadBack(texture* TextureToRead, void* Data) override;
 
-	void SetGraphicsPipelineState(render_context* Context) override;
-	void SetComputePipelineState(compute_context* Context) override;
+	bool SetGraphicsPipelineState(render_context* Context) override;
+	bool SetComputePipelineState(compute_context* Context) override;
 
 	void SetConstant(void* Data, size_t Size) override;
 
@@ -68,6 +68,9 @@ struct vulkan_command_list : public command_list
 
 	void BindShaderParameters(const array<binding_packet>& Data) override;
 
+	void BeginRendering(u32 RenderWidth, u32 RenderHeight) override;
+	void EndRendering() override;
+
 	void DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount) override;
 	void DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize) override;
 	void Dispatch(u32 X = 1, u32 Y = 1, u32 Z = 1) override;
@@ -80,8 +83,8 @@ struct vulkan_command_list : public command_list
 
 	void SetMemoryBarrier(u32 SrcAccess, u32 DstAccess, u32 SrcStageMask, u32 DstStageMask) override;
 
-	void SetBufferBarriers(const std::vector<std::tuple<buffer*, u32, u32>>& BarrierData) override;
-	void SetImageBarriers(const std::vector<std::tuple<texture*, u32, barrier_state, u32, u32>>& BarrierData) override;
+	void SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData) override;
+	void SetImageBarriers(const std::vector<texture_barrier>& BarrierData) override;
 
 	void DebugGuiBegin(texture* RenderTarget) override;
 	void DebugGuiEnd() override;

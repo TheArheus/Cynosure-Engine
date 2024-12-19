@@ -2,8 +2,8 @@
 void engine::
 Init(const std::vector<std::string>& args)
 {
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 
 	Registry.AddSystem<render_system>();
 	Registry.AddSystem<movement_system>();
@@ -78,6 +78,9 @@ Run()
     const double TargetFrameRate = 1000.0 / FrameRateToChoose;
     double TimeLast = window::GetTimestamp();
 
+	double SmoothedFPS = FrameRateToChoose;
+	const double SmoothingFactor = 0.05; // NOTE: 0 (slow) and 1 (fast)
+
 	while(Window.IsRunning())
 	{
 		Window.NewFrame();
@@ -95,18 +98,19 @@ Run()
         }
 		double FrameDeltaTime = window::GetTimestamp() - TimeLast;
 #ifdef CE_DEBUG
-		if (FrameDeltaTime > TargetFrameRate) FrameDeltaTime = TargetFrameRate;
+		//if (FrameDeltaTime > TargetFrameRate) FrameDeltaTime = TargetFrameRate;
 #endif
 		TimeLast = window::GetTimestamp();
 
 		Registry.UpdateSystems(FrameDeltaTime);
 
-		std::string FrameSpeedString = "Frame " + std::to_string(FrameDeltaTime) + "ms, " + std::to_string(1.0 / FrameDeltaTime * 1000.0) + "fps";
+		double InstantFPS = 1000.0 / FrameDeltaTime;
+		SmoothedFPS = SmoothingFactor * InstantFPS + (1.0 - SmoothingFactor) * SmoothedFPS;
+		std::string FrameSpeedString = "Frame " + std::to_string(1000.0 / SmoothedFPS) + "ms, " + std::to_string(SmoothedFPS) + "fps";
 		if(!Window.IsGfxPaused)
 		{
 			Registry.GetSystem<render_system>()->Render(Window.Gfx);
 			// TODO: Function for text drawing
-#ifdef CE_DEBUG
 			{
 				u32 PutOffset = 0;
 				for(u32 CharIdx = 0; CharIdx < FrameSpeedString.size(); CharIdx++)
@@ -135,7 +139,6 @@ Run()
 					PutOffset += CharacterFont.Advance / Scale;
 				}
 			}
-#endif
 			Window.Gfx.Compile();
 			Window.Gfx.Execute();
 		}
