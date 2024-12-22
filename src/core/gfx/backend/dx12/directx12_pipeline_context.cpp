@@ -237,8 +237,7 @@ Present()
 	Gfx->CommandQueue->Execute(&CommandList);
 	Gfx->Fence->Flush(Gfx->CommandQueue);
 
-	//Gfx->SwapChain->Present(0, Gfx->TearingSupport * DXGI_PRESENT_ALLOW_TEARING);
-	Gfx->SwapChain->Present(0, 0);
+	Gfx->SwapChain->Present(0, Gfx->TearingSupport * DXGI_PRESENT_ALLOW_TEARING);
 	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
 	CurrentContext = nullptr;
 }

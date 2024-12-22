@@ -84,7 +84,7 @@ typedef size_t memory_index;
 
 struct texture_t
 {
-    u32* Memory;
+    u32* Memory = nullptr;
 
     u32 Width;
     u32 Height;
@@ -92,13 +92,13 @@ struct texture_t
 
 struct glyph_t
 {
-    u32* Memory;
-
     u32 Width;
     u32 Height;
     s32 OffsetX;
     s32 OffsetY;
     s32 FontSize;
+	float StartX;
+	float StartY;
 	float Advance;
 };
 

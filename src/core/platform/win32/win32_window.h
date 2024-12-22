@@ -86,6 +86,10 @@ public:
 
 	global_graphics_context Gfx;
 
+	button Buttons[256] = {};
+	float MouseX;
+	float MouseY;
+
 private:
 	window(const window& rhs) = delete;
 	window& operator=(const window& rhs) = delete;
@@ -95,8 +99,6 @@ private:
 	LRESULT DispatchMessages(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam);
 
 	static LARGE_INTEGER TimerFrequency;
-
-	button Buttons[256] = {};
 
 	ImGuiContext* imguiContext = nullptr;
 };

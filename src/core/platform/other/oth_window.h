@@ -78,6 +78,10 @@ public:
 
 	global_graphics_context Gfx;
 
+	button Buttons[256] = {};
+	float MouseX;
+	float MouseY;
+
 private:
 	window(const window& rhs) = delete;
 	window& operator=(const window& rhs) = delete;
@@ -102,8 +106,6 @@ private:
     static void WindowSizeCallback(GLFWwindow* window, int width, int height);
     static void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
     static void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-
-	button Buttons[256] = {};
 
 	ImGuiContext* imguiContext = nullptr;
 };

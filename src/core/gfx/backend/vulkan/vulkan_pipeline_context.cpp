@@ -520,7 +520,7 @@ Update(texture* TextureToUpdate, void* Data)
 
 	void* CpuPtr;
 	vkMapMemory(Device, Texture->TempMemory, 0, Texture->Size, 0, &CpuPtr);
-	memcpy(CpuPtr, Data, Texture->Size);
+	memcpy(CpuPtr, Data, Texture->Width * Texture->Height * Texture->Depth * GetPixelSize(Texture->Info.Format));
 	vkUnmapMemory(Device, Texture->TempMemory);
 
 	VkBufferImageCopy Region = {};
@@ -558,7 +558,7 @@ ReadBack(texture* TextureToRead, void* Data)
 
 	void* CpuPtr;
 	vkMapMemory(Device, Texture->TempMemory, 0, Texture->Size, 0, &CpuPtr);
-	memcpy(Data, CpuPtr, Texture->Size);
+	memcpy(Data, CpuPtr, Texture->Width * Texture->Height * Texture->Depth * GetPixelSize(Texture->Info.Format));
 	vkUnmapMemory(Device, Texture->TempMemory);
 }
 

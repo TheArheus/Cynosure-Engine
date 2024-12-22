@@ -3,7 +3,9 @@
 struct transform
 {
 	vec2 Pos;
-	vec2 Dim;
+	vec2 Scale;
+	vec2 Offset;
+	vec2 Dims;
 	vec3 Color;
 };
 
@@ -21,6 +23,6 @@ layout(location = 0) out vec2 TextCoord;
 void main()
 {
 	uint VertexIndex = gl_VertexIndex;
-	gl_Position = vec4(In[VertexIndex].Position * Transform.Dim + Transform.Pos, 0.0, 1.0);
-	TextCoord = In[VertexIndex].TextCoord;
+	gl_Position = vec4(In[VertexIndex].Position * Transform.Scale + Transform.Pos, 0.0, 1.0);
+	TextCoord = Transform.Offset + In[VertexIndex].TextCoord * Transform.Dims;
 }

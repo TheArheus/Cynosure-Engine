@@ -148,9 +148,9 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 
 		case WM_MOUSEMOVE:
 		{
-			s32 MouseX = GET_X_LPARAM(lParam);
-			s32 MouseY = GET_Y_LPARAM(lParam);
-			window::EventsDispatcher.Emit<mouse_move_event>(float(MouseX) / Width, float(MouseY) / Height);
+			MouseX = float(GET_X_LPARAM(lParam));
+			MouseY = float(Height) - float(GET_Y_LPARAM(lParam));
+			window::EventsDispatcher.Emit<mouse_move_event>(MouseX / Width, MouseY / Height);
 		} break;
 
 		case WM_MOUSEWHEEL:
@@ -219,14 +219,19 @@ void window::EmitEvents()
 {
 	for(u16 Code = 0; Code < 256; ++Code)
 	{
-		if(Buttons[Code].IsDown)
+		if(Buttons[Code].IsDown && !Buttons[Code].WasDown)
 		{
 			window::EventsDispatcher.Emit<key_down_event>(Code, Buttons[Code].RepeatCount);
 		}
-		else if(Buttons[Code].WasDown)
+		else if(!Buttons[Code].IsDown && Buttons[Code].WasDown)
 		{
 			window::EventsDispatcher.Emit<key_up_event>(Code, Buttons[Code].RepeatCount);
 		}
+	}
+	for (u16 Code = 0; Code < 256; ++Code)
+	{
+		Buttons[Code].WasDown = Buttons[Code].IsDown;
+		Buttons[Code].IsDown  = false;
 	}
 }
 

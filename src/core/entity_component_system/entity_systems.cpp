@@ -163,6 +163,35 @@ UpdateSystems(double dt)
     }
 }
 
+void registry::
+ClearAllEntities()
+{
+    for (auto& [TypeIndex, SystemPtr] : Systems)
+    {
+        SystemPtr->Entities.clear();
+    }
+
+    for (auto& Pool : ComponentPools)
+    {
+        if (Pool)
+        {
+            Pool->Clear();
+        }
+    }
+
+    HotEntities.clear();
+    ColdEntities.clear();
+    FreeIDs.clear();
+
+    EntitiesComponentSignatures.clear();
+    EntitiesCount = 0;
+
+    TagToEntity.clear();
+    EntityToTag.clear();
+    EntitiesPerGroup.clear();
+    GroupPerEntity.clear();
+}
+
 template<typename component_type, typename ...args>
 component_type* registry::
 AddComponent(entity& Object, args&&... Args)

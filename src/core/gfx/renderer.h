@@ -99,8 +99,9 @@ public:
 	RENDERER_API void AddTransferPass(std::string Name, execute_func Exec);
 
 	RENDERER_API void PushCircle(vec2 Pos, float Radius, vec3 Color);
-	RENDERER_API void PushRectangle(vec2 Pos, vec2 Dims, vec3 Color);
-	RENDERER_API void PushRectangle(vec2 Pos, vec2 Dims, resource_descriptor& Texture);
+	RENDERER_API void PushRectangle(vec2 Pos, vec2 Scale, vec3 Color);
+	RENDERER_API void PushRectangle(vec2 Pos, vec2 Scale, resource_descriptor& Texture);
+	RENDERER_API void PushRectangle(vec2 Pos, vec2 Scale, vec2 Offset, vec2 Dims, resource_descriptor& Atlas);
 
 	RENDERER_API void Compile();
 	RENDERER_API void Execute();

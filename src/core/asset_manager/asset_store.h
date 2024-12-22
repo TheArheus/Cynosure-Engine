@@ -16,6 +16,7 @@ struct pair_hash
 
 struct font_t
 {
+	texture_t Atlas;
 	std::array<glyph_t, 256> Glyphs;
     std::unordered_map<std::pair<u8, u8>, float, pair_hash> KerningMap;
 };
@@ -45,7 +46,7 @@ public:
     texture_t* GetTexture(const std::string& AssetID);
 
     void AddFont(const std::string& AssetID, const std::string& FilePath, s32 FontSize);
-    font_t GetFont(const std::string& AssetID);
+    font_t* GetFont(const std::string& AssetID);
 };
 
 #endif

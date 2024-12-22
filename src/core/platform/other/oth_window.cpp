@@ -70,6 +70,11 @@ void window::EmitEvents()
 			EventsDispatcher.Emit<key_up_event>(Code, Buttons[Code].RepeatCount);
 		}
 	}
+	for (u16 Code = 0; Code < 256; ++Code)
+	{
+		Buttons[Code].WasDown = Buttons[Code].IsDown;
+		Buttons[Code].IsDown  = false;
+	}
 }
 
 void window::
@@ -118,7 +123,9 @@ CursorPosCallback(GLFWwindow* gWindow, double NewX, double NewY)
 	window* Window = (window*)glfwGetWindowUserPointer(gWindow);
 	if(!Window) return;
 
-	window::EventsDispatcher.Emit<mouse_move_event>(NewX, NewY);
+	Window->MouseX = NewX;
+	Window->MouseY = Window->Height - NewY;
+	window::EventsDispatcher.Emit<mouse_move_event>(NewX / Window->Width, NewY / Window->Height);
 }
 
 void window::

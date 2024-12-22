@@ -80,6 +80,7 @@ struct base_pool
 {
 	virtual ~base_pool() = default;
 	virtual void RemoveEntityFromPool(u64 EntityId) = 0;
+	virtual void Clear() = 0;
 };
 
 template<typename T>
@@ -98,7 +99,7 @@ struct component_pool : public base_pool
 
 	~component_pool() override = default;
 
-	void Clear()
+	void Clear() override
 	{
         Data.clear();
         EntityIdToIndex.clear();
@@ -200,6 +201,7 @@ struct registry
 	void KillEntity(entity Entity);
 
 	void UpdateSystems(double dt);
+	void ClearAllEntities();
 
 	void AddTagToEntity(entity Handle, std::string Tag)
 	{

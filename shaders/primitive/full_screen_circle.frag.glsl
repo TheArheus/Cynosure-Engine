@@ -3,7 +3,9 @@
 struct transform
 {
 	vec2 Pos;
-	vec2 Dim;
+	vec2 Scale;
+	vec2 Offset;
+	vec2 Dims;
 	vec3 Color;
 };
 

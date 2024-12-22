@@ -15,10 +15,7 @@ ClearAssets()
 
     for(auto& Font : Fonts)
     {
-		for(u32 Idx = 0; Idx < 256; Idx++)
-		{
-			if(Font.second.Glyphs[Idx].Memory) free(Font.second.Glyphs[Idx].Memory);
-		}
+		if(Font.second.Atlas.Memory) free(Font.second.Atlas.Memory);
     }
 
     Textures.clear();
@@ -72,8 +69,21 @@ AddFont(const std::string& AssetID, const std::string& FilePath, s32 FontSize)
     }
 
     FT_Set_Pixel_Sizes(FontFace, 0, FontSize);
+	u32 MaxWidth  = 0;
+	u32 MaxHeight = 0;
+    for (u32 Character = 0; Character < 256; ++Character)
+    {
+		FT_Load_Char(FontFace, Character, FT_LOAD_RENDER);
+        FT_GlyphSlot Glyph = FontFace->glyph;
+        MaxWidth += Glyph->bitmap.width;
+        MaxHeight = Max(MaxHeight, Glyph->bitmap.rows);
+	}
 
 	font_t Font;
+	Font.Atlas.Memory = (u32*)calloc(MaxWidth * MaxHeight, sizeof(u32));
+	Font.Atlas.Width  = MaxWidth;
+	Font.Atlas.Height = MaxHeight;
+	float StartX = 0.0;
     for (u32 Character = 0; Character < 256; ++Character)
     {
 		FT_Load_Char(FontFace, Character, FT_LOAD_RENDER);
@@ -84,25 +94,26 @@ AddFont(const std::string& AssetID, const std::string& FilePath, s32 FontSize)
         GlyphData.Height = Glyph->bitmap.rows;
         GlyphData.OffsetX = Glyph->bitmap_left;
         GlyphData.OffsetY = Glyph->bitmap_top;
+        GlyphData.StartX = StartX;
+        GlyphData.StartY = 0.0;
         GlyphData.Advance = Glyph->advance.x >> 6;
+
 
         if (Glyph->bitmap.width == 0 || Glyph->bitmap.rows == 0)
         {
-			GlyphData.Memory = nullptr;
             continue;
         }
-
-        u32 BitmapSize = GlyphData.Width * GlyphData.Height;
-        GlyphData.Memory = (u32*)malloc(BitmapSize * sizeof(u32));
 
         for (u32 Y = 0; Y < GlyphData.Height; ++Y)
         {
             for (u32 X = 0; X < GlyphData.Width; ++X)
             {
                 u8 Gray = Glyph->bitmap.buffer[(GlyphData.Height - 1 - Y) * GlyphData.Width + X];
-                GlyphData.Memory[Y * GlyphData.Width + X] = (Gray << 24) | (Gray << 16) | (Gray << 8) | Gray;
+				Font.Atlas.Memory[Y * Font.Atlas.Width + X + u32(StartX)] = (Gray << 24) | (Gray << 16) | (Gray << 8) | Gray;
             }
         }
+
+		StartX += GlyphData.Width;
     }
 
     if (FT_HAS_KERNING(FontFace))
@@ -126,13 +137,13 @@ AddFont(const std::string& AssetID, const std::string& FilePath, s32 FontSize)
     FT_Done_Face(FontFace);
 }
 
-font_t asset_store::
+font_t* asset_store::
 GetFont(const std::string& AssetID)
 {
-	auto it = Fonts.find(AssetID);
-	if(it != Fonts.end())
-	{
-		return it->second;
-	}
-	return {};
+    auto it = Fonts.find(AssetID);
+    if (it != Fonts.end())
+    {
+        return &it->second;
+    }
+    return nullptr;
 }

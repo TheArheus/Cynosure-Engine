@@ -280,7 +280,7 @@ SetContext(shader_pass* Pass, command_list* Context)
 
 // TODO: move to instanced draw
 void global_graphics_context::
-PushRectangle(vec2 Pos, vec2 Dims, vec3 Color)
+PushRectangle(vec2 Pos, vec2 Scale, vec3 Color)
 {
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string("Rectangle draw");
@@ -302,18 +302,22 @@ PushRectangle(vec2 Pos, vec2 Dims, vec3 Color)
 	*((full_screen_pass_color::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
 
 	Passes.push_back(NewPass);
-	Dispatches[NewPass] = [Pos, Dims, Color, ColorTarget = GfxColorTarget[BackBufferIndex]]
+	Dispatches[NewPass] = [Pos, Scale, Color, ColorTarget = GfxColorTarget[BackBufferIndex]]
 	(command_list* Cmd)
 	{
 		struct transform
 		{
 			vec2 Pos;
-			vec2 Dim;
+			vec2 Scale;
+			vec2 Offset;
+			vec2 Dims;
 			vec3 Color;
 		};
 		transform Transform = {};
 		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Dim = Dims / vec2(ColorTarget.Width, ColorTarget.Height);
+		Transform.Scale = Scale / vec2(ColorTarget.Width, ColorTarget.Height);
+		Transform.Offset = vec2(0);
+		Transform.Dims = vec2(1);
 		Transform.Color = Color;
 
 		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
@@ -334,7 +338,7 @@ PushRectangle(vec2 Pos, vec2 Dims, vec3 Color)
 
 // TODO: move to instanced draw
 void global_graphics_context::
-PushRectangle(vec2 Pos, vec2 Dims, resource_descriptor& Texture)
+PushRectangle(vec2 Pos, vec2 Scale, resource_descriptor& Texture)
 {
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string("Textured rectangle draw");
@@ -357,17 +361,77 @@ PushRectangle(vec2 Pos, vec2 Dims, resource_descriptor& Texture)
 	*((full_screen_pass_texture::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
 
 	Passes.push_back(NewPass);
-	Dispatches[NewPass] = [Pos, Dims, ColorTarget = GfxColorTarget[BackBufferIndex]]
+	Dispatches[NewPass] = [Pos, Scale, Texture = Texture, ColorTarget = GfxColorTarget[BackBufferIndex]]
 	(command_list* Cmd)
 	{
 		struct transform
 		{
 			vec2 Pos;
-			vec2 Dim;
+			vec2 Scale;
+			vec2 Offset;
+			vec2 Dims;
 		};
 		transform Transform = {};
 		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Dim = Dims / vec2(ColorTarget.Width, ColorTarget.Height);
+		Transform.Scale = Scale / vec2(ColorTarget.Width, ColorTarget.Height);
+		Transform.Offset = vec2(0);
+		Transform.Dims = vec2(1);
+
+		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
+
+		Cmd->SetConstant((void*)&Transform, sizeof(transform));
+		Cmd->DrawIndexed(0, 6, 0, 0, 1);
+	};
+
+	PassToContext.emplace(NewPass, std::type_index(typeid(full_screen_pass_texture)));
+
+	auto FindIt = ContextMap.find(std::type_index(typeid(full_screen_pass_texture)));
+
+	if(FindIt == ContextMap.end())
+	{
+		GeneralShaderViewMap[std::type_index(typeid(full_screen_pass_texture))] = std::make_unique<full_screen_pass_texture>();
+	}
+}
+
+void global_graphics_context::
+PushRectangle(vec2 Pos, vec2 Scale, vec2 Offset, vec2 Dims, resource_descriptor& Atlas)
+{
+	shader_pass* NewPass = PushStruct(shader_pass);
+	NewPass->Name = string("Textured rectangle draw");
+	NewPass->Type = pass_type::graphics;
+
+	full_screen_pass_texture::raster_parameters RasterParameters = {};
+	RasterParameters.ColorTarget = GfxColorTarget[BackBufferIndex];
+	RasterParameters.IndexBuffer = QuadIndexBuffer;
+
+	full_screen_pass_texture::parameters Parameters = {};
+	Parameters.Vertices = QuadVertexBuffer;
+	Parameters.Texture  = Atlas;
+
+	NewPass->ShaderReflection = reflect<full_screen_pass_texture::parameters>::Get();
+	NewPass->ShaderParameters = PushStruct(full_screen_pass_texture::parameters);
+	*((full_screen_pass_texture::parameters*)NewPass->ShaderParameters) = Parameters;
+
+	NewPass->RasterReflection = reflect<full_screen_pass_texture::raster_parameters>::Get();
+	NewPass->RasterParameters = PushStruct(full_screen_pass_texture::raster_parameters);
+	*((full_screen_pass_texture::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
+
+	Passes.push_back(NewPass);
+	Dispatches[NewPass] = [Pos, Scale, Offset, Dims, Atlas, ColorTarget = GfxColorTarget[BackBufferIndex]]
+	(command_list* Cmd)
+	{
+		struct transform
+		{
+			vec2 Pos;
+			vec2 Scale;
+			vec2 Offset;
+			vec2 Dims;
+		};
+		transform Transform = {};
+		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
+		Transform.Scale = Scale / vec2(ColorTarget.Width, ColorTarget.Height);
+		Transform.Offset = Offset / vec2(Atlas.Width, Atlas.Height);
+		Transform.Dims = Dims / vec2(Atlas.Width, Atlas.Height);
 
 		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
 
@@ -415,12 +479,16 @@ PushCircle(vec2 Pos, float Radius, vec3 Color)
 		struct transform
 		{
 			vec2 Pos;
-			vec2 Dim;
+			vec2 Scale;
+			vec2 Offset;
+			vec2 Dims;
 			vec3 Color;
 		};
 		transform Transform = {};
 		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Dim = vec2(2.0 * Radius) / vec2(ColorTarget.Width, ColorTarget.Height);
+		Transform.Scale = vec2(2.0 * Radius) / vec2(ColorTarget.Width, ColorTarget.Height);
+		Transform.Offset = vec2(0);
+		Transform.Dims = vec2(1);
 		Transform.Color = Color;
 
 		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
