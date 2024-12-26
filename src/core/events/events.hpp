@@ -15,17 +15,23 @@ struct collision_event : public event
 struct key_down_event : public event
 {
 	u16 Code;
-	u16 RepeatCount;
 
-	key_down_event(u16 NewCode, u16 NewRepeatCount) : Code(NewCode), RepeatCount(NewRepeatCount) {}
+	key_down_event(u16 NewCode) : Code(NewCode) {}
 };
 
 struct key_up_event : public event
 {
 	u16 Code;
+
+	key_up_event(u16 NewCode) : Code(NewCode) {}
+};
+
+struct key_hold_event : public event
+{
+	u16 Code;
 	u16 RepeatCount;
 
-	key_up_event(u16 NewCode, u16 NewRepeatCount) : Code(NewCode), RepeatCount(NewRepeatCount) {}
+	key_hold_event(u16 NewCode, u16 NewRepeatCount) : Code(NewCode), RepeatCount(NewRepeatCount) {}
 };
 
 struct mouse_move_event : public event

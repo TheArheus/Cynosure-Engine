@@ -51,29 +51,56 @@ void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name
 	ImGui_ImplGlfw_InitForVulkan(Handle, true);
 }
 
+void window::Close()
+{
+	if(Handle)
+	{
+		IsGfxPaused = true;
+		ImGui::SetCurrentContext(imguiContext);
+		Gfx.DestroyObject();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext(imguiContext);
+		imguiContext = nullptr;
+		glfwDestroyWindow(Handle);
+		WindowClass.WindowInstances.erase(Handle);
+		WindowClass.WindowCount--;
+		Handle = nullptr;
+	}
+}
+
 window::~window()
 {
-	DestroyObject();
+	Close();
 }
 
 // TODO: Better event handling here if possible
 void window::EmitEvents()
 {
-	for(u16 Code = 0; Code < 256; ++Code)
-	{
-		if(Buttons[Code].IsDown)
-		{
-			EventsDispatcher.Emit<key_down_event>(Code, Buttons[Code].RepeatCount);
-		}
-		else if(Buttons[Code].WasDown)
-		{
-			EventsDispatcher.Emit<key_up_event>(Code, Buttons[Code].RepeatCount);
-		}
+    for(u16 Code = 0; Code < 256; ++Code)
+    {
+        if(Buttons[Code].IsDown)
+        {
+            if(!Buttons[Code].WasDown)
+            {
+                window::EventsDispatcher.Emit<key_down_event>(Code);
+            }
+            else
+            {
+                window::EventsDispatcher.Emit<key_hold_event>(Code, Buttons[Code].RepeatCount);
+            }
+        }
+        else if(Buttons[Code].WasDown)
+        {
+            window::EventsDispatcher.Emit<key_up_event>(Code);
+        }
 	}
-	for (u16 Code = 0; Code < 256; ++Code)
-	{
-		Buttons[Code].WasDown = Buttons[Code].IsDown;
-		Buttons[Code].IsDown  = false;
+}
+
+void window::UpdateStates()
+{
+    for(u16 Code = 0; Code < 256; ++Code)
+    {
+        Buttons[Code].WasDown = Buttons[Code].IsDown;
 	}
 }
 
@@ -83,18 +110,24 @@ KeyCallback(GLFWwindow* gWindow, int Key, int Code, int Action, int Mods)
 	window* Window = (window*)glfwGetWindowUserPointer(gWindow);
 	if(!Window) return;
 
-	if(Action == GLFW_PRESS || Action == GLFW_REPEAT)
-	{
-		Window->Buttons[GetECCode(Key)].IsDown  = true;
-		Window->Buttons[GetECCode(Key)].WasDown = 1 * Action == GLFW_REPEAT;
-		Window->Buttons[GetECCode(Key)].RepeatCount++;
-	}
-	else if(Action == GLFW_RELEASE)
-	{
-		Window->Buttons[GetECCode(Key)].IsDown  = false;
-		Window->Buttons[GetECCode(Key)].WasDown = 1 * Action == GLFW_REPEAT;
-		Window->Buttons[GetECCode(Key)].RepeatCount = 0;
-	}
+    u16 EC = GetECCode(Key);
+    if (EC == EC_UNKNOWN) return;
+
+    if (Action == GLFW_PRESS)
+    {
+        Window->Buttons[EC].IsDown  = true;
+        Window->Buttons[EC].RepeatCount = 1;
+    }
+    else if (Action == GLFW_REPEAT)
+    {
+        Window->Buttons[EC].IsDown = true;
+        Window->Buttons[EC].RepeatCount++;
+    }
+    else if (Action == GLFW_RELEASE)
+    {
+        Window->Buttons[EC].IsDown = false;
+        Window->Buttons[EC].RepeatCount = 0;
+    }
 }
 
 void window::
@@ -103,18 +136,24 @@ MouseButtonCallback(GLFWwindow* gWindow, int Button, int Action, int Mods)
 	window* Window = (window*)glfwGetWindowUserPointer(gWindow);
 	if(!Window) return;
 
-	if(Action == GLFW_PRESS || Action == GLFW_REPEAT)
-	{
-		Window->Buttons[GetECCode(Button)].IsDown  = true;
-		Window->Buttons[GetECCode(Button)].WasDown = 1 * Action == GLFW_REPEAT;
-		Window->Buttons[GetECCode(Button)].RepeatCount++;
-	}
-	else if(Action == GLFW_RELEASE)
-	{
-		Window->Buttons[GetECCode(Button)].IsDown  = false;
-		Window->Buttons[GetECCode(Button)].WasDown = 1 * Action == GLFW_REPEAT;
-		Window->Buttons[GetECCode(Button)].RepeatCount = 0;
-	}
+    u16 EC = GetECCode(Button);
+    if (EC == EC_UNKNOWN) return;
+
+    if (Action == GLFW_PRESS)
+    {
+        Window->Buttons[EC].IsDown  = true;
+        Window->Buttons[EC].RepeatCount = 1;
+    }
+    else if (Action == GLFW_REPEAT)
+    {
+        Window->Buttons[EC].IsDown = true;
+        Window->Buttons[EC].RepeatCount++;
+    }
+    else if (Action == GLFW_RELEASE)
+    {
+        Window->Buttons[EC].IsDown = false;
+        Window->Buttons[EC].RepeatCount = 0;
+    }
 }
 
 void window::
@@ -167,7 +206,7 @@ std::optional<int> window::ProcessMessages()
         auto It = WindowClass.WindowInstances.find(Handle);
         if (It != WindowClass.WindowInstances.end())
         {
-			It->second->DestroyObject();
+			It->second->Close();
         }
     }
 

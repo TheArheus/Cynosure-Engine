@@ -17,12 +17,14 @@ struct pair_hash
 struct font_t
 {
 	texture_t Atlas;
+	s32 MaxAscent;
+	s32 MaxDescent;
 	std::array<glyph_t, 256> Glyphs;
     std::unordered_map<std::pair<u8, u8>, float, pair_hash> KerningMap;
 };
 
 typedef std::unordered_map<std::string, texture_t*> texture_storage;
-typedef std::unordered_map<std::string, font_t>   font_storage;
+typedef std::unordered_map<std::string, font_t>     font_storage;
 
 class asset_store
 {

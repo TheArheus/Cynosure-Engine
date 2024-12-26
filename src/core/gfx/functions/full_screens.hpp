@@ -18,6 +18,10 @@ struct full_screen_pass_color : public shader_graphics_view_context
 	{
 		utils::render_context::input_data SetupData = {};
 		SetupData.UseColor = true;
+		SetupData.UseBlend = true;
+		SetupData.Topology = topology::triangle_list;
+		SetupData.BlendSrc = blend_factor::src_alpha;
+		SetupData.BlendDst = blend_factor::one_minus_src_alpha;
 		return SetupData;
 	}
 
@@ -52,6 +56,10 @@ struct full_screen_pass_circle : public shader_graphics_view_context
 	{
 		utils::render_context::input_data SetupData = {};
 		SetupData.UseColor = true;
+		SetupData.UseBlend = true;
+		SetupData.Topology = topology::triangle_list;
+		SetupData.BlendSrc = blend_factor::src_alpha;
+		SetupData.BlendDst = blend_factor::one_minus_src_alpha;
 		return SetupData;
 	}
 
@@ -87,6 +95,10 @@ struct full_screen_pass_texture : public shader_graphics_view_context
 	{
 		utils::render_context::input_data SetupData = {};
 		SetupData.UseColor = true;
+		SetupData.UseBlend = true;
+		SetupData.Topology = topology::triangle_list;
+		SetupData.BlendSrc = blend_factor::src_alpha;
+		SetupData.BlendDst = blend_factor::one_minus_src_alpha;
 		return SetupData;
 	}
 

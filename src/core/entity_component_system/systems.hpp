@@ -123,7 +123,10 @@ struct collision_system : public entity_system
 {
 	u32 FrameWidth;
 	u32 FrameHeight;
-	collision_system(u32 WindowWidth, u32 WindowHeight) : FrameWidth(WindowWidth), FrameHeight(WindowHeight) {}
+	collision_system(u32 WindowWidth, u32 WindowHeight) : FrameWidth(WindowWidth), FrameHeight(WindowHeight)
+	{
+		RequireComponent<collidable>();
+	}
 
 	void SubscribeOnEvents() override
 	{

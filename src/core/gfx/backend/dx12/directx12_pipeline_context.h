@@ -107,7 +107,7 @@ public:
 	~directx12_render_context() override { DestroyObject(); };
 
 	directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::vector<std::string> ShaderList, 
-			const std::vector<image_format>& ColorTargetFormats, const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
+			const std::vector<image_format>& ColorTargetFormats, const utils::render_context::input_data& InputData, const std::vector<shader_define>& ShaderDefines);
 
 	directx12_render_context(const directx12_render_context&) = delete;
 	directx12_render_context& operator=(const directx12_render_context&) = delete;

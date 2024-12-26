@@ -129,6 +129,15 @@ KillEntity(entity Entity)
 }
 
 void registry::
+SetupSystems()
+{
+    for (auto& [Type, System] : Systems)
+	{
+		System->SubscribeOnEvents();
+    }
+}
+
+void registry::
 UpdateSystems(double dt)
 {
 	for(entity Entity : HotEntities)
@@ -158,7 +167,6 @@ UpdateSystems(double dt)
 
     for (auto& [Type, System] : Systems)
 	{
-		System->SubscribeOnEvents();
         System->Update(dt);
     }
 }

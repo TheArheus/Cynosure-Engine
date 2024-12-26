@@ -20,6 +20,10 @@ struct renderable
 {
 };
 
+struct collidable
+{
+};
+
 struct mesh
 {
 };

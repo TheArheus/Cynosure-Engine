@@ -38,6 +38,8 @@ private:
 		s32 WindowCount = 0;
 		bool IsWindowCreated = false;
 		bool IsRunning = true;
+
+		std::unordered_map<HWND, window*> WindowInstances;
 	};
 
 public:
@@ -49,13 +51,18 @@ public:
 	~window();
 
 	void Create(unsigned int _Width, unsigned int _Height, const char* _Name);
+	void Close();
+	void RequestClose() { if(Handle) PostMessage(Handle, WM_CLOSE, 0, 0); }
 
 	void NewFrame()
 	{
 		ImGui::SetCurrentContext(imguiContext);
+		Gfx.Backend->ImGuiNewFrame();
 		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
 	};
 	void EmitEvents();
+	void UpdateStates();
 
 	void InitVulkanGraphics();
 	void InitDirectx12Graphics();
@@ -72,7 +79,7 @@ public:
 
 	static event_bus EventsDispatcher;
 
-	HWND Handle;
+	HWND Handle = nullptr;
 	const char* Name;
 	u32 Width;
 	u32 Height;
@@ -81,6 +88,7 @@ public:
 	bool IsMaximized = true;
 	bool IsGfxPaused = false;
 	bool IsResizing  = false;
+	bool ShouldClose = false;
 
 	static window_class WindowClass;
 

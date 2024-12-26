@@ -140,6 +140,7 @@ void directx12_command_list::
 AcquireNextImage()
 {
 	// NOTE: For directx12 this happens in the end of the frame
+	BackBufferIndex = Gfx->BackBufferIndex;
 }
 
 void directx12_command_list::
@@ -238,7 +239,7 @@ Present()
 	Gfx->Fence->Flush(Gfx->CommandQueue);
 
 	Gfx->SwapChain->Present(0, Gfx->TearingSupport * DXGI_PRESENT_ALLOW_TEARING);
-	BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
+	Gfx->BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
 	CurrentContext = nullptr;
 }
 
@@ -887,15 +888,13 @@ DebugGuiBegin(texture* RenderTarget)
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers;
 	if(GetDXImageLayout(Clr->CurrentState[0], Clr->CurrentLayout[0]) != D3D12_RESOURCE_STATE_RENDER_TARGET) 
 		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Clr->Handle.Get(), GetDXImageLayout(Clr->CurrentState[0], Clr->CurrentLayout[0]), D3D12_RESOURCE_STATE_RENDER_TARGET));
-	else
+	else if(Clr->Info.Usage & TF_Storage)
 		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Clr->Handle.Get()));
 
 	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
 
 	std::fill(Clr->CurrentLayout.begin(), Clr->CurrentLayout.end(), AF_ColorAttachmentWrite);
 	std::fill(Clr->CurrentState.begin(), Clr->CurrentState.end(), barrier_state::general);
-
-	ImGui_ImplDX12_NewFrame();
 
 	std::vector<ID3D12DescriptorHeap*> Heaps;
 	Heaps.push_back(Gfx->ImGuiResourcesHeap->Handle.Get());
@@ -923,7 +922,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	D3D12_RASTERIZER_DESC RasterDesc = {};
 	RasterDesc.FillMode = D3D12_FILL_MODE_SOLID;
 	RasterDesc.CullMode = GetDXCullMode(InputData.CullMode);
-	RasterDesc.FrontCounterClockwise = true;
+	RasterDesc.FrontCounterClockwise = InputData.FrontFace == front_face::counter_clock_wise;
 	RasterDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
 	RasterDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
 	RasterDesc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
@@ -1087,12 +1086,24 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	PipelineDesc.pRootSignature = RootSignatureHandle.Get();
 	for(u32 FormatIdx = 0; FormatIdx < ColorTargetFormats.size(); ++FormatIdx) PipelineDesc.RTVFormats[FormatIdx] = GetDXFormat(ColorTargetFormats[FormatIdx]);
 
+	D3D12_RENDER_TARGET_BLEND_DESC RenderTargetBlendState = {};
+    RenderTargetBlendState.BlendEnable = InputData.UseBlend;
+    RenderTargetBlendState.BlendOp = D3D12_BLEND_OP_ADD;
+    RenderTargetBlendState.SrcBlend = GetDXBlend(InputData.BlendSrc);
+    RenderTargetBlendState.DestBlend = GetDXBlend(InputData.BlendDst);
+    RenderTargetBlendState.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+    RenderTargetBlendState.SrcBlendAlpha = GetDXBlend(InputData.BlendSrc);
+    RenderTargetBlendState.DestBlendAlpha = GetDXBlend(InputData.BlendDst);
+    RenderTargetBlendState.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
 	PipelineDesc.RasterizerState = RasterDesc;
-	PipelineDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	PipelineDesc.BlendState.AlphaToCoverageEnable = false;
+	PipelineDesc.BlendState.IndependentBlendEnable = false;
+	for(int i = 0; i < ColorTargetFormats.size(); i++) PipelineDesc.BlendState.RenderTarget[i] = RenderTargetBlendState;
 	PipelineDesc.DepthStencilState = DepthStencilDesc;
 	PipelineDesc.SampleMask = UINT_MAX;
-	PipelineDesc.PrimitiveTopologyType = InputData.UseOutline ? D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE : D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	PipelineTopology = InputData.UseOutline ? D3D_PRIMITIVE_TOPOLOGY_LINELIST : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	PipelineDesc.PrimitiveTopologyType = GetDXTopologyType(InputData.Topology);
+	PipelineTopology = GetDXTopology(InputData.Topology);
 	PipelineDesc.NumRenderTargets = ColorTargetFormats.size();
 	PipelineDesc.SampleDesc.Count = 1; //MsaaState ? MsaaQuality : 1;
 	PipelineDesc.SampleDesc.Quality = 0; //MsaaState ? (MsaaQuality - 1) : 0;

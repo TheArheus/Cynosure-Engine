@@ -281,6 +281,7 @@ vulkan_backend(GLFWwindow* Handle)
 	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(PhysicalDevice, Surface, &ResizeCaps));
 	Width = ResizeCaps.currentExtent.width;
 	Height = ResizeCaps.currentExtent.height;
+	if(ImageCount < ResizeCaps.minImageCount) ImageCount = ResizeCaps.minImageCount;
 
 	VkCompositeAlphaFlagBitsKHR CompositeAlpha = 
 		(SurfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR :
@@ -290,7 +291,7 @@ vulkan_backend(GLFWwindow* Handle)
 
 	VkSwapchainCreateInfoKHR SwapchainCreateInfo = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
 	SwapchainCreateInfo.surface = Surface;
-	SwapchainCreateInfo.minImageCount = 2;
+	SwapchainCreateInfo.minImageCount = ImageCount;
 	SwapchainCreateInfo.imageFormat = SurfaceFormat.format;
 	SwapchainCreateInfo.imageColorSpace = SurfaceFormat.colorSpace;
 	SwapchainCreateInfo.imageExtent.width = Width;
@@ -325,7 +326,6 @@ vulkan_backend(GLFWwindow* Handle)
 		vmaCreateAllocator(&AllocatorInfo, &AllocatorHandle);
 	}
 
-	// TODO: Custom initial resource state
 	utils::texture::input_data TextureInputData = {};
 	TextureInputData.Type	   = image_type::Texture1D;
 	TextureInputData.MipLevels = 1;
@@ -373,7 +373,7 @@ vulkan_backend(GLFWwindow* Handle)
 	InitInfo.DescriptorPool = ImGuiPool;
 	InitInfo.QueueFamily = FamilyIndex;
 	InitInfo.Queue = CommandQueue->Handle;
-	InitInfo.MinImageCount = 2;
+	InitInfo.MinImageCount = ImageCount;
 	InitInfo.ImageCount = SwapchainImages.size();
 	InitInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT; //MsaaQuality;
 	InitInfo.UseDynamicRendering = Features13.dynamicRendering;
@@ -600,7 +600,7 @@ bool GlslCompile(std::vector<u32>& SpirvOut, const std::string& Name, const std:
 	return false;
 }
 
-// TODO: Parse for push constant sizes
+// TODO: Implement a better shader compilation
 // TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
 VkShaderModule vulkan_backend::
 LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, bool>>& IsWritable, std::map<u32, std::map<u32, image_type>>& TextureTypes, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)

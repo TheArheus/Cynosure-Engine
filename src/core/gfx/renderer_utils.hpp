@@ -57,9 +57,13 @@ namespace utils
 		struct input_data
 		{
 			cull_mode CullMode;
+			blend_factor BlendSrc;
+			blend_factor BlendDst;
+			topology Topology;
+			front_face FrontFace;
 			bool UseColor;
 			bool UseDepth;
-			bool UseOutline;
+			bool UseBlend;
 			bool UseMultiview;
 			bool UseConservativeRaster;
 			u32  ViewMask;
@@ -252,15 +256,13 @@ struct gpu_vertex_buffer
 	gpu_vertex_buffer() = default;
 	gpu_vertex_buffer(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return;
-		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
 		ID = Desc.ID;
 	}
 
 	gpu_vertex_buffer& operator=(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return *this;
-		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
 		ID = Desc.ID;
 		return *this;
 	}
@@ -273,15 +275,13 @@ struct gpu_index_buffer
 	gpu_index_buffer() = default;
 	gpu_index_buffer(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return;
-		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
 		ID = Desc.ID;
 	}
 
 	gpu_index_buffer& operator=(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return *this;
-		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
 		ID = Desc.ID;
 		return *this;
 	}
@@ -294,15 +294,13 @@ struct gpu_indirect_buffer
 	gpu_indirect_buffer() = default;
 	gpu_indirect_buffer(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return;
-		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
 		ID = Desc.ID;
 	}
 
 	gpu_indirect_buffer& operator=(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return *this;
-		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
 		ID = Desc.ID;
 		return *this;
 	}
@@ -318,15 +316,13 @@ struct gpu_color_target
 		IDs = array<u64>(Vec.size());
 		for(size_t Idx = 0; Idx < Vec.size(); Idx++)
 		{
-			if(!Vec[Idx].IsInitialized) continue;
-			assert(Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+			assert(Vec[Idx].IsInitialized && Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 			IDs[Idx] = Vec[Idx].ID;
 		}
 	}
 	gpu_color_target(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return;
-		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 		IDs = array<u64>(1);
 		IDs[0] = Desc.ID;
 	}
@@ -336,16 +332,14 @@ struct gpu_color_target
 		IDs = array<u64>(Vec.size());
 		for(size_t Idx = 0; Idx < Vec.size(); Idx++)
 		{
-			if(!Vec[Idx].IsInitialized) continue;
-			assert(Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+			assert(Vec[Idx].IsInitialized && Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 			IDs[Idx] = Vec[Idx].ID;
 		}
 		return *this;
 	}
 	gpu_color_target& operator=(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return *this;
-		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 		IDs = array<u64>(1);
 		IDs[0] = Desc.ID;
 		return *this;
@@ -362,14 +356,12 @@ struct gpu_depth_target
 	gpu_depth_target() = default;
 	gpu_depth_target(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return;
-		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 		ID = Desc.ID;
 	}
 	gpu_depth_target& operator=(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return *this;
-		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 		ID = Desc.ID;
 		return *this;
 	}
@@ -383,16 +375,14 @@ struct gpu_buffer
 	gpu_buffer() = default;
 	gpu_buffer(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return;
-		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
 		ID = Desc.ID;
 		WithCounter = RF_WithCounter & Desc.Usage;
 	}
 
 	gpu_buffer& operator=(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return *this;
-		assert(Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::buffer && "Wrong resource: should be buffer");
 		ID = Desc.ID;
 		WithCounter = RF_WithCounter & Desc.Usage;
 		return *this;
@@ -407,15 +397,13 @@ struct gpu_texture
 	gpu_texture() = default;
 	gpu_texture(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return;
-		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 		ID = Desc.ID;
 		SubresourceIdx = Desc.SubresourceIdx;
 	}
 	gpu_texture& operator=(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return *this;
-		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 		ID = Desc.ID;
 		SubresourceIdx = Desc.SubresourceIdx;
 		return *this;
@@ -433,15 +421,13 @@ struct gpu_texture_array
 		IDs = array<u64>(Vec.size());
 		for(size_t Idx = 0; Idx < Vec.size(); Idx++)
 		{
-			if(!Vec[Idx].IsInitialized) continue;
-			assert(Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+			assert(Vec[Idx].IsInitialized && Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 			IDs[Idx] = Vec[Idx].ID;
 		}
 	}
 	gpu_texture_array(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return;
-		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 		IDs = array<u64>(1);
 		IDs[0] = Desc.ID;
 		SubresourceIdx = Desc.SubresourceIdx;
@@ -452,16 +438,14 @@ struct gpu_texture_array
 		IDs = array<u64>(Vec.size());
 		for(size_t Idx = 0; Idx < Vec.size(); Idx++)
 		{
-			if(!Vec[Idx].IsInitialized) continue;
-			assert(Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+			assert(Vec[Idx].IsInitialized && Vec[Idx].Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 			IDs[Idx] = Vec[Idx].ID;
 		}
 		return *this;
 	}
 	gpu_texture_array& operator=(const resource_descriptor& Desc)
 	{
-		if(!Desc.IsInitialized) return *this;
-		assert(Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
+		assert(Desc.IsInitialized && Desc.Type == resource_descriptor_type::texture && "Wrong resource: should be texture");
 		IDs = array<u64>(1);
 		IDs[0] = Desc.ID;
 		SubresourceIdx = Desc.SubresourceIdx;
@@ -477,10 +461,12 @@ struct renderer_backend
 {
 	virtual ~renderer_backend() = default;
 	virtual void DestroyObject() = 0;
+	virtual void ImGuiNewFrame() = 0;
 	virtual void RecreateSwapchain(u32 NewWidth, u32 NewHeight) = 0;
 
 	u32 Width;
 	u32 Height;
+	u32 ImageCount = 2;
 	backend_type Type;
 };
 

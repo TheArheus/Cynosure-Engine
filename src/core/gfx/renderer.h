@@ -33,22 +33,14 @@ struct resource_lifetime
 
 struct resource_state
 {
-    // For simplicity, we track:
-    // - IsWritable: whether resource was last used for writing
-    // - BarrierState: the pipeline barrier layout/state
-    // - ShaderStageAccess: which stages accessed it (bitmask)
     bool IsWritable = false;
     barrier_state State = barrier_state::undefined;
     u32 ShaderStageAccess = 0; 
 	u32 ShaderAspect = 0;
-    bool Valid = false; // Indicates if we have a recorded state
+    bool Valid = false;
     
     bool operator==(const resource_state& Oth) const
     {
-        // Define what "matching" means. For example:
-        // - Same barrier state?
-        // - Same read/write usage?
-        // - Same shader stages involved?
         return (IsWritable == Oth.IsWritable) &&
                (State == Oth.State) &&
 			   (ShaderAspect == Oth.ShaderAspect) && 
@@ -72,7 +64,7 @@ class global_graphics_context
 	command_list* CreateGlobalPipelineContext();
 
 	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList, const std::vector<image_format>& ColorTargets, 
-										const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
+										const utils::render_context::input_data& InputData = {cull_mode::back, blend_factor::src_alpha, blend_factor::one_minus_src_alpha, topology::triangle_list, front_face::counter_clock_wise, true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
 	compute_context* CreateComputeContext(const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
 
 public:
@@ -119,7 +111,7 @@ public:
 	resource_binder* Binder = nullptr;
 	general_context* CurrentContext = nullptr;
 	gpu_memory_heap* GpuMemoryHeap = nullptr;
-	command_list* ExecutionContext = nullptr;
+	std::vector<command_list*> ExecutionContexts;
 
 	//////////////////////////////////////////////////////
 	u32 BackBufferIndex = 0;
@@ -127,7 +119,7 @@ public:
 	resource_descriptor QuadVertexBuffer;
 	resource_descriptor QuadIndexBuffer;
 
-	resource_descriptor GfxColorTarget[2];
+	std::vector<resource_descriptor> GfxColorTarget;
 	resource_descriptor GfxDepthTarget;
 };
 

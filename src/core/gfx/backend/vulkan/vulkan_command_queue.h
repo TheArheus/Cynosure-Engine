@@ -30,9 +30,9 @@ public:
 	void Remove(VkCommandBuffer* CommandList);
 
 	void Execute();
-	void Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore);
+	void Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore, VkFence* Fence = nullptr);
 	void Execute(VkCommandBuffer* CommandList);
-	void Execute(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore);
+	void Execute(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore, VkFence* Fence = nullptr);
 
 	void ExecuteAndRemove(VkCommandBuffer* CommandList);
 	void ExecuteAndRemove(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore);

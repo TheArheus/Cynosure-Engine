@@ -17,5 +17,5 @@ layout(location = 0) out vec4 OutputColor;
 
 void main()
 {
-	OutputColor = vec4(texture(InTexture, TextCoord).rgb, 1.0);
+	OutputColor = vec4(texture(InTexture, TextCoord) * vec4(Transform.Color, 1.0));
 }

@@ -279,6 +279,10 @@ CreateResource(renderer_backend* Backend)
 	VK_CHECK(vkCreateSemaphore(Device, &SemaphoreCreateInfo, nullptr, &AcquireSemaphore));
 	VK_CHECK(vkCreateSemaphore(Device, &SemaphoreCreateInfo, nullptr, &ReleaseSemaphore));
 
+	VkFenceCreateInfo FenceCreateInfo = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+	FenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+	VK_CHECK(vkCreateFence(Device, &FenceCreateInfo, nullptr, &RenderFence));
+
 	CommandList = CommandQueue->AllocateCommandList();
 }
 
@@ -286,7 +290,8 @@ void vulkan_command_list::
 DestroyObject()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	vkQueueWaitIdle(CommandQueue->Handle);
+	vkWaitForFences(Device, 1, &RenderFence, VK_TRUE, UINT64_MAX);
+	vkResetFences(Device, 1, &RenderFence);
 
 	if(AcquireSemaphore)
 	{
@@ -298,6 +303,11 @@ DestroyObject()
 		vkDestroySemaphore(Device, ReleaseSemaphore, nullptr);
 		ReleaseSemaphore = 0;
 	}
+	if(RenderFence)
+	{
+		vkDestroyFence(Device, RenderFence, nullptr);
+		RenderFence = 0;
+	}
 	if(CommandList)
 	{
 		CommandQueue->Remove(&CommandList);
@@ -308,6 +318,8 @@ DestroyObject()
 void vulkan_command_list::
 AcquireNextImage()
 {
+	vkWaitForFences(Device, 1, &RenderFence, VK_TRUE, UINT64_MAX);
+	vkResetFences(Device, 1, &RenderFence);
 	vkAcquireNextImageKHR(Device, Gfx->Swapchain, ~0ull, AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
 }
 
@@ -403,7 +415,7 @@ Present()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	PlaceEndOfFrameBarriers();
-	CommandQueue->Execute(&CommandList, &ReleaseSemaphore, &AcquireSemaphore);
+	CommandQueue->Execute(&CommandList, &ReleaseSemaphore, &AcquireSemaphore, &RenderFence);
 
 	VkPresentInfoKHR PresentInfo = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
 	PresentInfo.waitSemaphoreCount = 1;
@@ -645,8 +657,6 @@ SetStencilTarget(texture* Target, vec2 Clear)
 	RenderingAttachmentInfos.push_back(StencilInfo);
 }
 
-// TODO: A better code
-// TODO: Move out pipeline barriers out of this function
 void vulkan_command_list::
 BindShaderParameters(const array<binding_packet>& Data)
 {
@@ -1147,8 +1157,6 @@ DebugGuiBegin(texture* RenderTarget)
 {
 	vulkan_texture* Clr = static_cast<vulkan_texture*>(RenderTarget);
 
-	ImGui_ImplVulkan_NewFrame();
-
 	VkRenderingInfoKHR RenderingInfoGui = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
 	RenderingInfoGui.renderArea = {{}, {u32(Gfx->Width), u32(Gfx->Height)}};
 	RenderingInfoGui.layerCount = 1;
@@ -1431,17 +1439,17 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	VkPipelineVertexInputStateCreateInfo VertexInputState = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 
 	VkPipelineInputAssemblyStateCreateInfo InputAssemblyState = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-	InputAssemblyState.topology = InputData.UseOutline ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	InputAssemblyState.topology = GetVKTopology(InputData.Topology);
 
 	std::vector<VkPipelineColorBlendAttachmentState> ColorAttachmentState(ColorTargetFormats.size());
 	for(u32 Idx = 0; Idx < ColorTargetFormats.size(); ++Idx)
 	{
 		ColorAttachmentState[Idx].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-#if DEBUG_COLOR_BLEND
-		ColorAttachmentState[Idx].blendEnable = true;
-		ColorAttachmentState[Idx].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-		ColorAttachmentState[Idx].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-#endif
+		ColorAttachmentState[Idx].blendEnable = InputData.UseBlend;
+		ColorAttachmentState[Idx].srcColorBlendFactor = GetVKBlendFactor(InputData.BlendSrc);
+		ColorAttachmentState[Idx].dstColorBlendFactor = GetVKBlendFactor(InputData.BlendDst);
+		ColorAttachmentState[Idx].srcAlphaBlendFactor = GetVKBlendFactor(InputData.BlendSrc);
+		ColorAttachmentState[Idx].dstAlphaBlendFactor = GetVKBlendFactor(InputData.BlendDst);
 	}
 
 	VkPipelineColorBlendStateCreateInfo ColorBlendState = {VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
@@ -1466,7 +1474,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	VkPipelineRasterizationStateCreateInfo RasterizationState = {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
 	RasterizationState.lineWidth = 1.0f;
 	RasterizationState.cullMode  = GetVKCullMode(InputData.CullMode);
-	RasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	RasterizationState.frontFace = GetVKFrontFace(InputData.FrontFace);
 	RasterizationState.pNext = InputData.UseConservativeRaster ? &ConservativeRasterState : nullptr;
 
 	VkPipelineDynamicStateCreateInfo DynamicState = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};

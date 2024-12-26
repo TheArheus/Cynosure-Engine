@@ -201,6 +201,9 @@ struct v2
 	v2& operator=(const swizzle_2d<v2<T>, 1, 1>& rhs) { x = rhs.E[1]; y = rhs.E[1]; return *this; };
 	v2& operator=(const swizzle_2d<v2<T>, 0, 1>& rhs) { x = rhs.E[0]; y = rhs.E[1]; return *this; };
 
+	v2(const ImVec2& oth) : x(oth.x), y(oth.y) {}
+    operator ImVec2() const { return ImVec2(x, y); }
+
     T& operator[](uint32_t Idx)
     {
         return E[Idx];
@@ -476,7 +479,6 @@ struct v3
 	v3(const swizzle_3d<v3<T>, 2, 2, 2>& rhs) : x(rhs.E[2]), y(rhs.E[2]), z(rhs.E[2]) {};
 	v3(const swizzle_3d<v3<T>, 0, 1, 2>& rhs) : x(rhs.E[0]), y(rhs.E[1]), z(rhs.E[2]) {};
 
-
 	v3& operator=(const swizzle_2d<v2<T>, 0, 0>& rhs) { x = rhs.E[0]; y = rhs.E[0]; return *this; };
 	v3& operator=(const swizzle_2d<v2<T>, 1, 1>& rhs) { x = rhs.E[1]; y = rhs.E[1]; return *this; };
 	v3& operator=(const swizzle_2d<v2<T>, 0, 1>& rhs) { x = rhs.E[0]; y = rhs.E[1]; return *this; };
@@ -484,6 +486,10 @@ struct v3
     v3& operator=(const swizzle_3d<v3<T>, 1, 1, 1>& rhs) { x = rhs.E[1], y = rhs.E[1], z = rhs.E[1]; return *this; }
     v3& operator=(const swizzle_3d<v3<T>, 2, 2, 2>& rhs) { x = rhs.E[2], y = rhs.E[2], z = rhs.E[2]; return *this; }
     v3& operator=(const swizzle_3d<v3<T>, 0, 1, 2>& rhs) { x = rhs.E[0], y = rhs.E[1], z = rhs.E[2]; return *this; }
+
+	v3(const ImVec2& oth) : x(oth.x), y(oth.y), z(0) {}
+	v3(const ImVec4& oth) : x(oth.x), y(oth.y), z(oth.z) {}
+    operator ImVec4() const { return ImVec4(x, y, z, 0); }
 
     T& operator[](uint32_t Idx)
     {
@@ -818,6 +824,9 @@ struct v4
     v4& operator=(const swizzle_4d<v3<T>, 2, 2, 2, 2>& rhs) { x = rhs.E[2], y = rhs.E[2], z = rhs.E[2], w = rhs.E[2]; return *this; }
     v4& operator=(const swizzle_4d<v3<T>, 3, 3, 3, 3>& rhs) { x = rhs.E[3], y = rhs.E[3], z = rhs.E[3], w = rhs.E[3]; return *this; }
 	v4& operator=(const swizzle_4d<v3<T>, 0, 1, 2, 3>& rhs) { x = rhs.E[0], y = rhs.E[1], z = rhs.E[2], w = rhs.E[3]; return *this; }
+
+	v4(const ImVec4& oth) : x(oth.x), y(oth.y), z(oth.z), w(oth.w) {}
+    operator ImVec4() const { return ImVec4(x, y, z, w); }
 
     v4<T> operator=(const v4<T>& rhs) { x = rhs.x; y = rhs.y; z = rhs.z; w = rhs.w; return *this; }
 

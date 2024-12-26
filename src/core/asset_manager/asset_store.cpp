@@ -1,5 +1,7 @@
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image.h"
+#include "stb_image_write.h"
 
 #include <cstdlib>
 #include <cstdio>
@@ -71,23 +73,39 @@ AddFont(const std::string& AssetID, const std::string& FilePath, s32 FontSize)
     FT_Set_Pixel_Sizes(FontFace, 0, FontSize);
 	u32 MaxWidth  = 0;
 	u32 MaxHeight = 0;
+	s32 MaxAscent = 0;
+	s32 MaxDescent = 0;
     for (u32 Character = 0; Character < 256; ++Character)
     {
 		FT_Load_Char(FontFace, Character, FT_LOAD_RENDER);
         FT_GlyphSlot Glyph = FontFace->glyph;
         MaxWidth += Glyph->bitmap.width;
         MaxHeight = Max(MaxHeight, Glyph->bitmap.rows);
+
+		s32 Top = Glyph->bitmap_top;
+		s32 Bottom = Top - Glyph->bitmap.rows;
+		if(Top > MaxAscent) MaxAscent = Top;
+		if(Bottom < -MaxDescent) MaxDescent = -Bottom;
 	}
+	s32 RowHeight = MaxAscent + MaxDescent;
 
 	font_t Font;
-	Font.Atlas.Memory = (u32*)calloc(MaxWidth * MaxHeight, sizeof(u32));
 	Font.Atlas.Width  = MaxWidth;
-	Font.Atlas.Height = MaxHeight;
-	float StartX = 0.0;
+	Font.Atlas.Height = RowHeight;
+	Font.Atlas.Memory = (u32*)calloc(Font.Atlas.Width * Font.Atlas.Height, sizeof(u32));
+	Font.MaxAscent  = MaxAscent;
+	Font.MaxDescent = MaxDescent;
+	s32 StartX = 0;
+	s32 StartY = 0;
     for (u32 Character = 0; Character < 256; ++Character)
     {
 		FT_Load_Char(FontFace, Character, FT_LOAD_RENDER);
         FT_GlyphSlot Glyph = FontFace->glyph;
+
+		s32 Ascender  = (FontFace->size->metrics.ascender  >> 6);
+		s32 Descender = (FontFace->size->metrics.descender >> 6);
+		s32 LineGap   = ((FontFace->size->metrics.height >> 6) - (Ascender - Descender));
+		StartY = MaxAscent - Glyph->bitmap_top;
 
         glyph_t& GlyphData = Font.Glyphs[Character];
         GlyphData.Width = Glyph->bitmap.width;
@@ -96,23 +114,23 @@ AddFont(const std::string& AssetID, const std::string& FilePath, s32 FontSize)
         GlyphData.OffsetY = Glyph->bitmap_top;
         GlyphData.StartX = StartX;
         GlyphData.StartY = 0.0;
-        GlyphData.Advance = Glyph->advance.x >> 6;
-
+        GlyphData.AdvanceX = Glyph->advance.x >> 6;
 
         if (Glyph->bitmap.width == 0 || Glyph->bitmap.rows == 0)
         {
             continue;
         }
 
-        for (u32 Y = 0; Y < GlyphData.Height; ++Y)
+        for (s32 Y = 0; Y < GlyphData.Height; ++Y)
         {
-            for (u32 X = 0; X < GlyphData.Width; ++X)
+            for (s32 X = 0; X < GlyphData.Width; ++X)
             {
                 u8 Gray = Glyph->bitmap.buffer[(GlyphData.Height - 1 - Y) * GlyphData.Width + X];
-				Font.Atlas.Memory[Y * Font.Atlas.Width + X + u32(StartX)] = (Gray << 24) | (Gray << 16) | (Gray << 8) | Gray;
+				Font.Atlas.Memory[(Y + StartY) * Font.Atlas.Width + (X + StartX)] = (Gray << 24) | (Gray > 0 ? 0xFFFFFF : 0x0);
             }
         }
 
+		GlyphData.Height = MaxAscent;
 		StartX += GlyphData.Width;
     }
 
@@ -132,6 +150,8 @@ AddFont(const std::string& AssetID, const std::string& FilePath, s32 FontSize)
             }
         }
     }
+
+	//stbi_write_png("test_atlas.png", Font.Atlas.Width, Font.Atlas.Height, 4, Font.Atlas.Memory, Font.Atlas.Width * 4);
 
     Fonts[AssetID] = std::move(Font);
     FT_Done_Face(FontFace);

@@ -76,7 +76,7 @@ directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 		SwapChainDesc.Flags = (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 		SwapChainDesc.Width = ClientWidth;
 		SwapChainDesc.Height = ClientHeight;
-		SwapChainDesc.BufferCount = 2;
+		SwapChainDesc.BufferCount = ImageCount;
 		SwapChainDesc.Format = ColorTargetFormat;
 		SwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -85,8 +85,8 @@ directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 		Factory->CreateSwapChainForHwnd(CommandQueue->Handle.Get(), Handle, &SwapChainDesc, nullptr, nullptr, &_SwapChain);
 		_SwapChain.As(&SwapChain);
 
-		SwapchainImages.resize(2);
-		SwapchainCurrentState.resize(2);
+		SwapchainImages.resize(ImageCount);
+		SwapchainCurrentState.resize(ImageCount);
 	}
 
 	ColorTargetHeap  = new descriptor_heap(Device.Get(), DX12_RESOURCE_LIMIT, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -108,10 +108,11 @@ directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 		ColorTargetViewDesc.Format = ColorTargetFormat;
 		ColorTargetViewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
 
-		SwapChain->GetBuffer(0, IID_PPV_ARGS(&SwapchainImages[0]));
-		Device->CreateRenderTargetView(SwapchainImages[0].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
-		SwapChain->GetBuffer(1, IID_PPV_ARGS(&SwapchainImages[1]));
-		Device->CreateRenderTargetView(SwapchainImages[1].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
+		for(u32 i = 0; i < ImageCount; i++)
+		{
+			SwapChain->GetBuffer(i, IID_PPV_ARGS(&SwapchainImages[i]));
+			Device->CreateRenderTargetView(SwapchainImages[i].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
+		}
 	}
 
 	u32 RenderFormatRequired = D3D12_FORMAT_SUPPORT1_RENDER_TARGET | D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE | D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET;
@@ -135,7 +136,7 @@ directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 	if (MsaaQuality >= 2) MsaaState = true;
 	if (MsaaQuality < 2) RenderMultisampleSupport = false;
 
-	ImGui_ImplDX12_Init(Device.Get(), 2, ColorTargetFormat, ImGuiResourcesHeap->Handle.Get(), ImGuiResourcesHeap->CpuHandle, ImGuiResourcesHeap->GpuHandle);
+	ImGui_ImplDX12_Init(Device.Get(), ImageCount, ColorTargetFormat, ImGuiResourcesHeap->Handle.Get(), ImGuiResourcesHeap->CpuHandle, ImGuiResourcesHeap->GpuHandle);
 
 	D3D12MA::ALLOCATOR_DESC AllocatorDesc = {};
 	AllocatorDesc.pDevice  = Device.Get();
@@ -200,17 +201,16 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 
 	SwapchainImages.clear();
 
-	SwapChain->ResizeBuffers(2, NewWidth, NewHeight, ColorTargetFormat, (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	SwapChain->ResizeBuffers(ImageCount, NewWidth, NewHeight, ColorTargetFormat, (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 
+	D3D12_RENDER_TARGET_VIEW_DESC ColorTargetViewDesc = {};
+	ColorTargetViewDesc.Format = ColorTargetFormat;
+	ColorTargetViewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+
+	for(u32 i = 0; i < ImageCount; i++)
 	{
-		D3D12_RENDER_TARGET_VIEW_DESC ColorTargetViewDesc = {};
-		ColorTargetViewDesc.Format = ColorTargetFormat;
-		ColorTargetViewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
-
-		SwapChain->GetBuffer(0, IID_PPV_ARGS(&SwapchainImages[0]));
-		Device->CreateRenderTargetView(SwapchainImages[0].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
-		SwapChain->GetBuffer(1, IID_PPV_ARGS(&SwapchainImages[1]));
-		Device->CreateRenderTargetView(SwapchainImages[1].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
+		SwapChain->GetBuffer(i, IID_PPV_ARGS(&SwapchainImages[i]));
+		Device->CreateRenderTargetView(SwapchainImages[i].Get(), &ColorTargetViewDesc, ColorTargetHeap->GetNextCpuHandle());
 	}
 }
 
@@ -255,13 +255,20 @@ dx12_descriptor_type GetDXSpvDescriptorType(const std::vector<op_info>& ShaderIn
 	}
 }
 
-// TODO: Use allocator for the inner data so that there wouldn't be a leak
+// TODO: Implement a better shader compilation
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
 LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, descriptor_param>>& ParameterLayout, std::map<u32, std::map<u32, u32>>& NewBindings, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {
 	auto FoundCompiledShader = CompiledShaders.find(Path);
 	if(FoundCompiledShader != CompiledShaders.end())
 	{
+		for (const auto& [Set, Bindings] : FoundCompiledShader->second.ParameterLayout)
+		{
+			for (const auto& [Binding, Param] : Bindings)
+			{
+				ParameterLayout[Set][Binding] = Param;
+			}
+		}
 		NewBindings.insert(FoundCompiledShader->second.NewBindings.begin(), FoundCompiledShader->second.NewBindings.end());
 		ShaderRootLayout.insert(FoundCompiledShader->second.ShaderRootLayout.begin(), FoundCompiledShader->second.ShaderRootLayout.end());
 		DescriptorHeapSizes.insert(FoundCompiledShader->second.DescriptorHeapSizes.begin(), FoundCompiledShader->second.DescriptorHeapSizes.end());
@@ -525,6 +532,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 		std::map<u32, std::map<u32, u32>> ShaderToUse;
 		std::map<u32, std::map<u32, u32>> ParameterOffsets;
+		std::map<u32, std::map<u32, descriptor_param>> ParameterLayoutTemp;
 		for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
 		{
 			const op_info& Var = ShaderInfo[VariableIdx];
@@ -544,7 +552,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 				u32 StorageClass = Var.StorageClass;
 				bool NonWritable = false;
 				dx12_descriptor_type DescriptorType;
-				image_type& ImageType = ParameterLayout[Var.Set][Var.Binding].ImageType;
+				image_type& ImageType = ParameterLayoutTemp[Var.Set][Var.Binding].ImageType;
 				if(VariableType.OpCode == SpvOpTypePointer)
 				{
 					const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
@@ -581,28 +589,28 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 				if(DescriptorType == dx12_descriptor_type::unordered_access)
 				{
-					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::buffer_storage;
-					ParameterLayout[Var.Set][Var.Binding].IsWritable = true;
+					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::buffer_storage;
+					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = true;
 				}
 				else if(DescriptorType == dx12_descriptor_type::shader_resource || DescriptorType == dx12_descriptor_type::constant_buffer)
 				{
-					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::buffer_uniform;
-					ParameterLayout[Var.Set][Var.Binding].IsWritable = false;
+					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::buffer_uniform;
+					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = false;
 				}
 				else if(DescriptorType == dx12_descriptor_type::image)
 				{
-					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::texture_storage;
-					ParameterLayout[Var.Set][Var.Binding].IsWritable = true;
+					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::texture_storage;
+					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = true;
 				}
 				else if(DescriptorType == dx12_descriptor_type::sampler)
 				{
-					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
-					ParameterLayout[Var.Set][Var.Binding].IsWritable = false;
+					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
+					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = false;
 				}
 				else if(DescriptorType == dx12_descriptor_type::combined_image_sampler)
 				{
-					ParameterLayout[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
-					ParameterLayout[Var.Set][Var.Binding].IsWritable = false;
+					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
+					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = false;
 				}
 
 				if((DescriptorType == dx12_descriptor_type::image || 
@@ -626,8 +634,8 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
 
-						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					case dx12_descriptor_type::image:
 					case dx12_descriptor_type::unordered_access:
@@ -640,8 +648,8 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
 
-						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::general;
-						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
+						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::general;
+						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
 					} break;
 					case dx12_descriptor_type::constant_buffer:
 					{
@@ -653,8 +661,8 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
 
-						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					case dx12_descriptor_type::combined_image_sampler:
 					{
@@ -679,8 +687,8 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER]     += Size;
 
-						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					case dx12_descriptor_type::sampler:
 					{
@@ -692,8 +700,8 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER]     += Size;
 
-						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					}
 
@@ -702,9 +710,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
 					Parameter.DescriptorTable  = {1, ParameterRange};
 
-					ParameterLayout[Var.Set][Var.Binding].Count = Size;
-					//ParameterLayout[Var.Set][Var.Binding].ImageType = TextureType;
-					ParameterLayout[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
+					ParameterLayoutTemp[Var.Set][Var.Binding].Count = Size;
+					//ParameterLayoutTemp[Var.Set][Var.Binding].ImageType = TextureType;
+					ParameterLayoutTemp[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 				else
 				{
@@ -716,15 +724,15 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					{
 						Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
 
-						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
 					} break;
 					case dx12_descriptor_type::unordered_access:
 					{
 						Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
 
-						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::general;
-						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
+						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::general;
+						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
 					} break;
 					case dx12_descriptor_type::constant_buffer:
 					{
@@ -739,12 +747,20 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 					Parameter.Descriptor.RegisterSpace  = Var.Set;
 					Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
 
-					ParameterLayout[Var.Set][Var.Binding].Count = 1;
-					ParameterLayout[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
+					ParameterLayoutTemp[Var.Set][Var.Binding].Count = 1;
+					ParameterLayoutTemp[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
 				}
 			}
 		}
 
+		for (const auto& [Set, Bindings] : ParameterLayoutTemp)
+		{
+			for (const auto& [Binding, Param] : Bindings)
+			{
+				ParameterLayout[Set][Binding] = Param;
+			}
+		}
+		CompiledShaders[Path].ParameterLayout.insert(ParameterLayoutTemp.begin(), ParameterLayoutTemp.end());
 		CompiledShaders[Path].ShaderRootLayout.insert(ShaderRootLayout.begin(), ShaderRootLayout.end());
 		CompiledShaders[Path].DescriptorHeapSizes.insert(DescriptorHeapSizes.begin(), DescriptorHeapSizes.end());
 		CompiledShaders[Path].HavePushConstant = HavePushConstant;

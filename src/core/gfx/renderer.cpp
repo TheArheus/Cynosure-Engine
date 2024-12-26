@@ -45,7 +45,7 @@ global_graphics_context(backend_type _BackendType, GLFWwindow* Window)
 		assert("Backend type is unavalable");
 
 	Binder = CreateResourceBinder();
-	ExecutionContext = CreateGlobalPipelineContext();
+	for(u32 i = 0; i < Backend->ImageCount; i++) ExecutionContexts.push_back(CreateGlobalPipelineContext());
 	GpuMemoryHeap = new gpu_memory_heap(Backend);
 
 	utils::texture::input_data TextureInputData = {};
@@ -54,8 +54,10 @@ global_graphics_context(backend_type _BackendType, GLFWwindow* Window)
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
 	TextureInputData.Usage     = TF_ColorAttachment | TF_Sampled;
-	GfxColorTarget[0] = GpuMemoryHeap->CreateTexture("ColorTarget0", Backend->Width, Backend->Height, 1, TextureInputData);
-	GfxColorTarget[1] = GpuMemoryHeap->CreateTexture("ColorTarget1", Backend->Width, Backend->Height, 1, TextureInputData);
+	for(u32 i = 0; i < Backend->ImageCount; i++)
+	{
+		GfxColorTarget.push_back(GpuMemoryHeap->CreateTexture("ColorTarget" + std::to_string(i), Backend->Width, Backend->Height, 1, TextureInputData));
+	}
 	TextureInputData.Format    = image_format::D32_SFLOAT;
 	TextureInputData.Usage     = TF_DepthTexture | TF_Sampled;
 	GfxDepthTarget = GpuMemoryHeap->CreateTexture("DepthTarget", Backend->Width, Backend->Height, 1, TextureInputData);
@@ -83,9 +85,10 @@ void global_graphics_context::
 DestroyObject()
 {
 	GeneralShaderViewMap.clear();
+
+	for(command_list* ExecutionContext : ExecutionContexts) delete ExecutionContext;
 	ContextMap.clear();
 
-	if(ExecutionContext) delete ExecutionContext;
 	if(GpuMemoryHeap) delete GpuMemoryHeap;
 	if(Binder) delete Binder;
 	if(Backend) delete Backend;
@@ -94,7 +97,7 @@ DestroyObject()
     Backend = nullptr;
 	GpuMemoryHeap = nullptr;
     CurrentContext = nullptr;
-    ExecutionContext = nullptr;
+    ExecutionContexts.clear();
 }
 
 global_graphics_context::
@@ -108,22 +111,18 @@ global_graphics_context(global_graphics_context&& Oth) noexcept
       PassToContext(std::move(Oth.PassToContext)),
       Passes(std::move(Oth.Passes)),
       CurrentContext(Oth.CurrentContext),
-      ExecutionContext(Oth.ExecutionContext),
       BackBufferIndex(Oth.BackBufferIndex),
       GfxDepthTarget(std::move(Oth.GfxDepthTarget)),
       QuadVertexBuffer(std::move(Oth.QuadVertexBuffer)),
       QuadIndexBuffer(std::move(Oth.QuadIndexBuffer))
 {
-    for (size_t i = 0; i < 2; ++i)
-	{
-        GfxColorTarget[i] = std::move(Oth.GfxColorTarget[i]);
-    }
+	GfxColorTarget = std::move(Oth.GfxColorTarget);
+	ExecutionContexts = std::move(Oth.ExecutionContexts),
 
 	Oth.Binder = nullptr;
     Oth.Backend = nullptr;
 	Oth.GpuMemoryHeap = nullptr;
     Oth.CurrentContext = nullptr;
-    Oth.ExecutionContext = nullptr;
 }
 
 global_graphics_context& global_graphics_context::
@@ -140,14 +139,11 @@ operator=(global_graphics_context&& Oth) noexcept
         PassToContext = std::move(Oth.PassToContext);
         Passes = std::move(Oth.Passes);
         CurrentContext = Oth.CurrentContext;
-        ExecutionContext = Oth.ExecutionContext;
+		ExecutionContexts = std::move(Oth.ExecutionContexts),
 
         BackBufferIndex = Oth.BackBufferIndex;
 
-		for (size_t i = 0; i < 2; ++i)
-		{
-            GfxColorTarget[i] = std::move(Oth.GfxColorTarget[i]);
-        }
+		GfxColorTarget = std::move(Oth.GfxColorTarget);
 
 		QuadVertexBuffer = std::move(Oth.QuadVertexBuffer);
 		QuadIndexBuffer  = std::move(Oth.QuadIndexBuffer);
@@ -156,7 +152,6 @@ operator=(global_graphics_context&& Oth) noexcept
         Oth.Backend = nullptr;
 		Oth.GpuMemoryHeap = nullptr;
         Oth.CurrentContext = nullptr;
-        Oth.ExecutionContext = nullptr;
     }
 
     return *this;
@@ -320,8 +315,6 @@ PushRectangle(vec2 Pos, vec2 Scale, vec3 Color)
 		Transform.Dims = vec2(1);
 		Transform.Color = Color;
 
-		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
-
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
 	};
@@ -370,14 +363,14 @@ PushRectangle(vec2 Pos, vec2 Scale, resource_descriptor& Texture)
 			vec2 Scale;
 			vec2 Offset;
 			vec2 Dims;
+			vec3 Color;
 		};
 		transform Transform = {};
 		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
 		Transform.Scale = Scale / vec2(ColorTarget.Width, ColorTarget.Height);
 		Transform.Offset = vec2(0);
 		Transform.Dims = vec2(1);
-
-		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
+		Transform.Color = vec3(1);
 
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
@@ -426,14 +419,14 @@ PushRectangle(vec2 Pos, vec2 Scale, vec2 Offset, vec2 Dims, resource_descriptor&
 			vec2 Scale;
 			vec2 Offset;
 			vec2 Dims;
+			vec3 Color;
 		};
 		transform Transform = {};
 		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
 		Transform.Scale = Scale / vec2(ColorTarget.Width, ColorTarget.Height);
 		Transform.Offset = Offset / vec2(Atlas.Width, Atlas.Height);
 		Transform.Dims = Dims / vec2(Atlas.Width, Atlas.Height);
-
-		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
+		Transform.Color = vec3(1);
 
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
@@ -491,8 +484,6 @@ PushCircle(vec2 Pos, float Radius, vec3 Color)
 		Transform.Dims = vec2(1);
 		Transform.Color = Color;
 
-		Cmd->SetViewport(0, 0, ColorTarget.Width, ColorTarget.Height);
-
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
 	};
@@ -529,6 +520,9 @@ AddTransferPass(std::string Name, execute_func Exec)
 }
 
 // TODO: Command parallelization maybe
+// TODO: Maybe compile render graph only once per change
+// TODO: Make so the resources wouldn't binded to descriptors multiple times(only when they are actually changed in the descriptor)
+//       Plus bind static descriptors only once
 void global_graphics_context::
 Compile()
 {
@@ -714,9 +708,6 @@ Compile()
 						Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
 
 						NewPacket.Resources[i] = GpuMemoryHeap->GetTexture((*Data)[i]);
-
-						//texture* CurrentTexture = (texture*)NewPacket.Resources[i];
-						//AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, NewPacket.Mips, Parameter.ShaderToUse});
 					}
 					Packets.push_back(NewPacket);
 				}
@@ -733,7 +724,7 @@ Compile()
 		Pass->BufferBarriers = array<buffer_barrier>(AttachmentBufferBarriers.data(), AttachmentBufferBarriers.size());
 		Pass->TextureBarriers = array<texture_barrier>(AttachmentImageBarriers.data(), AttachmentImageBarriers.size());
 
-		Pass->Bindings = array<binding_packet>(Packets.data(), Packets.size());
+		Pass->ParamsChanged ? Pass->Bindings = array<binding_packet>(Packets.data(), Packets.size()) : NULL;
 		if(HaveStatic)
 		{
 			Binder->AppendStaticStorage(UseContext, Pass->Bindings, StaticOffs);
@@ -745,14 +736,17 @@ Compile()
 }
 
 // TODO: Consider of pushing pass work in different thread if some of them are not dependent and can use different queue type
+// TODO: Better viewport setup
 void global_graphics_context::
 Execute()
 {
+	command_list* ExecutionContext = ExecutionContexts[BackBufferIndex];
 	ExecutionContext->AcquireNextImage();
 	ExecutionContext->Begin();
 
 	texture* CurrentColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, GfxColorTarget[BackBufferIndex]);
 	ExecutionContext->FillTexture(CurrentColorTarget, vec4(vec3(0), 1.0f));
+	ExecutionContext->SetViewport(0, 0, CurrentColorTarget->Width, CurrentColorTarget->Height);
 
 	// NOTE: Little binding cache for some of the resources:
 	buffer*  BoundVertexBuffer = nullptr;
@@ -766,13 +760,10 @@ Execute()
 		shader_pass* Pass = Passes[PassIndex];
 		bool ShouldRebind = SetContext(Pass, ExecutionContext) || Pass->ParamsChanged;
 
-        if (ShouldRebind)
+        if (ShouldRebind && RenderingActive)
         {
-            if (RenderingActive)
-            {
-                ExecutionContext->EndRendering();
-                RenderingActive = false;
-            }
+			ExecutionContext->EndRendering();
+			RenderingActive = false;
         }
 
         if (Pass->RasterReflection && ShouldRebind)
@@ -790,7 +781,7 @@ Execute()
                     gpu_index_buffer* Data = (gpu_index_buffer*)((uptr)RasterParameters + Member->Offset);
                     buffer* IndexBuffer = GpuMemoryHeap->GetBuffer(ExecutionContext, Data->ID);
 
-                    if (ShouldRebind || BoundIndexBuffer != IndexBuffer)
+                    if (BoundIndexBuffer != IndexBuffer)
                     {
                         ExecutionContext->AttachmentBufferBarriers.push_back({IndexBuffer, RF_IndexBuffer, PSF_VertexShader});
                         ExecutionContext->SetIndexBuffer(IndexBuffer);
@@ -809,6 +800,29 @@ Execute()
                         texture* ColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ID);
                         DesiredColorTargets.push_back(ColorTarget);
                     }
+					if (ShouldRebind)
+					{
+						if((BoundColorTargets.size() != DesiredColorTargets.size()) ||
+						   !std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin()))
+						{
+							for (texture* ColorTarget : DesiredColorTargets)
+							{
+								ExecutionContext->AttachmentImageBarriers.push_back({
+									ColorTarget, 
+									AF_ColorAttachmentWrite, 
+									barrier_state::color_attachment, 
+									SUBRESOURCES_ALL, 
+									PSF_ColorAttachment
+								});
+							}
+							ExecutionContext->SetColorTarget(DesiredColorTargets);
+							BoundColorTargets = DesiredColorTargets;
+						}
+						else
+						{
+							ExecutionContext->SetColorTarget(BoundColorTargets);
+						}
+					}
                 }
 #if 0
                 else if (Member->Type == meta_type::gpu_depth_target)
@@ -816,52 +830,28 @@ Execute()
                     gpu_depth_target* Data = (gpu_depth_target*)((uptr)RasterParameters + Member->Offset);
                     texture* DepthTarget = GpuMemoryHeap->GetTexture(ExecutionContext, (*Data)[0]);
                     DesiredDepthTarget = DepthTarget;
+					if (ShouldRebind)
+					{
+						if (BoundDepthTarget != DesiredDepthTarget)
+						{
+							ExecutionContext->AttachmentImageBarriers.push_back({
+								DesiredDepthTarget, 
+								AF_DepthStencilAttachmentWrite, 
+								barrier_state::depth_stencil_attachment, 
+								SUBRESOURCES_ALL, 
+								PSF_EarlyFragment
+							});
+							ExecutionContext->SetDepthTarget(DesiredDepthTarget);
+							BoundDepthTarget = DesiredDepthTarget;
+						}
+						else
+						{
+							ExecutionContext->SetDepthTarget(BoundDepthTarget);
+						}
+					}
                 }
 #endif
             }
-
-            // Decide if we need to rebind color targets:
-            bool ColorTargetsChanged = 
-                (BoundColorTargets.size() != DesiredColorTargets.size()) ||
-                !std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin());
-
-            // Decide if we need to rebind depth targets:
-            bool DepthTargetChanged = (BoundDepthTarget != DesiredDepthTarget);
-
-            // If ShouldRebind is true, we rebind even if they haven't changed
-            if (ShouldRebind || ColorTargetsChanged)
-            {
-                for (texture* ColorTarget : DesiredColorTargets)
-                {
-                    ExecutionContext->AttachmentImageBarriers.push_back({
-                        ColorTarget, 
-                        AF_ColorAttachmentWrite, 
-                        barrier_state::color_attachment, 
-                        SUBRESOURCES_ALL, 
-                        PSF_ColorAttachment
-                    });
-                }
-                ExecutionContext->SetColorTarget(DesiredColorTargets);
-                BoundColorTargets = DesiredColorTargets;
-            }
-
-#if 0
-            if (ShouldRebind || DepthTargetChanged)
-            {
-                if (DesiredDepthTarget)
-                {
-                    ExecutionContext->AttachmentImageBarriers.push_back({
-                        DesiredDepthTarget, 
-                        AF_DepthStencilAttachmentWrite, 
-                        barrier_state::depth_stencil_attachment, 
-                        SUBRESOURCES_ALL, 
-                        PSF_EarlyFragment
-                    });
-                    ExecutionContext->SetDepthTarget(DesiredDepthTarget);
-                }
-                BoundDepthTarget = DesiredDepthTarget;
-            }
-#endif
         }
 
 		ExecutionContext->AttachmentBufferBarriers.insert(ExecutionContext->AttachmentBufferBarriers.end(), Pass->BufferBarriers.begin(), Pass->BufferBarriers.end());
@@ -872,18 +862,10 @@ Execute()
 
 		ExecutionContext->BindShaderParameters(Pass->Bindings);
 
-        if (ShouldRebind)
+        if (ShouldRebind || !RenderingActive)
         {
             ExecutionContext->BeginRendering(Backend->Width, Backend->Height);
             RenderingActive = true;
-        }
-        else
-        {
-            if (!RenderingActive)
-            {
-                ExecutionContext->BeginRendering(Backend->Width, Backend->Height);
-                RenderingActive = true;
-            }
         }
 
 		Dispatches[Pass](ExecutionContext);
@@ -898,34 +880,9 @@ Execute()
 		RenderingActive = false;
 	}
 
-	// TODO: Think about how to implement this properly now
-#if 0
 	ExecutionContext->DebugGuiBegin(CurrentColorTarget);
-	ImGui::NewFrame();
-
-	SceneManager.RenderUI();
-
-	if(SceneManager.Count() > 1)
-	{
-		ImGui::SetNextWindowPos(ImVec2(0, 300));
-		ImGui::SetNextWindowSize(ImVec2(150, 100));
-		ImGui::Begin("Active Scenes", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-
-		for(u32 SceneIdx = 0; SceneIdx < SceneManager.Count(); ++SceneIdx)
-		{
-			if(ImGui::Button(SceneManager.Infos[SceneIdx].Name.c_str()))
-			{
-				SceneManager.CurrentScene = SceneIdx;
-			}
-		}
-
-		ImGui::End();
-	}
-
-	ImGui::EndFrame();
 	ImGui::Render();
 	ExecutionContext->DebugGuiEnd();
-#endif
 
 	ExecutionContext->EmplaceColorTarget(CurrentColorTarget);
 	ExecutionContext->Present();
@@ -940,5 +897,5 @@ Execute()
 	Dispatches.clear();
 	PassToContext.clear();
 
-	BackBufferIndex = (BackBufferIndex + 1) % 2;
+	BackBufferIndex = (BackBufferIndex + 1) % Backend->ImageCount;
 }

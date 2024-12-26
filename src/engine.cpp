@@ -2,16 +2,21 @@
 void engine::
 Init(const std::vector<std::string>& args)
 {
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
+
+	window::EventsDispatcher.Subscribe(this, &engine::OnButtonDown);
+	window::EventsDispatcher.Subscribe(this, &engine::OnButtonUp);
+	window::EventsDispatcher.Subscribe(this, &engine::OnButtonHold);
 
 	CreateGuiContext(&Window);
 
 	Registry.AddSystem<render_system>();
 	Registry.AddSystem<movement_system>();
 	Registry.AddSystem<collision_system>(Window.Width, Window.Height);
+	Registry.SetupSystems();
 
-	AssetStore.AddFont("roboto", "../assets/fonts/Roboto-Regular.ttf", MAX_FONT_SIZE);
+	AssetStore.AddFont("roboto", "../assets/fonts/OpenSans-Regular.ttf", MAX_FONT_SIZE);
 	SetGuiFont(AssetStore.GetFont("roboto"), 18);
 }
 
@@ -27,13 +32,11 @@ Run()
 
 	while(Window.IsRunning())
 	{
-		Window.NewFrame();
-		Window.EventsDispatcher.Reset();
-
-		window::EventsDispatcher.Subscribe(this, &engine::OnButtonDown);
-
 		auto Result = window::ProcessMessages();
-		if(Result) return *Result;
+		if(Result) break;//return *Result;
+
+		Window.NewFrame();
+		Window.EmitEvents();
 
         double FrameTime = TargetFrameRate - (window::GetTimestamp() - TimeLast);
         if (FrameTime > 0 && FrameTime < TargetFrameRate)
@@ -42,7 +45,7 @@ Run()
         }
 		double FrameDeltaTime = window::GetTimestamp() - TimeLast;
 #ifdef CE_DEBUG
-		//if (FrameDeltaTime > TargetFrameRate) FrameDeltaTime = TargetFrameRate;
+		if (FrameDeltaTime > TargetFrameRate) FrameDeltaTime = TargetFrameRate;
 #endif
 		TimeLast = window::GetTimestamp();
 
@@ -67,19 +70,16 @@ Run()
 
 		double InstantFPS = 1000.0 / FrameDeltaTime;
 		SmoothedFPS = SmoothingFactor * InstantFPS + (1.0 - SmoothingFactor) * SmoothedFPS;
-		std::string FrameSpeedString = "Frame " + std::to_string(1000.0 / SmoothedFPS) + "ms, " + std::to_string(SmoothedFPS) + "fps";
-#if CE_DEBUG
+		std::string FrameSpeedString = "Frame: " + std::to_string(1000.0 / SmoothedFPS) + "ms, " + std::to_string(SmoothedFPS) + "fps";
 		GuiLabel(FrameSpeedString, vec2(0, Window.Height));
-		GuiLabel("Mouse X: " + std::to_string(Window.MouseX) + " Mouse Y: " + std::to_string(Window.MouseY), vec2(0, Window.Height - 20));
-#endif
+
 		if(!Window.IsGfxPaused)
 		{
 			Window.Gfx.Compile();
 			Window.Gfx.Execute();
 		}
 
-		Window.EmitEvents();
-		window::EventsDispatcher.DispatchEvents();
+		Window.UpdateStates();
 		Allocator.UpdateAndReset();
 	}
 
@@ -90,6 +90,7 @@ Run()
 void engine::
 DrawMainMenu()
 {
+#if USE_CE_GUI
     vec2 ScreenCenter = vec2(Window.Width * 0.5f, Window.Height * 0.5f);
 
     vec2 BtnSize = vec2(200, 50);
@@ -104,13 +105,48 @@ DrawMainMenu()
     BtnPos = ScreenCenter - vec2(0, 30);
     if (GuiButton("Exit Game", BtnPos, BtnSize))
     {
-		window::WindowClass.IsRunning = false;
+		Window.RequestClose();
     }
+#else
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(Window.Width, Window.Height), ImGuiCond_Always);
+    
+    ImGuiWindowFlags WindowFlags  = ImGuiWindowFlags_NoTitleBar |
+                                    ImGuiWindowFlags_NoResize |
+                                    ImGuiWindowFlags_NoMove |
+                                    ImGuiWindowFlags_NoScrollbar |
+                                    ImGuiWindowFlags_NoScrollWithMouse |
+                                    ImGuiWindowFlags_NoCollapse |
+                                    ImGuiWindowFlags_NoBackground;
+
+    ImGui::Begin("MainMenu", nullptr, WindowFlags);
+
+    vec2 ScreenCenter = vec2(Window.Width * 0.5f, Window.Height * 0.5f);
+    vec2 BtnSize = vec2(200, 50);
+
+    vec2 BtnPosStart = vec2(ScreenCenter.x, ScreenCenter.y - 30);
+    ImGui::SetCursorPos(BtnPosStart - 0.5f * BtnSize);
+    if (ImGui::Button("Start Game", BtnSize))
+    {
+        CurrentGameState = game_state::playing;
+        SetupGameEntities();
+    }
+
+    ImVec2 BtnPosExit = ImVec2(ScreenCenter.x, ScreenCenter.y + 30);
+    ImGui::SetCursorPos(BtnPosExit - 0.5f * BtnSize);
+    if (ImGui::Button("Exit Game", BtnSize))
+    {
+        Window.RequestClose();
+    }
+
+    ImGui::End();
+#endif
 }
 
 void engine::
 DrawPauseMenu()
 {
+#if USE_CE_GUI
     vec2 ScreenCenter = vec2(Window.Width * 0.5f, Window.Height * 0.5f);
 
     vec2 BtnSize = vec2(200, 50);
@@ -126,6 +162,40 @@ DrawPauseMenu()
         Registry.ClearAllEntities();
         CurrentGameState = game_state::main_menu;
     }
+#else
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(Window.Width, Window.Height), ImGuiCond_Always);
+    
+    ImGuiWindowFlags WindowFlags  = ImGuiWindowFlags_NoTitleBar |
+                                    ImGuiWindowFlags_NoResize |
+                                    ImGuiWindowFlags_NoMove |
+                                    ImGuiWindowFlags_NoScrollbar |
+                                    ImGuiWindowFlags_NoScrollWithMouse |
+                                    ImGuiWindowFlags_NoCollapse |
+                                    ImGuiWindowFlags_NoBackground;
+
+    ImGui::Begin("PauseMenu", nullptr, WindowFlags);
+
+    vec2 ScreenCenter = vec2(Window.Width * 0.5f, Window.Height * 0.5f);
+    vec2 BtnSize = vec2(200, 50);
+
+    vec2 BtnPosStart = vec2(ScreenCenter.x, ScreenCenter.y - 30);
+    ImGui::SetCursorPos(BtnPosStart - 0.5f * BtnSize);
+    if (ImGui::Button("Resume", BtnSize))
+    {
+        CurrentGameState = game_state::playing;
+    }
+
+    ImVec2 BtnPosExit = ImVec2(ScreenCenter.x, ScreenCenter.y + 30);
+    ImGui::SetCursorPos(BtnPosExit - 0.5f * BtnSize);
+    if (ImGui::Button("Main Menu", BtnSize))
+    {
+        Registry.ClearAllEntities();
+        CurrentGameState = game_state::main_menu;
+    }
+
+    ImGui::End();
+#endif
 }
 
 void engine::
@@ -138,12 +208,14 @@ SetupGameEntities()
 	entity Paddle = Registry.CreateEntity();
 	Paddle.AddTag("Player");
 	Paddle.AddComponent<renderable>();
+	Paddle.AddComponent<collidable>();
 	Paddle.AddComponent<transform>(PlayerPosition - vec2(0, 50));
 	Paddle.AddComponent<rectangle>(vec2(100, 20));
 
 	entity Ball = Registry.CreateEntity();
 	Ball.AddTag("Ball");
 	Ball.AddComponent<renderable>();
+	Ball.AddComponent<collidable>();
 	Ball.AddComponent<transform>(PlayerPosition);
 	Ball.AddComponent<velocity>();
 	Ball.AddComponent<circle>(10);
@@ -164,8 +236,25 @@ SetupGameEntities()
 			entity Brick = Registry.CreateEntity();
 			Brick.AddToGroup("Brick");
 			Brick.AddComponent<renderable>();
+			Brick.AddComponent<collidable>();
 			Brick.AddComponent<transform>(vec2(100, 50) + vec2(X * BlockWidth, 400 + Y * BlockHeight));
 			Brick.AddComponent<rectangle>(vec2(BlockWidth, BlockHeight));
+		}
+	}
+}
+
+void engine::
+OnButtonUp(key_up_event& Event)
+{
+	if(CurrentGameState == game_state::playing)
+	{
+		entity BallEntity = Registry.GetEntityByTag("Ball");
+		velocity& BallVel = BallEntity.GetComponent<velocity>();
+
+		if(Event.Code == EC_SPACE)
+		{
+			BallVel.Direction = vec2(0, 1);
+			BallVel.Speed = 0.75f;
 		}
 	}
 }
@@ -187,18 +276,17 @@ OnButtonDown(key_down_event& Event)
             CurrentGameState = game_state::playing;
         }
     }
+}
 
+void engine::
+OnButtonHold(key_hold_event& Event)
+{
 	if(CurrentGameState == game_state::playing)
 	{
 		entity PaddleEntity = Registry.GetEntityByTag("Player");
-		entity BallEntity = Registry.GetEntityByTag("Ball");
 
 		transform& Trans = PaddleEntity.GetComponent<transform>();
 		rectangle Rect = PaddleEntity.GetComponent<rectangle>();
-
-		transform& BallTrans = BallEntity.GetComponent<transform>();
-		velocity& BallVel = BallEntity.GetComponent<velocity>();
-		circle BallDesc = BallEntity.GetComponent<circle>();
 
 		vec2 Delta(0.0f, 0.0f);
 		if(Event.Code == EC_LEFT)
@@ -208,11 +296,6 @@ OnButtonDown(key_down_event& Event)
 		if(Event.Code == EC_RIGHT)
 		{
 			Delta.x += 25.0f;
-		}
-		if(Event.Code == EC_SPACE)
-		{
-			BallVel.Direction = vec2(0, 1);
-			BallVel.Speed = 0.75f;
 		}
 		
 		Trans.Position += Delta;

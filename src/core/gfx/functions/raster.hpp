@@ -18,7 +18,6 @@ struct debug_raster : public shader_graphics_view_context
 		SetupData.UseColor	 = true;
 		SetupData.UseDepth	 = true;
 		SetupData.CullMode   = cull_mode::back;
-		SetupData.UseOutline = true;
 
 		return SetupData;
 	}

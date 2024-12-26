@@ -98,6 +98,7 @@ struct vulkan_command_list : public command_list
 	VkPipelineStageFlags CurrentStage;
 	VkCommandBuffer CommandList;
 	VkSemaphore AcquireSemaphore, ReleaseSemaphore;
+	VkFence AcquireFence, RenderFence;
 
 	vulkan_backend* Gfx = nullptr;
 
@@ -117,7 +118,7 @@ public:
 	~vulkan_render_context() override { DestroyObject(); }
 
 	vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op NewStoreOp, std::vector<std::string> ShaderList, 
-						  const std::vector<image_format>& ColorTargetFormats, const utils::render_context::input_data& InputData = {cull_mode::back, true, true, false, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
+						  const std::vector<image_format>& ColorTargetFormats, const utils::render_context::input_data& InputData, const std::vector<shader_define>& ShaderDefines);
 
 	vulkan_render_context(const vulkan_render_context&) = delete;
 	vulkan_render_context& operator=(const vulkan_render_context&) = delete;

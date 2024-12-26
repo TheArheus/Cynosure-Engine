@@ -12,7 +12,7 @@ gpu_memory_heap::
 
 	for (auto& [ID, Descriptor] : Descriptors)
 	{
-		if(Descriptor.Data) delete Descriptor.Data;
+		if(Descriptor.Data) free(Descriptor.Data);
 		Descriptor.Data = nullptr;
 	}
 
@@ -105,7 +105,7 @@ CreateBuffer(const std::string& Name, void* Data, u64 Size, u64 Count, u32 Usage
 		Descriptor.ID = NextID++;
 	}
 	Descriptor.Name  = Name;
-	Descriptor.Data  = new char[Size * Count];
+	Descriptor.Data  = (char*)calloc(Size, Count);
 	Descriptor.Size  = Size;
 	Descriptor.Count = Count;
 	Descriptor.Usage = Usage;
@@ -151,7 +151,7 @@ CreateTexture(const std::string& Name, void* Data, u32 Width, u32 Height, u32 De
 		Descriptor.ID = NextID++;
 	}
 	Descriptor.Name   = Name;
-	Descriptor.Data   = new char[Width * Height * Depth * GetPixelSize(Info.Format)];
+	Descriptor.Data   = (char*)calloc(GetPixelSize(Info.Format), Width * Height * Depth);
 	Descriptor.Width  = Width;
 	Descriptor.Height = Height;
 	Descriptor.Depth  = Depth;

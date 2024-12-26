@@ -40,20 +40,26 @@ public:
 	~window();
 
 	void Create(unsigned int Width, unsigned int Height, const char* Name);
+	void Close();
+	void RequestClose() { if (Handle) glfwSetWindowShouldClose(Handle, GLFW_TRUE); }
 
 	void NewFrame()
 	{
 		ImGui::SetCurrentContext(imguiContext);
+		Gfx.Backend->ImGuiNewFrame();
 		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
 	};
+
 	void EmitEvents();
+	void UpdateStates();
 
 	void InitVulkanGraphics();
 	void InitDirectx12Graphics();
 
 	static std::optional<int> ProcessMessages();
 	static double GetTimestamp();
-	static void window::SleepFor(double Time);
+	static void SleepFor(double Time);
 
 	void SetTitle(std::string& Title);
 
@@ -85,21 +91,6 @@ public:
 private:
 	window(const window& rhs) = delete;
 	window& operator=(const window& rhs) = delete;
-
-	void DestroyObject()
-	{
-		if(Handle)
-		{
-			ImGui::SetCurrentContext(imguiContext);
-			Gfx.DestroyObject();
-			ImGui_ImplGlfw_Shutdown();
-			ImGui::DestroyContext(imguiContext);
-			glfwDestroyWindow(Handle);
-			WindowClass.WindowInstances.erase(Handle);
-			WindowClass.WindowCount--;
-			Handle = nullptr;
-		}
-	}
 
 	static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
     static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);

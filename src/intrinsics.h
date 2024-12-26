@@ -92,14 +92,15 @@ struct texture_t
 
 struct glyph_t
 {
-    u32 Width;
-    u32 Height;
+    s32 Width;
+    s32 Height;
     s32 OffsetX;
     s32 OffsetY;
     s32 FontSize;
 	float StartX;
 	float StartY;
-	float Advance;
+	float AdvanceX;
+	float AdvanceY;
 };
 
 #include "core/math.h"

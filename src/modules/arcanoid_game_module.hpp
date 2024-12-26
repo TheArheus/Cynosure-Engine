@@ -1,9 +1,8 @@
-#include "game_module.hpp"
 
 class arcanoid : game_module
 {
 public:
-	ModuleStart() override
+	void OnInit()
 	{
 		Registry.AddSystem<render_system>();
 		Registry.AddSystem<movement_system>();
@@ -29,13 +28,15 @@ public:
 		}
 	}
 
-	ModuleUpdate() override
+	void OnUpdate(double dt)
 	{
+		Registry.UpdateSystems();
+		Registry.GetSystem<movement_system>()->Update(dt);
+		Registry.GetSystem<collision_system>()->Update(dt);
+	}
+
+	void OnRender()
+	{
+		Registry.GetSystem<render_system>()->Render(Window.Gfx);
 	}
 };
-
-extern "C" GameSceneCreateFunc(CubeSceneCreate)
-{
-	game_module* Ptr = new arcanoid();
-	return Ptr;
-}

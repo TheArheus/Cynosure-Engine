@@ -35,6 +35,7 @@ void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name
 
 	Handle = CreateWindow(WindowClass.Name, Name, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), CW_USEDEFAULT, CW_USEDEFAULT, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
 	WindowClass.IsWindowCreated = true;
+	WindowClass.WindowInstances[Handle] = this;
 
 	imguiContext = ImGui::CreateContext();
 	ImGui::SetCurrentContext(imguiContext);
@@ -45,14 +46,26 @@ void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name
 	QueryPerformanceFrequency(&TimerFrequency);
 }
 
+void window::Close()
+{
+	if(Handle)
+	{
+		IsGfxPaused = true;
+		ImGui::SetCurrentContext(imguiContext);
+		Gfx.DestroyObject();
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext(imguiContext);
+		imguiContext = nullptr;
+		DestroyWindow(Handle);
+		WindowClass.WindowInstances.erase(Handle);
+		Handle = nullptr;
+	}
+}
+
 window::
 ~window()
 {
-	ImGui::SetCurrentContext(imguiContext);
-	Gfx.DestroyObject();
-	ImGui_ImplWin32_Shutdown();
-	ImGui::DestroyContext(imguiContext);
-	DestroyWindow(Handle);
+	Close();
 }
 
 LRESULT window::InitWindowProc(HWND hWindow, UINT Message, WPARAM wParam, LPARAM lParam)
@@ -77,8 +90,11 @@ LRESULT window::WindowProc(HWND hWindow, UINT Message, WPARAM wParam, LPARAM lPa
 	window* Window = reinterpret_cast<window*>(GetWindowLongPtr(hWindow, GWLP_USERDATA));
 	if(Window)
 	{
-		ImGui::SetCurrentContext(Window->imguiContext);
-		ImGui_ImplWin32_WndProcHandler(hWindow, Message, wParam, lParam);
+		if(Window->imguiContext)
+		{
+			ImGui::SetCurrentContext(Window->imguiContext);
+			ImGui_ImplWin32_WndProcHandler(hWindow, Message, wParam, lParam);
+		}
 		return Window->DispatchMessages(hWindow, Message, wParam, lParam);
 	}
 	return DefWindowProc(hWindow, Message, wParam, lParam);
@@ -196,17 +212,19 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 		} break;
         case WM_CLOSE:
         {
-            DestroyWindow(hWindow);
+			ShouldClose = true;
             return 0;
         } break;
         case WM_DESTROY:
         {
             WindowClass.WindowCount--;
+#if 0
             if(WindowClass.WindowCount == 0)
             {
                 WindowClass.IsRunning = false;
                 PostQuitMessage(0);
             }
+#endif
             return 0;
         } break;
 	}
@@ -217,21 +235,31 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 // TODO: Better event handling here if possible
 void window::EmitEvents()
 {
-	for(u16 Code = 0; Code < 256; ++Code)
-	{
-		if(Buttons[Code].IsDown && !Buttons[Code].WasDown)
-		{
-			window::EventsDispatcher.Emit<key_down_event>(Code, Buttons[Code].RepeatCount);
-		}
-		else if(!Buttons[Code].IsDown && Buttons[Code].WasDown)
-		{
-			window::EventsDispatcher.Emit<key_up_event>(Code, Buttons[Code].RepeatCount);
-		}
+    for(u16 Code = 0; Code < 256; ++Code)
+    {
+        if(Buttons[Code].IsDown)
+        {
+            if(!Buttons[Code].WasDown)
+            {
+                window::EventsDispatcher.Emit<key_down_event>(Code);
+            }
+            else
+            {
+                window::EventsDispatcher.Emit<key_hold_event>(Code, Buttons[Code].RepeatCount);
+            }
+        }
+        else if(Buttons[Code].WasDown)
+        {
+            window::EventsDispatcher.Emit<key_up_event>(Code);
+        }
 	}
-	for (u16 Code = 0; Code < 256; ++Code)
-	{
-		Buttons[Code].WasDown = Buttons[Code].IsDown;
-		Buttons[Code].IsDown  = false;
+}
+
+void window::UpdateStates()
+{
+    for(u16 Code = 0; Code < 256; ++Code)
+    {
+        Buttons[Code].WasDown = Buttons[Code].IsDown;
 	}
 }
 
@@ -240,14 +268,40 @@ std::optional<int> window::ProcessMessages()
 	MSG Message = {};
 	while(PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
 	{
+#if 0
 		if(Message.message == WM_QUIT) 
 		{
 			WindowClass.IsRunning = false;
 			return int(Message.wParam);
 		}
+#endif
 		TranslateMessage(&Message);
 		DispatchMessage(&Message);
 	}
+
+	std::vector<HWND> ToClose;
+    for (auto& [Handle, Instance] : WindowClass.WindowInstances)
+	{
+        if (Instance->ShouldClose)
+		{
+			ToClose.push_back(Handle);
+        }
+    }
+
+    for (auto Handle : ToClose)
+    {
+        auto It = WindowClass.WindowInstances.find(Handle);
+        if (It != WindowClass.WindowInstances.end())
+        {
+			It->second->Close();
+        }
+    }
+
+    if (WindowClass.WindowCount == 0)
+    {
+		WindowClass.IsRunning = false;
+        return 0;
+    }
 
 	return {};
 }

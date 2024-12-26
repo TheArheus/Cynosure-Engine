@@ -84,14 +84,14 @@ Execute()
 }
 
 void vulkan_command_queue::
-Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
+Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore, VkFence* Fence)
 {
 	for(VkCommandBuffer CommandList : CommandLists)
 	{
 		vkEndCommandBuffer(CommandList);
 	}
 
-	VkPipelineStageFlags SubmitStageFlag = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	VkPipelineStageFlags SubmitStageFlag = VK_PIPELINE_STAGE_TRANSFER_BIT; //VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	VkSubmitInfo SubmitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
 	SubmitInfo.pWaitDstStageMask = &SubmitStageFlag;
 	SubmitInfo.commandBufferCount = CommandLists.size();
@@ -100,8 +100,8 @@ Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
 	SubmitInfo.pWaitSemaphores = AcquireSemaphore;
 	SubmitInfo.signalSemaphoreCount = 1;
 	SubmitInfo.pSignalSemaphores = ReleaseSemaphore;
-	VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
-	vkQueueWaitIdle(Handle);
+	VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, Fence ? *Fence : VK_NULL_HANDLE));
+	//vkQueueWaitIdle(Handle);
 }
 
 void vulkan_command_queue::
@@ -117,11 +117,11 @@ Execute(VkCommandBuffer* CommandList)
 }
 
 void vulkan_command_queue::
-Execute(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
+Execute(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore, VkFence* Fence)
 {
 	VK_CHECK(vkEndCommandBuffer(*CommandList));
 
-	VkPipelineStageFlags SubmitStageFlag = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	VkPipelineStageFlags SubmitStageFlag = VK_PIPELINE_STAGE_TRANSFER_BIT; //VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	VkSubmitInfo SubmitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
 	SubmitInfo.pWaitDstStageMask = &SubmitStageFlag;
 	SubmitInfo.commandBufferCount = 1;
@@ -130,8 +130,8 @@ Execute(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore
 	SubmitInfo.pWaitSemaphores = AcquireSemaphore;
 	SubmitInfo.signalSemaphoreCount = 1;
 	SubmitInfo.pSignalSemaphores = ReleaseSemaphore;
-	VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
-	vkQueueWaitIdle(Handle);
+	VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, Fence ? *Fence : VK_NULL_HANDLE));
+	//vkQueueWaitIdle(Handle);
 }
 
 void vulkan_command_queue::
@@ -144,6 +144,6 @@ ExecuteAndRemove(VkCommandBuffer* CommandList)
 void vulkan_command_queue::
 ExecuteAndRemove(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore)
 {
-	Execute(CommandList, ReleaseSemaphore, AcquireSemaphore);
+	Execute(CommandList, ReleaseSemaphore, AcquireSemaphore, nullptr);
 	Remove(CommandList);
 }

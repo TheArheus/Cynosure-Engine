@@ -198,7 +198,6 @@ private:
 	vulkan_backend* Gfx = nullptr;
 };
 
-// TODO: Better image view handling
 struct vulkan_texture : public texture
 {
 	friend vulkan_command_list;

@@ -56,7 +56,6 @@ struct event_bus
 
 	void Reset()
 	{
-		EventList.clear();
         EventsQueue.clear();
 	}
 
@@ -81,7 +80,8 @@ struct event_bus
 			for(std::unique_ptr<base_event_handler>& Handler : *Handlers)
 			{
 				base_event_handler* Handle = Handler.get();
-				EventsQueue.push_back([=](){Handle->Execute(const_cast<event_type&>(Event));});
+                Handle->Execute(Event);
+				//EventsQueue.push_back([=](){Handle->Execute(const_cast<event_type&>(Event));});
 			}
 		}
 	}
