@@ -89,7 +89,6 @@ namespace utils
 			u32 Usage;
 			u32 MipLevels;
 			u32 Layers;
-			bool UseStagingBuffer;
 			barrier_state InitialState;
 			sampler_info SamplerInfo;
 		};
@@ -125,7 +124,6 @@ namespace std
             hash_combine(Result, hash<u32>{}(id.Usage));
             hash_combine(Result, hash<u32>{}(id.MipLevels));
             hash_combine(Result, hash<u32>{}(id.Layers));
-            hash_combine(Result, hash<bool>{}(id.UseStagingBuffer));
             hash_combine(Result, hash<u64>{}(static_cast<u64>(id.InitialState)));
             return Result;
         }
@@ -457,6 +455,7 @@ struct gpu_texture_array
 };
 #pragma pack(pop)
 
+struct buffer;
 struct renderer_backend
 {
 	virtual ~renderer_backend() = default;
@@ -487,7 +486,6 @@ public:
 	std::map<u32, std::vector<descriptor_param>> ParameterLayout;
 };
 
-struct buffer;
 struct texture;
 struct resource;
 struct binding_packet
@@ -749,10 +747,14 @@ struct buffer : resource
 
 	virtual void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) = 0;
 
+	buffer* UpdateBuffer = nullptr;
+	buffer* UploadBuffer = nullptr;
+
 	u64 Size          = 0;
 	u64 Alignment     = 0;
 	u32 CounterOffset = 0;
 
+	buffer_barrier CurrBarrierState;
 	u32 PrevShader    = PSF_TopOfPipe;
 	u32 CurrentLayout = 0;
 	u32 Usage         = 0;
@@ -782,10 +784,12 @@ struct texture : resource
 	virtual void ReadBack(renderer_backend* Backend, void* Data) override = 0;
 
 	virtual void DestroyResource() override = 0;
+	virtual void DestroyStagingResource() = 0;
 
 	virtual void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) = 0;
-	virtual void CreateStagingResource() = 0;
-	virtual void DestroyStagingResource() = 0;
+
+	buffer* UpdateBuffer = nullptr;
+	buffer* UploadBuffer = nullptr;
 
 	u64 Width  = 0;
 	u64 Height = 0;

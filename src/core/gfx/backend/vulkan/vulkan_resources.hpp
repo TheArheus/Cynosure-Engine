@@ -121,6 +121,10 @@ struct vulkan_buffer : public buffer
 
 		VmaAllocationCreateInfo AllocCreateInfo = {};
 		AllocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+		if(Flags & RF_CpuWrite)
+			AllocCreateInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+		if(Flags & RF_CpuRead)
+			AllocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
 		VmaAllocationInfo AllocationInfo;
 		VK_CHECK(vmaCreateBuffer(Gfx->AllocatorHandle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
 		Memory = AllocationInfo.deviceMemory;
@@ -207,7 +211,7 @@ struct vulkan_texture : public texture
     vulkan_texture(const vulkan_texture&) = delete;
     vulkan_texture& operator=(const vulkan_texture&) = delete;
 
-	vulkan_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
+	vulkan_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData)
 	{
 		CreateResource(Backend, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
 		CreateStagingResource();
@@ -369,7 +373,7 @@ struct vulkan_texture : public texture
 		}
 	}
 
-	void CreateStagingResource() override
+	void CreateStagingResource()
 	{
 		VkBufferCreateInfo TempCreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
 		TempCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;

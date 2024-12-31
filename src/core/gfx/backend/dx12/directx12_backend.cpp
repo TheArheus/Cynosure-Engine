@@ -142,6 +142,11 @@ directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 	AllocatorDesc.pDevice  = Device.Get();
 	AllocatorDesc.pAdapter = Adapter.Get();
 	D3D12MA::CreateAllocator(&AllocatorDesc, &AllocatorHandle);
+
+#if 0
+	UpdateBuffer = new directx12_buffer(this, "Update buffer", nullptr, MiB(64), 1, RF_CpuWrite);
+	UploadBuffer = new directx12_buffer(this, "Upload buffer", nullptr, MiB(64), 1, RF_CpuRead);
+#endif
 };
 
 void directx12_backend::
@@ -151,6 +156,13 @@ DestroyObject()
     ImGui_ImplDX12_Shutdown();
 
 	imguiContext = nullptr;
+
+#if 0
+	delete UpdateBuffer;
+	UpdateBuffer = nullptr;
+	delete UploadBuffer;
+	UploadBuffer = nullptr;
+#endif
 
 	delete ColorTargetHeap;
 	ColorTargetHeap = nullptr;

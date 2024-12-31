@@ -766,11 +766,12 @@ Execute()
 			RenderingActive = false;
         }
 
-        if (Pass->RasterReflection && ShouldRebind)
+		buffer* DesiredIndexBuffer = nullptr;
+		std::vector<texture*> DesiredColorTargets; 
+		texture* DesiredDepthTarget = nullptr;
+        if (Pass->RasterReflection)
         {
             void* RasterParameters = Pass->RasterParameters;
-            std::vector<texture*> DesiredColorTargets; 
-            texture* DesiredDepthTarget = nullptr;
 
             for (u32 RasterParamIdx = 0; RasterParamIdx < Pass->RasterReflection->Size; ++RasterParamIdx)
             {
@@ -779,13 +780,11 @@ Execute()
                 if (Member->Type == meta_type::gpu_index_buffer)
                 {
                     gpu_index_buffer* Data = (gpu_index_buffer*)((uptr)RasterParameters + Member->Offset);
-                    buffer* IndexBuffer = GpuMemoryHeap->GetBuffer(ExecutionContext, Data->ID);
+                    DesiredIndexBuffer = GpuMemoryHeap->GetBuffer(ExecutionContext, Data->ID);
 
-                    if (BoundIndexBuffer != IndexBuffer)
+                    if (BoundIndexBuffer != DesiredIndexBuffer)
                     {
-                        ExecutionContext->AttachmentBufferBarriers.push_back({IndexBuffer, RF_IndexBuffer, PSF_VertexShader});
-                        ExecutionContext->SetIndexBuffer(IndexBuffer);
-                        BoundIndexBuffer = IndexBuffer;
+                        ExecutionContext->AttachmentBufferBarriers.push_back({DesiredIndexBuffer, AF_IndexRead, PSF_VertexInput});
                     }
                 }
                 else if (Member->Type == meta_type::gpu_color_target)
@@ -800,27 +799,18 @@ Execute()
                         texture* ColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ID);
                         DesiredColorTargets.push_back(ColorTarget);
                     }
-					if (ShouldRebind)
+					if(ShouldRebind && ((BoundColorTargets.size() != DesiredColorTargets.size()) ||
+					   !std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin())))
 					{
-						if((BoundColorTargets.size() != DesiredColorTargets.size()) ||
-						   !std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin()))
+						for (texture* ColorTarget : DesiredColorTargets)
 						{
-							for (texture* ColorTarget : DesiredColorTargets)
-							{
-								ExecutionContext->AttachmentImageBarriers.push_back({
-									ColorTarget, 
-									AF_ColorAttachmentWrite, 
-									barrier_state::color_attachment, 
-									SUBRESOURCES_ALL, 
-									PSF_ColorAttachment
-								});
-							}
-							ExecutionContext->SetColorTarget(DesiredColorTargets);
-							BoundColorTargets = DesiredColorTargets;
-						}
-						else
-						{
-							ExecutionContext->SetColorTarget(BoundColorTargets);
+							ExecutionContext->AttachmentImageBarriers.push_back({
+								ColorTarget, 
+								AF_ColorAttachmentWrite, 
+								barrier_state::color_attachment, 
+								SUBRESOURCES_ALL, 
+								PSF_ColorAttachment
+							});
 						}
 					}
                 }
@@ -830,24 +820,15 @@ Execute()
                     gpu_depth_target* Data = (gpu_depth_target*)((uptr)RasterParameters + Member->Offset);
                     texture* DepthTarget = GpuMemoryHeap->GetTexture(ExecutionContext, (*Data)[0]);
                     DesiredDepthTarget = DepthTarget;
-					if (ShouldRebind)
+					if (ShouldRebind && BoundDepthTarget != DesiredDepthTarget)
 					{
-						if (BoundDepthTarget != DesiredDepthTarget)
-						{
-							ExecutionContext->AttachmentImageBarriers.push_back({
-								DesiredDepthTarget, 
-								AF_DepthStencilAttachmentWrite, 
-								barrier_state::depth_stencil_attachment, 
-								SUBRESOURCES_ALL, 
-								PSF_EarlyFragment
-							});
-							ExecutionContext->SetDepthTarget(DesiredDepthTarget);
-							BoundDepthTarget = DesiredDepthTarget;
-						}
-						else
-						{
-							ExecutionContext->SetDepthTarget(BoundDepthTarget);
-						}
+						ExecutionContext->AttachmentImageBarriers.push_back({
+							DesiredDepthTarget, 
+							AF_DepthStencilAttachmentWrite, 
+							barrier_state::depth_stencil_attachment, 
+							SUBRESOURCES_ALL, 
+							PSF_EarlyFragment
+						});
 					}
                 }
 #endif
@@ -859,6 +840,41 @@ Execute()
 
 		ExecutionContext->SetBufferBarriers(ExecutionContext->AttachmentBufferBarriers);
 		ExecutionContext->SetImageBarriers(ExecutionContext->AttachmentImageBarriers);
+
+		if (DesiredIndexBuffer && BoundIndexBuffer != DesiredIndexBuffer)
+		{
+			ExecutionContext->SetIndexBuffer(DesiredIndexBuffer);
+			BoundIndexBuffer = DesiredIndexBuffer;
+		}
+
+		if (DesiredColorTargets.size() && ShouldRebind)
+        {
+			if ((BoundColorTargets.size() != DesiredColorTargets.size()) ||
+				!std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin()))
+			{
+				ExecutionContext->SetColorTarget(DesiredColorTargets);
+				BoundColorTargets = DesiredColorTargets;
+			}
+			else
+			{
+				ExecutionContext->SetColorTarget(BoundColorTargets);
+			}
+        }
+
+#if 0
+		if (DesiredDepthTarget && ShouldRebind)
+        {
+            if (BoundDepthTarget != DesiredDepthTarget)
+            {
+                ExecutionContext->SetDepthTarget(DesiredDepthTarget);
+                BoundDepthTarget = DesiredDepthTarget;
+            }
+            else
+            {
+                ExecutionContext->SetDepthTarget(BoundDepthTarget);
+            }
+        }
+#endif
 
 		ExecutionContext->BindShaderParameters(Pass->Bindings);
 

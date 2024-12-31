@@ -326,6 +326,11 @@ vulkan_backend(GLFWwindow* Handle)
 		vmaCreateAllocator(&AllocatorInfo, &AllocatorHandle);
 	}
 
+#if 0
+	UpdateBuffer = new vulkan_buffer(this, "Update buffer", nullptr, MiB(64), 1, RF_CpuWrite);
+	UploadBuffer = new vulkan_buffer(this, "Upload buffer", nullptr, MiB(64), 1, RF_CpuRead);
+#endif
+
 	utils::texture::input_data TextureInputData = {};
 	TextureInputData.Type	   = image_type::Texture1D;
 	TextureInputData.MipLevels = 1;
@@ -452,6 +457,13 @@ DestroyObject()
         vkDestroyDescriptorPool(Device, ImGuiPool, nullptr);
         ImGuiPool = VK_NULL_HANDLE;
     }
+
+#if 0
+	delete UpdateBuffer;
+	UpdateBuffer = nullptr;
+	delete UploadBuffer;
+	UploadBuffer = nullptr;
+#endif
 
 	delete NullTexture1D;
 	delete NullTexture2D;

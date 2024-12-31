@@ -247,71 +247,86 @@ void directx12_command_list::
 Update(buffer* BufferToUpdate, void* Data)
 {
 	if(!Data) return;
+
+	directx12_buffer* Staging = static_cast<directx12_buffer*>(BufferToUpdate->UpdateBuffer);
 	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToUpdate);
-	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
+
+	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}, {Staging, AF_TransferRead, PSF_Transfer}});
 
 	void* CpuPtr = nullptr;
-	Buffer->TempHandle->Map(0, nullptr, &CpuPtr);
+	Staging->Handle->Map(0, nullptr, &CpuPtr);
 	memcpy(CpuPtr, Data, Buffer->Size);
-	Buffer->TempHandle->Unmap(0, 0);
+	Staging->Handle->Unmap(0, 0);
 
-	CommandList->CopyResource(Buffer->Handle.Get(), Buffer->TempHandle.Get());
+	CommandList->CopyResource(Buffer->Handle.Get(), Staging->Handle.Get());
 }
 
 void directx12_command_list::
 UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 {
 	if(!Data) return;
+
+	directx12_buffer* Staging = static_cast<directx12_buffer*>(BufferToUpdate->UpdateBuffer);
 	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToUpdate);
 
 	if(UpdateByteSize == 0) return;
 	assert(UpdateByteSize <= Buffer->Size);
 
-	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
+	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}, {Staging, AF_TransferRead, PSF_Transfer}});
 
 	void* CpuPtr = nullptr;
-	Buffer->TempHandle->Map(0, nullptr, &CpuPtr);
+	Staging->Handle->Map(0, nullptr, &CpuPtr);
 	memcpy(CpuPtr, Data, UpdateByteSize);
-	Buffer->TempHandle->Unmap(0, 0);
+	Staging->Handle->Unmap(0, 0);
 
-	CommandList->CopyBufferRegion(Buffer->Handle.Get(), 0, Buffer->TempHandle.Get(), 0, UpdateByteSize);
+	CommandList->CopyBufferRegion(Buffer->Handle.Get(), 0, Staging->Handle.Get(), 0, UpdateByteSize);
 }
 
 void directx12_command_list::
 ReadBack(buffer* BufferToRead, void* Data)
 {
 	if(!Data) return;
-	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
-	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
 
-	CommandList->CopyBufferRegion(Buffer->TempHandle.Get(), 0, Buffer->Handle.Get(), 0, Buffer->Size);
+	directx12_buffer* Staging = static_cast<directx12_buffer*>(BufferToRead->UploadBuffer);
+	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
+
+	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferWrite, PSF_Transfer}});
+
+	CommandList->CopyBufferRegion(Staging->Handle.Get(), 0, Buffer->Handle.Get(), 0, Buffer->Size);
 
 	void* CpuPtr = nullptr;
-	Buffer->TempHandle->Map(0, nullptr, &CpuPtr);
+	Staging->Handle->Map(0, nullptr, &CpuPtr);
 	memcpy(Data, CpuPtr, Buffer->Size);
-	Buffer->TempHandle->Unmap(0, 0);
+	Staging->Handle->Unmap(0, 0);
 }
 
 void directx12_command_list::
 ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 {
 	if(!Data) return;
-	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
-	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
 
-	CommandList->CopyBufferRegion(Buffer->TempHandle.Get(), 0, Buffer->Handle.Get(), 0, UpdateByteSize);
+	directx12_buffer* Staging = static_cast<directx12_buffer*>(BufferToRead->UploadBuffer);
+	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
+
+	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferWrite, PSF_Transfer}});
+
+	CommandList->CopyBufferRegion(Staging->Handle.Get(), 0, Buffer->Handle.Get(), 0, UpdateByteSize);
 
 	void* CpuPtr = nullptr;
-	Buffer->TempHandle->Map(0, nullptr, &CpuPtr);
+	Staging->Handle->Map(0, nullptr, &CpuPtr);
 	memcpy(Data, CpuPtr, UpdateByteSize);
-	Buffer->TempHandle->Unmap(0, 0);
+	Staging->Handle->Unmap(0, 0);
 }
 
 void directx12_command_list::
 Update(texture* TextureToUpdate, void* Data)
 {
 	if(!Data) return;
+
+	directx12_buffer*  Staging = static_cast<directx12_buffer*>(TextureToUpdate->UpdateBuffer);
 	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToUpdate);
+
+	SetBufferBarriers({{Staging, AF_TransferRead, PSF_Transfer}});
 	SetImageBarriers({{TextureToUpdate, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
 
 	D3D12_SUBRESOURCE_FOOTPRINT SubresourceDesc = {};
@@ -322,7 +337,7 @@ Update(texture* TextureToUpdate, void* Data)
 	SubresourceDesc.RowPitch = AlignUp(Texture->Width * GetPixelSize(Texture->Info.Format), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 
 	void* CpuPtr = nullptr;
-	Texture->TempHandle->Map(0, nullptr, &CpuPtr);
+	Staging->Handle->Map(0, nullptr, &CpuPtr);
 	for (u32 z = 0; z < Texture->Depth;  z++)
 	{
 		for (u32 y = 0; y < Texture->Height; y++)
@@ -332,13 +347,13 @@ Update(texture* TextureToUpdate, void* Data)
 		  memcpy(Dst, Src, GetPixelSize(Texture->Info.Format) * Texture->Width);
 		}
 	}
-	Texture->TempHandle->Unmap(0, 0);
+	Staging->Handle->Unmap(0, 0);
 
 	D3D12_PLACED_SUBRESOURCE_FOOTPRINT TextureFootprint = {};
 	TextureFootprint.Footprint = SubresourceDesc;
 
 	D3D12_TEXTURE_COPY_LOCATION SrcCopyLocation = {};
-	SrcCopyLocation.pResource = Texture->TempHandle.Get();
+	SrcCopyLocation.pResource = Staging->Handle.Get();
 	SrcCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 	SrcCopyLocation.PlacedFootprint = TextureFootprint;
 
@@ -355,15 +370,19 @@ void directx12_command_list::
 ReadBack(texture* TextureToRead, void* Data)
 {
 	if(!Data) return;
+
+	directx12_buffer* Staging = static_cast<directx12_buffer*>(TextureToRead->UploadBuffer);
 	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToRead);
+
+	SetBufferBarriers({{Staging, AF_TransferWrite, PSF_Transfer}});
 	SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
 
-	CommandList->CopyResource(Texture->TempHandle.Get(), Texture->Handle.Get());
+	CommandList->CopyResource(Staging->Handle.Get(), Texture->Handle.Get());
 
 	void* CpuPtr = nullptr;
-	Texture->TempHandle->Map(0, nullptr, &CpuPtr);
+	Staging->Handle->Map(0, nullptr, &CpuPtr);
 	memcpy(Data, CpuPtr, Texture->Width * Texture->Height * Texture->Depth * GetPixelSize(Texture->Info.Format));
-	Texture->TempHandle->Unmap(0, 0);
+	Staging->Handle->Unmap(0, 0);
 }
 
 bool directx12_command_list::

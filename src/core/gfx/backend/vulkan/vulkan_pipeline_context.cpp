@@ -457,6 +457,18 @@ Update(buffer* BufferToUpdate, void* Data)
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToUpdate);
 	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
 
+    VkBufferMemoryBarrier TempBarrierBefore = {};
+    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.buffer = Buffer->Temp;
+    TempBarrierBefore.offset = 0;
+    TempBarrierBefore.size = Buffer->Size;
+
+    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
+
 	void* CpuPtr;
 	vkMapMemory(Device, Buffer->TempMemory, 0, Buffer->Size, 0, &CpuPtr);
 	memcpy(CpuPtr, Data, Buffer->Size);
@@ -477,6 +489,18 @@ UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 
 	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
 
+    VkBufferMemoryBarrier TempBarrierBefore = {};
+    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.buffer = Buffer->Temp;
+    TempBarrierBefore.offset = 0;
+    TempBarrierBefore.size = Buffer->Size;
+
+    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
+
 	void* CpuPtr;
 	vkMapMemory(Device, Buffer->TempMemory, 0, UpdateByteSize, 0, &CpuPtr);
 	memcpy(CpuPtr, Data, UpdateByteSize);
@@ -493,6 +517,18 @@ ReadBack(buffer* BufferToRead, void* Data)
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToRead);
 
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
+
+    VkBufferMemoryBarrier TempBarrierBefore = {};
+    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.buffer = Buffer->Temp;
+    TempBarrierBefore.offset = 0;
+    TempBarrierBefore.size = Buffer->Size;
+
+    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
 
 	VkBufferCopy Region = {0, 0, VkDeviceSize(Buffer->Size)};
 	vkCmdCopyBuffer(CommandList, Buffer->Handle, Buffer->Temp, 1, &Region);
@@ -514,6 +550,18 @@ ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
 
+    VkBufferMemoryBarrier TempBarrierBefore = {};
+    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.buffer = Buffer->Temp;
+    TempBarrierBefore.offset = 0;
+    TempBarrierBefore.size = Buffer->Size;
+
+    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
+
 	VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
 	vkCmdCopyBuffer(CommandList, Buffer->Handle, Buffer->Temp, 1, &Region);
 
@@ -529,6 +577,18 @@ Update(texture* TextureToUpdate, void* Data)
 	if(!Data) return;
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureToUpdate);
 	SetImageBarriers({{TextureToUpdate, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
+
+    VkBufferMemoryBarrier TempBarrierBefore = {};
+    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.buffer = Texture->Temp;
+    TempBarrierBefore.offset = 0;
+    TempBarrierBefore.size = Texture->Size;
+
+    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
 
 	void* CpuPtr;
 	vkMapMemory(Device, Texture->TempMemory, 0, Texture->Size, 0, &CpuPtr);
@@ -554,6 +614,18 @@ ReadBack(texture* TextureToRead, void* Data)
 	if(!Data) return;
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureToRead);
 	SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
+
+    VkBufferMemoryBarrier TempBarrierBefore = {};
+    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    TempBarrierBefore.buffer = Texture->Temp;
+    TempBarrierBefore.offset = 0;
+    TempBarrierBefore.size = Texture->Size;
+
+    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
 
 	VkBufferImageCopy Region = {};
 	Region.bufferOffset = 0;

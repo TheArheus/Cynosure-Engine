@@ -21,8 +21,8 @@ public:
 	RENDERER_API resource_descriptor CreateBuffer(const std::string& Name, void* Data, u64 Size, u64 Count, u32 Usage);
 	RENDERER_API resource_descriptor CreateBuffer(const std::string& Name, u64 Size, u64 Count, u32 Usage);
 
-	RENDERER_API resource_descriptor CreateTexture(const std::string& Name, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& Info = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}});
-	RENDERER_API resource_descriptor CreateTexture(const std::string& Name, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& Info = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}});
+	RENDERER_API resource_descriptor CreateTexture(const std::string& Name, void* Data, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& Info = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}});
+	RENDERER_API resource_descriptor CreateTexture(const std::string& Name, u32 Width, u32 Height, u32 Depth, const utils::texture::input_data& Info = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}});
 
 	[[nodiscard]] RENDERER_API resource_descriptor GetResourceDescriptor(u64 ID);
 

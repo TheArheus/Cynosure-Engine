@@ -1,5 +1,5 @@
 #pragma once
-#define USE_CE_GUI 0
+#define USE_CE_GUI 1
 
 #include "intrinsics.h"
 

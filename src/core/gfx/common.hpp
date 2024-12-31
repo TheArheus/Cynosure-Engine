@@ -393,6 +393,8 @@ enum resource_flags
 	RF_CopySrc	        = BYTE(5),
 	RF_CopyDst          = BYTE(6),
 	RF_WithCounter      = BYTE(7),
+	RF_CpuRead          = BYTE(8),
+	RF_CpuWrite         = BYTE(9),
 };
 
 enum image_flags
@@ -407,7 +409,6 @@ enum image_flags
 	TF_CubeMap				 = BYTE(7),
 	TF_CopySrc	             = BYTE(8),
 	TF_CopyDst               = BYTE(9),
-
 };
 
 u32 GetPixelSize(image_format Format)

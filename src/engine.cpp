@@ -2,8 +2,8 @@
 void engine::
 Init(const std::vector<std::string>& args)
 {
-	//Window.InitVulkanGraphics();
-	Window.InitDirectx12Graphics();
+	Window.InitVulkanGraphics();
+	//Window.InitDirectx12Graphics();
 
 	window::EventsDispatcher.Subscribe(this, &engine::OnButtonDown);
 	window::EventsDispatcher.Subscribe(this, &engine::OnButtonUp);
@@ -33,7 +33,7 @@ Run()
 	while(Window.IsRunning())
 	{
 		auto Result = window::ProcessMessages();
-		if(Result) break;//return *Result;
+		if(Result) break;
 
 		Window.NewFrame();
 		Window.EmitEvents();

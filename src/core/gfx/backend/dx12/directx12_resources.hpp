@@ -46,9 +46,14 @@ struct directx12_texture_sampler : public texture_sampler
 
 struct directx12_buffer : public buffer
 {
-	directx12_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 NewUsage)
+	directx12_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 NewUsage, bool IsStagingCreated = false)
 	{
 		CreateResource(Backend, DebugName, NewSize, Count, NewUsage);
+		if(!IsStagingCreated)
+		{
+			UpdateBuffer = new directx12_buffer(Gfx, Name + ".update_staging_buffer", nullptr, NewSize, Count, RF_CpuWrite, true);
+			UploadBuffer = new directx12_buffer(Gfx, Name + ".upload_staging_buffer", nullptr, NewSize, Count, RF_CpuRead, true);
+		}
 		if(Data) Update(Backend, Data);
 	}
 
@@ -108,7 +113,11 @@ struct directx12_buffer : public buffer
 
 		D3D12MA::ALLOCATION_DESC AllocDesc = {};
 		AllocDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
-		CD3DX12_HEAP_PROPERTIES ResourceType = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		if(Usage & RF_CpuWrite)
+			AllocDesc.HeapType = D3D12_HEAP_TYPE_UPLOAD;
+		if(Usage & RF_CpuRead)
+			AllocDesc.HeapType = D3D12_HEAP_TYPE_READBACK;
+		CD3DX12_HEAP_PROPERTIES ResourceType = CD3DX12_HEAP_PROPERTIES(AllocDesc.HeapType);
 
 		Gfx->AllocatorHandle->CreateResource(&AllocDesc, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, NULL, &Allocation, IID_PPV_ARGS(&Handle));
 		NAME_DX12_OBJECT_CSTR(Handle.Get(), DebugName.c_str());
@@ -118,10 +127,6 @@ struct directx12_buffer : public buffer
 			Gfx->Device->CreateCommittedResource(&ResourceType, D3D12_HEAP_FLAG_NONE, &CounterResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&CounterHandle));
 			NAME_DX12_OBJECT_CSTR(CounterHandle, (DebugName + "_counter").c_str());
 		}
-
-		CD3DX12_HEAP_PROPERTIES ResourceTempType = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC TempDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, D3D12_RESOURCE_FLAG_NONE);
-		Gfx->Device->CreateCommittedResource(&ResourceTempType, D3D12_HEAP_FLAG_NONE, &TempDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempHandle));
 
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
@@ -168,13 +173,15 @@ struct directx12_buffer : public buffer
 
 	void DestroyResource() override
 	{
-		if(Handle)
+		if(UpdateBuffer)
 		{
-			Handle.Reset();
+			delete UpdateBuffer;
+			UpdateBuffer = nullptr;
 		}
-		if(TempHandle)
+		if(UploadBuffer)
 		{
-			TempHandle.Reset();
+			delete UploadBuffer;
+			UploadBuffer = nullptr;
 		}
 		if(CounterHandle)
 		{
@@ -190,7 +197,6 @@ struct directx12_buffer : public buffer
 	directx12_backend* Gfx = nullptr;
 
 	ComPtr<ID3D12Resource> Handle;
-	ComPtr<ID3D12Resource> TempHandle;
 	ComPtr<ID3D12Resource> CounterHandle;
 
 	D3D12_CPU_DESCRIPTOR_HANDLE ShaderResourceView  = {};
@@ -204,10 +210,11 @@ struct directx12_buffer : public buffer
 
 struct directx12_texture : public texture
 {
-	directx12_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, const utils::texture::input_data& InputData = {image_format::R8G8B8A8_UINT, image_type::Texture2D, image_flags::TF_Storage, 1, 1, false, barrier_state::undefined, {border_color::black_opaque, sampler_address_mode::clamp_to_edge, sampler_reduction_mode::weighted_average, filter::linear, filter::linear, mipmap_mode::linear}})
+	directx12_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData)
 	{
 		CreateResource(Backend, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
-		CreateStagingResource();
+		UpdateBuffer = new directx12_buffer(Gfx, Name + ".update_staging_buffer", nullptr, Size, 1, RF_CpuWrite, true);
+		UploadBuffer = new directx12_buffer(Gfx, Name + ".upload_staging_buffer", nullptr, Size, 1, RF_CpuRead, true);
 		if(Data) Update(Backend, Data);
 
         D3D12_SAMPLER_DESC SamplerDesc = {};
@@ -571,12 +578,6 @@ struct directx12_texture : public texture
 			delete Clear;
 	}
 
-	void CreateStagingResource() override 
-	{
-		CD3DX12_HEAP_PROPERTIES ResourceTempType = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC TempDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
-		Device->CreateCommittedResource(&ResourceTempType, D3D12_HEAP_FLAG_NONE, &TempDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempHandle));
-	}
 
 	void DestroyResource() override 
 	{
@@ -593,9 +594,15 @@ struct directx12_texture : public texture
 
 	void DestroyStagingResource() override 
 	{
-		if(TempHandle)
+		if(UpdateBuffer)
 		{
-			TempHandle.Reset();
+			delete UpdateBuffer;
+			UpdateBuffer = nullptr;
+		}
+		if(UploadBuffer)
+		{
+			delete UploadBuffer;
+			UploadBuffer = nullptr;
 		}
 	}
 
@@ -604,7 +611,6 @@ struct directx12_texture : public texture
 
 	ID3D12Device6* Device = nullptr;
 	ComPtr<ID3D12Resource> Handle;
-	ComPtr<ID3D12Resource> TempHandle;
 	ComPtr<D3D12MA::Allocation> Allocation;
 
 	D3D12_CPU_DESCRIPTOR_HANDLE Sampler = {};
