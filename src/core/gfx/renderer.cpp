@@ -902,7 +902,11 @@ Execute()
 
 	ExecutionContext->EmplaceColorTarget(CurrentColorTarget);
 	ExecutionContext->Present();
+}
 
+void global_graphics_context::
+SwapBuffers()
+{
 	for(shader_pass* Pass : Passes)
 	{
 		if(Pass->Type == pass_type::transfer) continue;

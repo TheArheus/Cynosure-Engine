@@ -203,6 +203,7 @@ struct registry
 	void SetupSystems();
 	void UpdateSystems(double dt);
 	void ClearAllEntities();
+	void ClearAll();
 
 	void AddTagToEntity(entity Handle, std::string Tag)
 	{

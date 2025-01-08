@@ -24,10 +24,6 @@ struct collidable
 {
 };
 
-struct mesh
-{
-};
-
 struct circle
 {
 	float Radius;

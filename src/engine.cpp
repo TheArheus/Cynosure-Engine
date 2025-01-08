@@ -5,15 +5,8 @@ Init(const std::vector<std::string>& args)
 	Window.InitVulkanGraphics();
 	//Window.InitDirectx12Graphics();
 
-	window::EventsDispatcher.Subscribe(this, &engine::OnButtonDown);
-	window::EventsDispatcher.Subscribe(this, &engine::OnButtonUp);
-	window::EventsDispatcher.Subscribe(this, &engine::OnButtonHold);
-
 	CreateGuiContext(&Window);
 
-	Registry.AddSystem<render_system>();
-	Registry.AddSystem<movement_system>();
-	Registry.AddSystem<collision_system>(Window.Width, Window.Height);
 	Registry.SetupSystems();
 
 	AssetStore.AddFont("roboto", "../assets/fonts/OpenSans-Regular.ttf", MAX_FONT_SIZE);
@@ -49,24 +42,8 @@ Run()
 #endif
 		TimeLast = window::GetTimestamp();
 
-        switch(CurrentGameState)
-        {
-            case game_state::main_menu:
-            {
-                DrawMainMenu();
-            } break;
-
-            case game_state::playing:
-            {
-                Registry.UpdateSystems(FrameDeltaTime);
-				Registry.GetSystem<render_system>()->Render(Window.Gfx);
-            } break;
-
-            case game_state::paused:
-            {
-                DrawPauseMenu();
-            } break;
-        }
+		UpdateModule();
+		Module->Update(FrameDeltaTime);
 
 		double InstantFPS = 1000.0 / FrameDeltaTime;
 		SmoothedFPS = SmoothingFactor * InstantFPS + (1.0 - SmoothingFactor) * SmoothedFPS;
@@ -79,8 +56,29 @@ Run()
 			Window.Gfx.Execute();
 		}
 
+		Window.Gfx.SwapBuffers();
 		Window.UpdateStates();
 		Allocator.UpdateAndReset();
+	}
+
+	window::EventsDispatcher.Reset();
+	Registry.ClearAll();
+
+	Module.reset();
+	window::FreeLoadedLibrary(ModuleInfo.Module);
+
+	{
+		std::filesystem::path TempPath("../build/game_module.sce");
+		{
+			auto Stem = TempPath.stem().string();
+			auto Ext  = TempPath.extension().string();
+			TempPath.replace_filename(Stem + ".temp" + Ext);
+		}
+
+		if(std::filesystem::exists(TempPath))
+		{
+			std::filesystem::remove(TempPath);
+		}
 	}
 
 	DestroyGuiContext();
@@ -88,226 +86,76 @@ Run()
 }
 
 void engine::
-DrawMainMenu()
+LoadModule()
 {
-#if USE_CE_GUI
-    vec2 ScreenCenter = vec2(Window.Width * 0.5f, Window.Height * 0.5f);
+	window::EventsDispatcher.Reset();
+	Registry.ClearAll();
 
-    vec2 BtnSize = vec2(200, 50);
-    vec2 BtnPos  = ScreenCenter + vec2(0, 30);
-    if (GuiButton("Start Game", BtnPos, BtnSize))
+    std::filesystem::path OriginalPath("../build/game_module.sce");
+    if (!std::filesystem::exists(OriginalPath) || !std::filesystem::is_regular_file(OriginalPath))
     {
-        CurrentGameState = game_state::playing;
-
-        SetupGameEntities();
+        std::cerr << "Module file does not exist or is not a file: " 
+                  << "../build/game_module.sce" << std::endl;
+        return;
     }
 
-    BtnPos = ScreenCenter - vec2(0, 30);
-    if (GuiButton("Exit Game", BtnPos, BtnSize))
+    std::filesystem::path TempPath = OriginalPath;
     {
-		Window.RequestClose();
-    }
-#else
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(Window.Width, Window.Height), ImGuiCond_Always);
-    
-    ImGuiWindowFlags WindowFlags  = ImGuiWindowFlags_NoTitleBar |
-                                    ImGuiWindowFlags_NoResize |
-                                    ImGuiWindowFlags_NoMove |
-                                    ImGuiWindowFlags_NoScrollbar |
-                                    ImGuiWindowFlags_NoScrollWithMouse |
-                                    ImGuiWindowFlags_NoCollapse |
-                                    ImGuiWindowFlags_NoBackground;
-
-    ImGui::Begin("MainMenu", nullptr, WindowFlags);
-
-    vec2 ScreenCenter = vec2(Window.Width * 0.5f, Window.Height * 0.5f);
-    vec2 BtnSize = vec2(200, 50);
-
-    vec2 BtnPosStart = vec2(ScreenCenter.x, ScreenCenter.y - 30);
-    ImGui::SetCursorPos(BtnPosStart - 0.5f * BtnSize);
-    if (ImGui::Button("Start Game", BtnSize))
-    {
-        CurrentGameState = game_state::playing;
-        SetupGameEntities();
+        auto Stem = TempPath.stem().string();
+        auto Ext  = TempPath.extension().string();
+        TempPath.replace_filename(Stem + ".temp" + Ext);
     }
 
-    ImVec2 BtnPosExit = ImVec2(ScreenCenter.x, ScreenCenter.y + 30);
-    ImGui::SetCursorPos(BtnPosExit - 0.5f * BtnSize);
-    if (ImGui::Button("Exit Game", BtnSize))
+    if (ModuleInfo.IsInitialized)
     {
-        Window.RequestClose();
+        Module.reset();
+        window::FreeLoadedLibrary(ModuleInfo.Module);
+        ModuleInfo.IsInitialized = false;
     }
 
-    ImGui::End();
-#endif
-}
-
-void engine::
-DrawPauseMenu()
-{
-#if USE_CE_GUI
-    vec2 ScreenCenter = vec2(Window.Width * 0.5f, Window.Height * 0.5f);
-
-    vec2 BtnSize = vec2(200, 50);
-    vec2 BtnPos  = ScreenCenter + vec2(0, 30);
-    if (GuiButton("Resume", BtnPos, BtnSize))
+    if(std::filesystem::exists(TempPath))
     {
-        CurrentGameState = game_state::playing;
+        std::filesystem::remove(TempPath);
     }
 
-    BtnPos = ScreenCenter - vec2(0, 30);
-    if (GuiButton("Main Menu", BtnPos, BtnSize))
     {
-        Registry.ClearAllEntities();
-        CurrentGameState = game_state::main_menu;
-    }
-#else
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(Window.Width, Window.Height), ImGuiCond_Always);
-    
-    ImGuiWindowFlags WindowFlags  = ImGuiWindowFlags_NoTitleBar |
-                                    ImGuiWindowFlags_NoResize |
-                                    ImGuiWindowFlags_NoMove |
-                                    ImGuiWindowFlags_NoScrollbar |
-                                    ImGuiWindowFlags_NoScrollWithMouse |
-                                    ImGuiWindowFlags_NoCollapse |
-                                    ImGuiWindowFlags_NoBackground;
-
-    ImGui::Begin("PauseMenu", nullptr, WindowFlags);
-
-    vec2 ScreenCenter = vec2(Window.Width * 0.5f, Window.Height * 0.5f);
-    vec2 BtnSize = vec2(200, 50);
-
-    vec2 BtnPosStart = vec2(ScreenCenter.x, ScreenCenter.y - 30);
-    ImGui::SetCursorPos(BtnPosStart - 0.5f * BtnSize);
-    if (ImGui::Button("Resume", BtnSize))
-    {
-        CurrentGameState = game_state::playing;
+        std::ifstream SourceFile(OriginalPath, std::ios::binary);
+        std::ofstream DestFile(TempPath, std::ios::binary);
+        DestFile << SourceFile.rdbuf();
     }
 
-    ImVec2 BtnPosExit = ImVec2(ScreenCenter.x, ScreenCenter.y + 30);
-    ImGui::SetCursorPos(BtnPosExit - 0.5f * BtnSize);
-    if (ImGui::Button("Main Menu", BtnSize))
+    std::string CreateFunctionName = "GameModuleCreate";
+    game_module_create* GameModuleCreate = (game_module_create*)
+		                                    window::GetProcAddr(ModuleInfo.Module, 
+			                                TempPath.string().c_str(), 
+											CreateFunctionName.c_str());
+
+    if (!GameModuleCreate)
     {
-        Registry.ClearAllEntities();
-        CurrentGameState = game_state::main_menu;
+        return;
     }
 
-    ImGui::End();
-#endif
-}
+    Module.reset(GameModuleCreate(Window, window::EventsDispatcher, Registry, Window.Gfx, GlobalGuiContext));
 
-void engine::
-SetupGameEntities()
-{
-	Registry.ClearAllEntities();
+    ModuleInfo.Name             = OriginalPath.stem().string();
+    ModuleInfo.Path             = OriginalPath.string();
+    ModuleInfo.LastFileCreation = std::filesystem::last_write_time(OriginalPath);
+    ModuleInfo.IsInitialized    = (Module != nullptr);
 
-	vec2 PlayerPosition = vec2(Window.Width / 2, 150);
-
-	entity Paddle = Registry.CreateEntity();
-	Paddle.AddTag("Player");
-	Paddle.AddComponent<renderable>();
-	Paddle.AddComponent<collidable>();
-	Paddle.AddComponent<transform>(PlayerPosition - vec2(0, 50));
-	Paddle.AddComponent<rectangle>(vec2(100, 20));
-
-	entity Ball = Registry.CreateEntity();
-	Ball.AddTag("Ball");
-	Ball.AddComponent<renderable>();
-	Ball.AddComponent<collidable>();
-	Ball.AddComponent<transform>(PlayerPosition);
-	Ball.AddComponent<velocity>();
-	Ball.AddComponent<circle>(10);
-
-	s32 NumOfCols = 16;
-	s32 NumOfRows = 8;
-
-	s32 LevelWidth  = (Window.Width / 2) - 80;
-	s32 LevelHeight = 400;
-
-	s32 BlockWidth  = LevelWidth / NumOfRows;
-	s32 BlockHeight = LevelHeight / NumOfCols;
-
-	for (s32 Y = 0; Y < NumOfRows; ++Y)
-	{
-		for (s32 X = 0; X < NumOfCols; ++X)
-		{
-			entity Brick = Registry.CreateEntity();
-			Brick.AddToGroup("Brick");
-			Brick.AddComponent<renderable>();
-			Brick.AddComponent<collidable>();
-			Brick.AddComponent<transform>(vec2(100, 50) + vec2(X * BlockWidth, 400 + Y * BlockHeight));
-			Brick.AddComponent<rectangle>(vec2(BlockWidth, BlockHeight));
-		}
-	}
-}
-
-void engine::
-OnButtonUp(key_up_event& Event)
-{
-	if(CurrentGameState == game_state::playing)
-	{
-		entity BallEntity = Registry.GetEntityByTag("Ball");
-		velocity& BallVel = BallEntity.GetComponent<velocity>();
-
-		if(Event.Code == EC_SPACE)
-		{
-			BallVel.Direction = vec2(0, 1);
-			BallVel.Speed = 0.75f;
-		}
-	}
-}
-
-void engine::
-OnButtonDown(key_down_event& Event)
-{
-    if (CurrentGameState == game_state::playing)
+    if (Module && Module->IsInitialized)
     {
-        if (Event.Code == EC_ESCAPE)
-        {
-            CurrentGameState = game_state::paused;
-        }
-    }
-	else if (CurrentGameState == game_state::paused)
-    {
-        if (Event.Code == EC_ESCAPE)
-        {
-            CurrentGameState = game_state::playing;
-        }
+        Module->ModuleStart();
     }
 }
 
 void engine::
-OnButtonHold(key_hold_event& Event)
+UpdateModule()
 {
-	if(CurrentGameState == game_state::playing)
-	{
-		entity PaddleEntity = Registry.GetEntityByTag("Player");
+    std::filesystem::path OriginalPath("../build/game_module.sce");
 
-		transform& Trans = PaddleEntity.GetComponent<transform>();
-		rectangle Rect = PaddleEntity.GetComponent<rectangle>();
-
-		vec2 Delta(0.0f, 0.0f);
-		if(Event.Code == EC_LEFT)
-		{
-			Delta.x -= 25.0f;
-		}
-		if(Event.Code == EC_RIGHT)
-		{
-			Delta.x += 25.0f;
-		}
-		
-		Trans.Position += Delta;
-
-		float HalfWidth = Rect.Dims.x / 2.0f;
-		if (Trans.Position.x - HalfWidth < 0.0f)
-		{
-			Trans.Position.x = HalfWidth;
-		}
-		if (Trans.Position.x + HalfWidth > Window.Width)
-		{
-			Trans.Position.x = Window.Width - HalfWidth;
-		}
-	}
+    auto CurrentFileTime = std::filesystem::last_write_time(OriginalPath);
+    if (CurrentFileTime != ModuleInfo.LastFileCreation && !window::IsFileLocked(OriginalPath))
+    {
+        LoadModule();
+    }
 }

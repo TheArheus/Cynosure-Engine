@@ -3,16 +3,16 @@
 window::window_class window::WindowClass;
 event_bus window::EventsDispatcher;
 
-window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
-	: Width(_Width), Height(_Height), Name(_Name)
+window::window(unsigned int _Width, unsigned int _Height, const std::string& _Name)
+	: Width(_Width), Height(_Height), Name(_Name), imguiContext(nullptr, &ImGui::DestroyContext)
 {
 	assert(!WindowClass.IsWindowCreated && "Window is already created");
 
 	Create(Width, Height, Name);
 }
 
-window::window(const char* _Name)
-	: Name(_Name)
+window::window(const std::string& _Name)
+	: Name(_Name), imguiContext(nullptr, &ImGui::DestroyContext)
 {
 	assert(!WindowClass.IsWindowCreated && "Window is already created");
 
@@ -27,12 +27,12 @@ window::window(const char* _Name)
 	glfwSetWindowMonitor(Handle, glfwGetPrimaryMonitor(), 0, 0, Width, Height, GLFW_DONT_CARE);
 }
 
-void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name)
+void window::Create(unsigned int _Width, unsigned int _Height, const std::string& _Name)
 {
 	WindowClass.IsRunning = true;
 	WindowClass.WindowCount++;
 
-	Handle = glfwCreateWindow(Width, Height, Name, nullptr, nullptr);
+	Handle = glfwCreateWindow(Width, Height, Name.c_str(), nullptr, nullptr);
 	if(!Handle) return;
 
 	WindowClass.IsWindowCreated = true;
@@ -46,8 +46,8 @@ void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name
     glfwSetCursorPosCallback(Handle, CursorPosCallback);
     glfwSetScrollCallback(Handle, ScrollCallback);
 
-	imguiContext = ImGui::CreateContext();
-	ImGui::SetCurrentContext(imguiContext);
+	imguiContext.reset(ImGui::CreateContext());
+	ImGui::SetCurrentContext(imguiContext.get());
 	ImGui_ImplGlfw_InitForVulkan(Handle, true);
 }
 
@@ -56,11 +56,9 @@ void window::Close()
 	if(Handle)
 	{
 		IsGfxPaused = true;
-		ImGui::SetCurrentContext(imguiContext);
+		ImGui::SetCurrentContext(imguiContext.get());
 		Gfx.DestroyObject();
 		ImGui_ImplGlfw_Shutdown();
-		ImGui::DestroyContext(imguiContext);
-		imguiContext = nullptr;
 		glfwDestroyWindow(Handle);
 		WindowClass.WindowInstances.erase(Handle);
 		WindowClass.WindowCount--;
@@ -228,7 +226,7 @@ void window::SetTitle(std::string& Title)
 void window::InitVulkanGraphics()
 {
 	if(!Handle) return;
-	ImGui::SetCurrentContext(imguiContext);
+	ImGui::SetCurrentContext(imguiContext.get());
 	Gfx = global_graphics_context(backend_type::vulkan, Handle);
 }
 
@@ -236,7 +234,7 @@ void window::InitDirectx12Graphics()
 {
 	assert("D3D12 Backend is not supported on this system");
 	if(!Handle) return;
-	ImGui::SetCurrentContext(imguiContext);
+	ImGui::SetCurrentContext(imguiContext.get());
 	Gfx = global_graphics_context(backend_type::directx12, Handle);
 }
 
@@ -274,4 +272,24 @@ void window::SleepFor(double Time)
     req.tv_nsec = static_cast<long>((Time - (req.tv_sec * 1000)) * 1e6);
 
     nanosleep(&req, nullptr);
+}
+
+bool window::
+IsFileLocked(const std::filesystem::path& FilePath)
+{
+    int fd = open(FilePath.c_str(), O_RDWR);
+    if (fd < 0)
+        return false;
+
+    if (flock(fd, LOCK_EX | LOCK_NB) == 0)
+    {
+        flock(fd, LOCK_UN);
+        close(fd);
+        return false;
+    }
+    else
+    {
+        close(fd);
+        return true;
+    }
 }

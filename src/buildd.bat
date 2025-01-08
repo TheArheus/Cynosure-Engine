@@ -20,11 +20,6 @@ set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console /ignore:4099
 for /f "delims=" %%i in ('python get_llvm_flags_clang.py') do set "llvm_flags=%%i"
 
 if not exist ..\build\ mkdir ..\build\
-if not exist ..\build\modules mkdir ..\build\modules
-
-pushd ..\build\modules\
-:: cl %CommonCompFlags% /I"..\..\src" /I"..\..\src\core\vendor" "..\..\src\modules\arcanoid_game_module.cpp" ..\libs\assimp-vc143-mt.lib /LD /link %CommonLinkFlags% /LIBPATH:"..\..\libs"
-popd
 
 pushd ..\build\
 :: clang++ -fms-runtime-lib=dll ..\generate.cpp -o generate.exe -lversion -lmsvcrt -lclangAPINotes -lclangEdit -lclangBasic -lclangTooling -lclangFrontendTool -lclangCodeGen -lclangARCMigrate -lclangRewrite -lclangRewriteFrontend -lclangASTMatchers -lclangSerialization -lclangSema -lclangStaticAnalyzerFrontend -lclangStaticAnalyzerCheckers -lclangStaticAnalyzerCore -lclangAnalysis -lclangDriver -lclangFrontend -lclangParse -lclangAST -lclangLex -lclangSupport !llvm_flags! -Xlinker /NODEFAULTLIB:libcmt.lib

@@ -14,9 +14,6 @@ struct render_system : public entity_system
 		for(entity& Entity : Entities)
 		{
 			auto& Transform = Entity.GetComponent<transform>();
-			if(Entity.HasComponent<mesh>())
-			{
-			}
 			if(Entity.HasComponent<circle>())
 			{
 				auto& CircleInfo = Entity.GetComponent<circle>();

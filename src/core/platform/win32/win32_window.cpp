@@ -4,23 +4,23 @@ window::window_class window::WindowClass;
 LARGE_INTEGER window::TimerFrequency;
 event_bus window::EventsDispatcher;
 
-window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
-	: Width(_Width), Height(_Height), Name(_Name)
+window::window(unsigned int _Width, unsigned int _Height, const std::string& _Name)
+	: Width(_Width), Height(_Height), Name(_Name), imguiContext(nullptr, &ImGui::DestroyContext)
 {
 	assert(!WindowClass.IsWindowCreated && "Window is already created");
 
 	Create(Width, Height, Name);
 }
 
-window::window(const char* _Name)
-	: Width(GetSystemMetrics(SM_CXSCREEN)), Height(GetSystemMetrics(SM_CYSCREEN)), Name(_Name)
+window::window(const std::string& _Name)
+	: Width(GetSystemMetrics(SM_CXSCREEN)), Height(GetSystemMetrics(SM_CYSCREEN)), Name(_Name), imguiContext(nullptr, &ImGui::DestroyContext)
 {
 	assert(!WindowClass.IsWindowCreated && "Window is already created");
 
 	Create(Width, Height, Name);
 }
 
-void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name)
+void window::Create(unsigned int _Width, unsigned int _Height, const std::string& _Name)
 {
 	WindowClass.IsRunning = true;
 	WindowClass.WindowCount++;
@@ -33,12 +33,12 @@ void window::Create(unsigned int _Width, unsigned int _Height, const char* _Name
 
 	AdjustWindowRect(&AdjustRect, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), 0);
 
-	Handle = CreateWindow(WindowClass.Name, Name, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), CW_USEDEFAULT, CW_USEDEFAULT, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
+	Handle = CreateWindow(WindowClass.Name, Name.c_str(), WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), CW_USEDEFAULT, CW_USEDEFAULT, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
 	WindowClass.IsWindowCreated = true;
 	WindowClass.WindowInstances[Handle] = this;
 
-	imguiContext = ImGui::CreateContext();
-	ImGui::SetCurrentContext(imguiContext);
+	imguiContext.reset(ImGui::CreateContext());
+	ImGui::SetCurrentContext(imguiContext.get());
 	ImGui_ImplWin32_Init(Handle);
 
 	ShowWindow(Handle, SW_SHOWNORMAL);
@@ -51,11 +51,9 @@ void window::Close()
 	if(Handle)
 	{
 		IsGfxPaused = true;
-		ImGui::SetCurrentContext(imguiContext);
+		ImGui::SetCurrentContext(imguiContext.get());
 		Gfx.DestroyObject();
 		ImGui_ImplWin32_Shutdown();
-		ImGui::DestroyContext(imguiContext);
-		imguiContext = nullptr;
 		DestroyWindow(Handle);
 		WindowClass.WindowInstances.erase(Handle);
 		Handle = nullptr;
@@ -92,7 +90,7 @@ LRESULT window::WindowProc(HWND hWindow, UINT Message, WPARAM wParam, LPARAM lPa
 	{
 		if(Window->imguiContext)
 		{
-			ImGui::SetCurrentContext(Window->imguiContext);
+			ImGui::SetCurrentContext(Window->imguiContext.get());
 			ImGui_ImplWin32_WndProcHandler(hWindow, Message, wParam, lParam);
 		}
 		return Window->DispatchMessages(hWindow, Message, wParam, lParam);
@@ -313,14 +311,14 @@ void window::SetTitle(std::string& Title)
 
 void window::InitVulkanGraphics()
 {
-	ImGui::SetCurrentContext(imguiContext);
-	Gfx = global_graphics_context(backend_type::vulkan, WindowClass.Inst, Handle, imguiContext);
+	ImGui::SetCurrentContext(imguiContext.get());
+	Gfx = global_graphics_context(backend_type::vulkan, WindowClass.Inst, Handle, imguiContext.get());
 }
 
 void window::InitDirectx12Graphics()
 {
-	ImGui::SetCurrentContext(imguiContext);
-	Gfx = global_graphics_context(backend_type::directx12, WindowClass.Inst, Handle, imguiContext);
+	ImGui::SetCurrentContext(imguiContext.get());
+	Gfx = global_graphics_context(backend_type::directx12, WindowClass.Inst, Handle, imguiContext.get());
 }
 
 void* window::
@@ -352,4 +350,28 @@ void window::SleepFor(double Time)
 {
     if (Time <= 0.0) return;
 	Sleep(static_cast<DWORD>(Time));
+}
+
+bool window::
+IsFileLocked(const std::filesystem::path& FilePath)
+{
+    HANDLE fileHandle = CreateFileW(
+        FilePath.wstring().c_str(),
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr
+    );
+
+    if (fileHandle == INVALID_HANDLE_VALUE)
+    {
+        return true;
+    }
+    else
+    {
+        CloseHandle(fileHandle);
+        return false;
+    }
 }

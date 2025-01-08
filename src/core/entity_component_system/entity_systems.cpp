@@ -200,6 +200,14 @@ ClearAllEntities()
     GroupPerEntity.clear();
 }
 
+void registry::
+ClearAll()
+{
+	ClearAllEntities();
+	ComponentPools.clear();
+	Systems.clear();
+}
+
 template<typename component_type, typename ...args>
 component_type* registry::
 AddComponent(entity& Object, args&&... Args)

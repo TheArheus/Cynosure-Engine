@@ -2,7 +2,6 @@
 
 #include "core/asset_manager/asset_store.cpp"
 #include "core/entity_component_system/entity_systems.cpp"
-#include "core/entity_component_system/systems.hpp"
 
 #include "engine.cpp"
 

@@ -97,6 +97,7 @@ public:
 
 	RENDERER_API void Compile();
 	RENDERER_API void Execute();
+	RENDERER_API void SwapBuffers();
 
 	renderer_backend* Backend;
 

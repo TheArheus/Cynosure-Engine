@@ -52,11 +52,10 @@ struct event_bus
 {
 	// TODO: multimap?
 	std::unordered_map<std::type_index, std::unique_ptr<handler_list>> EventList;
-	std::vector<std::function<void()>> EventsQueue;
 
 	void Reset()
 	{
-        EventsQueue.clear();
+		EventList.clear();
 	}
 
 	template<typename owner, typename event_type>
@@ -81,16 +80,7 @@ struct event_bus
 			{
 				base_event_handler* Handle = Handler.get();
                 Handle->Execute(Event);
-				//EventsQueue.push_back([=](){Handle->Execute(const_cast<event_type&>(Event));});
 			}
 		}
 	}
-
-    void DispatchEvents()
-    {
-        for (auto& EventFunction : EventsQueue)
-        {
-            EventFunction();
-        }
-    }
 };

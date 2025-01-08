@@ -33,19 +33,20 @@ class window
 public:
 
 	window() = default;
-	window(unsigned int Width, unsigned int Height, const char* Name);
-	window(const char* Name);
-	window(window&& rhs) = default;
-	window& operator=(window&& rhs) = default;
+	window(unsigned int Width, unsigned int Height, const std::string& Name);
+	window(const std::string& Name);
 	~window();
 
-	void Create(unsigned int Width, unsigned int Height, const char* Name);
+	window(window&& rhs) = default;
+	window& operator=(window&& rhs) = default;
+
+	void Create(unsigned int Width, unsigned int Height, const std::string& _Name);
 	void Close();
 	void RequestClose() { if (Handle) glfwSetWindowShouldClose(Handle, GLFW_TRUE); }
 
 	void NewFrame()
 	{
-		ImGui::SetCurrentContext(imguiContext);
+		ImGui::SetCurrentContext(imguiContext.get());
 		Gfx.Backend->ImGuiNewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
@@ -61,6 +62,8 @@ public:
 	static double GetTimestamp();
 	static void SleepFor(double Time);
 
+	static bool IsFileLocked(const std::filesystem::path& FilePath);
+
 	void SetTitle(std::string& Title);
 
 	bool IsRunning(){return WindowClass.IsRunning;}
@@ -71,7 +74,7 @@ public:
 	static event_bus EventsDispatcher;
 
 	GLFWwindow* Handle = nullptr;
-	const char* Name = nullptr;
+	std::string Name;
 	u32 Width;
 	u32 Height;
 
@@ -83,6 +86,7 @@ public:
 	static window_class WindowClass;
 
 	global_graphics_context Gfx;
+	std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> imguiContext;
 
 	button Buttons[256] = {};
 	float MouseX;
@@ -97,8 +101,6 @@ private:
     static void WindowSizeCallback(GLFWwindow* window, int width, int height);
     static void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
     static void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-
-	ImGuiContext* imguiContext = nullptr;
 };
 
 

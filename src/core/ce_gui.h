@@ -1,5 +1,7 @@
 #pragma once
 
+// TODO: make so that it would work with as little dependencies as possible
+
 constexpr double MAX_FONT_SIZE = 145;
 
 struct ce_gui_context
@@ -13,19 +15,6 @@ struct ce_gui_context
 };
 
 inline ce_gui_context* GlobalGuiContext = nullptr;
-
-void CreateGuiContext(window* Window)
-{
-	if(GlobalGuiContext) return;
-	GlobalGuiContext = new ce_gui_context();
-	GlobalGuiContext->Window = Window;
-}
-
-void DestroyGuiContext()
-{
-	if(GlobalGuiContext) delete GlobalGuiContext;
-	GlobalGuiContext = nullptr;
-}
 
 void SetGuiFont(font_t* Font, double FontSize)
 {
