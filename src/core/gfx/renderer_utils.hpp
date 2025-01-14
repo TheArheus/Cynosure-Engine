@@ -8,6 +8,28 @@
 	#define shader_param(...)
 #endif
 
+struct draw_indexed_indirect_command
+{
+    u32 IndexCount;
+    u32 InstanceCount;
+    u32 FirstIndex;
+    s32 VertexOffset;
+    u32 FirstInstance;
+};
+
+struct indirect_draw_indexed_command
+{
+	u32 DrawID;
+	draw_indexed_indirect_command DrawArg;
+};
+
+struct prim_vert
+{
+	vec2 Pos;
+	vec2 UV;
+	vec4 Col; // NOTE: Alpha is 1.0 for if primitive is textured
+};
+
 static u32 
 GetImageMipLevels(u32 Width, u32 Height)
 {
@@ -34,20 +56,143 @@ PreviousPowerOfTwo(u32 x)
     return x - (x >> 1);
 }
 
-struct draw_indexed_indirect_command
+static void 
+PushRectangle(std::vector<prim_vert>& Vertices, std::vector<u32>& Indices, vec2 Center, vec2 Scale, vec3 Color)
 {
-    u32 IndexCount;
-    u32 InstanceCount;
-    u32 FirstIndex;
-    s32 VertexOffset;
-    u32 FirstInstance;
-};
+    float HalfW = Scale.x * 0.5f;
+    float HalfH = Scale.y * 0.5f;
 
-struct indirect_draw_indexed_command
+    float Left   = Center.x - HalfW;
+    float Right  = Center.x + HalfW;
+    float Top    = Center.y - HalfH;
+    float Bottom = Center.y + HalfH;
+
+    u32 BaseIndex = (u32)Vertices.size();
+
+    prim_vert Vert0;
+    Vert0.Pos = vec2(Left, Top);
+    Vert0.UV  = vec2(0.0f, 0.0f);
+    Vert0.Col = vec4(Color, 0);
+
+    prim_vert Vert1;
+    Vert1.Pos = vec2(Right, Top);
+    Vert1.UV  = vec2(1.0f, 0.0f);
+    Vert1.Col = vec4(Color, 0);
+
+    prim_vert Vert2;
+    Vert2.Pos = vec2(Right, Bottom);
+    Vert2.UV  = vec2(1.0f, 1.0f);
+    Vert2.Col = vec4(Color, 0);
+
+    prim_vert Vert3;
+    Vert3.Pos = vec2(Left, Bottom);
+    Vert3.UV  = vec2(0.0f, 1.0f);
+    Vert3.Col = vec4(Color, 0);
+
+    Vertices.push_back(Vert0);
+    Vertices.push_back(Vert1);
+    Vertices.push_back(Vert2);
+    Vertices.push_back(Vert3);
+
+    Indices.push_back(BaseIndex + 0);
+    Indices.push_back(BaseIndex + 1);
+    Indices.push_back(BaseIndex + 2);
+
+    Indices.push_back(BaseIndex + 2);
+    Indices.push_back(BaseIndex + 3);
+    Indices.push_back(BaseIndex + 0);
+}
+
+static void 
+PushRectangle(std::vector<prim_vert>& Vertices, std::vector<u32>& Indices, vec2 Center, vec2 Scale, vec2 Offset, vec2 Dims, vec2 AtlasDims)
 {
-	u32 DrawID;
-	draw_indexed_indirect_command DrawArg;
-};
+    float HalfW = Scale.x * 0.5f;
+    float HalfH = Scale.y * 0.5f;
+
+    float Left   = Center.x - HalfW;
+    float Right  = Center.x + HalfW;
+    float Top    = Center.y - HalfH;
+    float Bottom = Center.y + HalfH;
+
+	float LeftU   =  Offset.x / AtlasDims.x;
+	float RightU  = (Offset.x + Dims.x) / AtlasDims.x;
+	float TopV    =  Offset.y / AtlasDims.y;
+	float BottomV = (Offset.y + Dims.y) / AtlasDims.y;
+
+    u32 BaseIndex = (u32)Vertices.size();
+
+    prim_vert Vert0;
+    Vert0.Pos = vec2(Left,  Top);
+    Vert0.UV  = vec2(LeftU, TopV);
+    Vert0.Col = vec4(1);
+
+    prim_vert Vert1;
+    Vert1.Pos = vec2(Right,  Top);
+    Vert1.UV  = vec2(RightU, TopV);
+    Vert1.Col = vec4(1);
+
+    prim_vert Vert2;
+    Vert2.Pos = vec2(Right,  Bottom);
+    Vert2.UV  = vec2(RightU, BottomV);
+    Vert2.Col = vec4(1);
+
+    prim_vert Vert3;
+    Vert3.Pos = vec2(Left,  Bottom);
+    Vert3.UV  = vec2(LeftU, BottomV);
+    Vert3.Col = vec4(1);
+
+    Vertices.push_back(Vert0);
+    Vertices.push_back(Vert1);
+    Vertices.push_back(Vert2);
+    Vertices.push_back(Vert3);
+
+    Indices.push_back(BaseIndex + 0);
+    Indices.push_back(BaseIndex + 1);
+    Indices.push_back(BaseIndex + 2);
+
+    Indices.push_back(BaseIndex + 2);
+    Indices.push_back(BaseIndex + 3);
+    Indices.push_back(BaseIndex + 0);
+}
+
+static void 
+PushCircle(std::vector<prim_vert>& Vertices, std::vector<u32>& Indices, vec2 Center, float Radius, vec3 Color)
+{
+    s32 Segments = 256;
+    u32 StartIndex = (u32)Vertices.size();
+
+    {
+        prim_vert VertCenter;
+        VertCenter.Pos = Center;
+        VertCenter.UV  = vec2(0.5f);
+        VertCenter.Col = vec4(Color, 0);
+        Vertices.push_back(VertCenter);
+    }
+
+    for (s32 i = 0; i < Segments; i++)
+    {
+        float Angle = (float)i / (float)Segments * 2.0f * Pi<float>;
+        float PosX  = Center.x + Radius * cosf(Angle);
+        float PosY  = Center.y + Radius * sinf(Angle);
+
+        prim_vert NewVert;
+        NewVert.Pos = vec2(PosX, PosY);
+        NewVert.UV  = vec2(0.0f);
+        NewVert.Col = vec4(Color, 0);
+        Vertices.push_back(NewVert);
+    }
+
+    for (s32 i = 0; i < Segments; i++)
+    {
+        u32 CenterIdx = StartIndex;
+        u32 Index0    = StartIndex + 1 + i;
+        u32 Index1    = StartIndex + 1 + ((i + 1) % Segments);
+
+        Indices.push_back(CenterIdx);
+        Indices.push_back(Index0);
+        Indices.push_back(Index1);
+    }
+}
 
 namespace utils
 {
@@ -168,19 +313,20 @@ struct resource_descriptor
     utils::texture::input_data Info;
 
 	bool IsInitialized;
+	bool IsUpdated;
 
     resource_descriptor()
         : Name(), ID(~0ull), SubresourceIdx(SUBRESOURCES_ALL),
           Data(nullptr), Type(), 
 		  Size(0), Count(0), Usage(0),
-          Width(0), Height(0), Depth(0), Info(), IsInitialized(false)
+          Width(0), Height(0), Depth(0), Info(), IsInitialized(false), IsUpdated(false)
     {}
 
     resource_descriptor(const resource_descriptor& other)
         : Name(other.Name), ID(other.ID), SubresourceIdx(other.SubresourceIdx),
           Data(other.Data), Type(other.Type),
           Size(other.Size), Count(other.Count), Usage(other.Usage),
-          Width(other.Width), Height(other.Height), Depth(other.Depth), Info(other.Info), IsInitialized(other.IsInitialized)
+          Width(other.Width), Height(other.Height), Depth(other.Depth), Info(other.Info), IsInitialized(other.IsInitialized), IsUpdated(other.IsUpdated)
     {}
 
     resource_descriptor(resource_descriptor&& other) noexcept
@@ -190,8 +336,12 @@ struct resource_descriptor
           Width(std::move(other.Width)), Height(std::move(other.Height)), Depth(std::move(other.Depth)), Info(std::move(other.Info))
     {
         other.Data = nullptr;
+
 		IsInitialized = true;
 		other.IsInitialized = false;
+
+		IsUpdated = other.IsUpdated;
+		other.IsUpdated = false;
     }
 
     resource_descriptor& operator=(const resource_descriptor& other)
@@ -211,6 +361,7 @@ struct resource_descriptor
             Depth = other.Depth;
             Info = other.Info;
 			IsInitialized = other.IsInitialized;
+			IsUpdated = other.IsUpdated;
         }
         return *this;
     }
@@ -235,6 +386,9 @@ struct resource_descriptor
             other.Data = nullptr;
 			IsInitialized = true;
 			other.IsInitialized = false;
+
+			IsUpdated = other.IsUpdated;
+			other.IsUpdated = false;
         }
         return *this;
     }

@@ -19,7 +19,7 @@ enum class shader_stage
 
 enum class pass_type
 {
-	graphics,
+	raster,
 	compute,
 	transfer,
 };

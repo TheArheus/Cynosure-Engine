@@ -14,7 +14,7 @@ set VoxelGridSize=-DVOXEL_SIZE=128
 set VulkanInc="%VULKAN_SDK%\Include"
 set VulkanLib="%VULKAN_SDK%\Lib"
 
-set GameModuleName="arcanoid"
+set GameModuleName=arcanoid
 
 set CommonCompFlags=/std:c++latest /Zc:__cplusplus -fp:fast -nologo -MDd -EHsc -Od -Oi -WX- -W4 -GR -Gm- -GS -FC -Zi -D_MBCS -DCE_DEBUG -wd4005 -wd4100 -wd4127 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267 -wd4315 -wd4324 -wd4505 -wd4715
 set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console /ignore:4099

@@ -4,31 +4,61 @@
 // TODO: managing instances
 struct render_system : public entity_system
 {
-	render_system()
+	resource_descriptor VertexBuffer;
+	resource_descriptor IndexBuffer;
+
+	render_system(global_graphics_context& Gfx)
 	{
 		RequireComponent<renderable>();
+
+		VertexBuffer = Gfx.GpuMemoryHeap->CreateBuffer("Vertex Buffer", sizeof(prim_vert), 128, RF_StorageBuffer);
+		IndexBuffer  = Gfx.GpuMemoryHeap->CreateBuffer("Index Buffer" , sizeof(u32)      , 128, RF_IndexBuffer);
 	}
 
-	void Render(global_graphics_context& Gfx)
+	void Render(global_graphics_context& Gfx, vec2 FramebufferDims)
 	{
+		std::vector<prim_vert> Vertices;
+		std::vector<u32> Indices;
+
 		for(entity& Entity : Entities)
 		{
 			auto& Transform = Entity.GetComponent<transform>();
 			if(Entity.HasComponent<circle>())
 			{
 				auto& CircleInfo = Entity.GetComponent<circle>();
-				Gfx.PushCircle(Transform.Position, Transform.Scale.x * CircleInfo.Radius, CircleInfo.Color);
+				PushCircle(Vertices, Indices, Transform.Position, Transform.Scale.x * CircleInfo.Radius, CircleInfo.Color);
 			}
 			if(Entity.HasComponent<rectangle>())
 			{
 				auto& RectInfo = Entity.GetComponent<rectangle>();
-				Gfx.PushRectangle(Transform.Position, Transform.Scale * RectInfo.Dims, RectInfo.Color);
+				PushRectangle(Vertices, Indices, Transform.Position, Transform.Scale * RectInfo.Dims, RectInfo.Color);
 			}
+#if 0
 			if(Entity.HasComponent<rectangle_textured>())
 			{
 				auto& RectInfo = Entity.GetComponent<rectangle_textured>();
-				Gfx.PushRectangle(Transform.Position, Transform.Scale * RectInfo.Dims, RectInfo.Texture);
+				PushRectangle(Vertices, Indices, Transform.Position, Transform.Scale * RectInfo.Dims, RectInfo.Texture);
 			}
+#endif
+		}
+
+		{
+			Gfx.GpuMemoryHeap->UpdateBuffer(VertexBuffer, Vertices.data(), sizeof(prim_vert), Vertices.size());
+			Gfx.GpuMemoryHeap->UpdateBuffer(IndexBuffer , Indices.data() , sizeof(u32), Indices.size());
+
+			primitive_2d::raster_parameters RasterParameters = {};
+			RasterParameters.IndexBuffer = IndexBuffer;
+			RasterParameters.ColorTarget = Gfx.ColorTarget[Gfx.BackBufferIndex];
+
+			primitive_2d::parameters Parameters = {};
+			Parameters.Vertices = VertexBuffer;
+			Parameters.Texture  = Gfx.ColorTarget[Gfx.BackBufferIndex]; // NOTE: this is temporary. I need to implement so that if I don't bind a texture there would be a null texture
+
+			Gfx.AddRasterPass<primitive_2d>("Primitive Rendering", Parameters, RasterParameters, [IndexCount = Indices.size(), FramebufferDims](command_list* Cmd)
+			{
+				Cmd->SetConstant((void*)FramebufferDims.E, sizeof(vec2));
+				Cmd->DrawIndexed(0, IndexCount, 0, 0, 1);
+			});
 		}
 	}
 };

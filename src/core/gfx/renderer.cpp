@@ -56,11 +56,11 @@ global_graphics_context(backend_type _BackendType, GLFWwindow* Window)
 	TextureInputData.Usage     = TF_ColorAttachment | TF_Sampled;
 	for(u32 i = 0; i < Backend->ImageCount; i++)
 	{
-		GfxColorTarget.push_back(GpuMemoryHeap->CreateTexture("ColorTarget" + std::to_string(i), Backend->Width, Backend->Height, 1, TextureInputData));
+		ColorTarget.push_back(GpuMemoryHeap->CreateTexture("ColorTarget" + std::to_string(i), Backend->Width, Backend->Height, 1, TextureInputData));
 	}
 	TextureInputData.Format    = image_format::D32_SFLOAT;
 	TextureInputData.Usage     = TF_DepthTexture | TF_Sampled;
-	GfxDepthTarget = GpuMemoryHeap->CreateTexture("DepthTarget", Backend->Width, Backend->Height, 1, TextureInputData);
+	DepthTarget = GpuMemoryHeap->CreateTexture("DepthTarget", Backend->Width, Backend->Height, 1, TextureInputData);
 
 	float QuadVertices[] =
 	{
@@ -112,11 +112,11 @@ global_graphics_context(global_graphics_context&& Oth) noexcept
       Passes(std::move(Oth.Passes)),
       CurrentContext(Oth.CurrentContext),
       BackBufferIndex(Oth.BackBufferIndex),
-      GfxDepthTarget(std::move(Oth.GfxDepthTarget)),
+      DepthTarget(std::move(Oth.DepthTarget)),
       QuadVertexBuffer(std::move(Oth.QuadVertexBuffer)),
       QuadIndexBuffer(std::move(Oth.QuadIndexBuffer))
 {
-	GfxColorTarget = std::move(Oth.GfxColorTarget);
+	ColorTarget = std::move(Oth.ColorTarget);
 	ExecutionContexts = std::move(Oth.ExecutionContexts),
 
 	Oth.Binder = nullptr;
@@ -143,7 +143,7 @@ operator=(global_graphics_context&& Oth) noexcept
 
         BackBufferIndex = Oth.BackBufferIndex;
 
-		GfxColorTarget = std::move(Oth.GfxColorTarget);
+		ColorTarget = std::move(Oth.ColorTarget);
 
 		QuadVertexBuffer = std::move(Oth.QuadVertexBuffer);
 		QuadIndexBuffer  = std::move(Oth.QuadIndexBuffer);
@@ -236,7 +236,7 @@ GetOrCreateContext(shader_pass* Pass)
     shader_view_context* ContextView = GeneralShaderViewMap[ContextType].get();
     general_context* NewContext = nullptr;
 
-    if (Pass->Type == pass_type::graphics)
+    if (Pass->Type == pass_type::raster)
     {
         auto* GraphicsContextView = static_cast<shader_graphics_view_context*>(ContextView);
         NewContext = CreateRenderContext(
@@ -263,7 +263,7 @@ bool global_graphics_context::
 SetContext(shader_pass* Pass, command_list* Context)
 {
     CurrentContext = GetOrCreateContext(Pass);
-    if (Pass->Type == pass_type::graphics)
+    if (Pass->Type == pass_type::raster)
     {
         return Context->SetGraphicsPipelineState(static_cast<render_context*>(CurrentContext));
     }
@@ -273,31 +273,19 @@ SetContext(shader_pass* Pass, command_list* Context)
     }
 }
 
+#if 0
 // TODO: move to instanced draw
 void global_graphics_context::
 PushRectangle(vec2 Pos, vec2 Scale, vec3 Color)
 {
-	shader_pass* NewPass = PushStruct(shader_pass);
-	NewPass->Name = string("Rectangle draw");
-	NewPass->Type = pass_type::graphics;
-
 	full_screen_pass_color::raster_parameters RasterParameters = {};
-	RasterParameters.ColorTarget = GfxColorTarget[BackBufferIndex];
+	RasterParameters.ColorTarget = ColorTarget[BackBufferIndex];
 	RasterParameters.IndexBuffer = QuadIndexBuffer;
 
 	full_screen_pass_color::parameters Parameters = {};
 	Parameters.Vertices = QuadVertexBuffer;
 
-	NewPass->ShaderReflection = reflect<full_screen_pass_color::parameters>::Get();
-	NewPass->ShaderParameters = PushStruct(full_screen_pass_color::parameters);
-	*((full_screen_pass_color::parameters*)NewPass->ShaderParameters) = Parameters;
-
-	NewPass->RasterReflection = reflect<full_screen_pass_color::raster_parameters>::Get();
-	NewPass->RasterParameters = PushStruct(full_screen_pass_color::raster_parameters);
-	*((full_screen_pass_color::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
-
-	Passes.push_back(NewPass);
-	Dispatches[NewPass] = [Pos, Scale, Color, ColorTarget = GfxColorTarget[BackBufferIndex]]
+	AddRasterPass<full_screen_pass_color>("Colored Rectangle Draw", Parameters, RasterParameters, [Pos, Scale, Color, ColorTarget = ColorTarget[BackBufferIndex]]
 	(command_list* Cmd)
 	{
 		struct transform
@@ -317,44 +305,22 @@ PushRectangle(vec2 Pos, vec2 Scale, vec3 Color)
 
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
-	};
-
-	PassToContext.emplace(NewPass, std::type_index(typeid(full_screen_pass_color)));
-
-	auto FindIt = ContextMap.find(std::type_index(typeid(full_screen_pass_color)));
-
-	if(FindIt == ContextMap.end())
-	{
-		GeneralShaderViewMap[std::type_index(typeid(full_screen_pass_color))] = std::make_unique<full_screen_pass_color>();
-	}
+	});
 }
 
 // TODO: move to instanced draw
 void global_graphics_context::
 PushRectangle(vec2 Pos, vec2 Scale, resource_descriptor& Texture)
 {
-	shader_pass* NewPass = PushStruct(shader_pass);
-	NewPass->Name = string("Textured rectangle draw");
-	NewPass->Type = pass_type::graphics;
-
 	full_screen_pass_texture::raster_parameters RasterParameters = {};
-	RasterParameters.ColorTarget = GfxColorTarget[BackBufferIndex];
+	RasterParameters.ColorTarget = ColorTarget[BackBufferIndex];
 	RasterParameters.IndexBuffer = QuadIndexBuffer;
 
 	full_screen_pass_texture::parameters Parameters = {};
 	Parameters.Vertices = QuadVertexBuffer;
 	Parameters.Texture  = Texture;
 
-	NewPass->ShaderReflection = reflect<full_screen_pass_texture::parameters>::Get();
-	NewPass->ShaderParameters = PushStruct(full_screen_pass_texture::parameters);
-	*((full_screen_pass_texture::parameters*)NewPass->ShaderParameters) = Parameters;
-
-	NewPass->RasterReflection = reflect<full_screen_pass_texture::raster_parameters>::Get();
-	NewPass->RasterParameters = PushStruct(full_screen_pass_texture::raster_parameters);
-	*((full_screen_pass_texture::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
-
-	Passes.push_back(NewPass);
-	Dispatches[NewPass] = [Pos, Scale, Texture = Texture, ColorTarget = GfxColorTarget[BackBufferIndex]]
+	AddRasterPass<full_screen_pass_texture>("Textured Rectangle Draw", Parameters, RasterParameters, [Pos, Scale, Texture = Texture, ColorTarget = ColorTarget[BackBufferIndex]]
 	(command_list* Cmd)
 	{
 		struct transform
@@ -374,43 +340,21 @@ PushRectangle(vec2 Pos, vec2 Scale, resource_descriptor& Texture)
 
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
-	};
-
-	PassToContext.emplace(NewPass, std::type_index(typeid(full_screen_pass_texture)));
-
-	auto FindIt = ContextMap.find(std::type_index(typeid(full_screen_pass_texture)));
-
-	if(FindIt == ContextMap.end())
-	{
-		GeneralShaderViewMap[std::type_index(typeid(full_screen_pass_texture))] = std::make_unique<full_screen_pass_texture>();
-	}
+	});
 }
 
 void global_graphics_context::
 PushRectangle(vec2 Pos, vec2 Scale, vec2 Offset, vec2 Dims, resource_descriptor& Atlas)
 {
-	shader_pass* NewPass = PushStruct(shader_pass);
-	NewPass->Name = string("Textured rectangle draw");
-	NewPass->Type = pass_type::graphics;
-
 	full_screen_pass_texture::raster_parameters RasterParameters = {};
-	RasterParameters.ColorTarget = GfxColorTarget[BackBufferIndex];
+	RasterParameters.ColorTarget = ColorTarget[BackBufferIndex];
 	RasterParameters.IndexBuffer = QuadIndexBuffer;
 
 	full_screen_pass_texture::parameters Parameters = {};
 	Parameters.Vertices = QuadVertexBuffer;
 	Parameters.Texture  = Atlas;
 
-	NewPass->ShaderReflection = reflect<full_screen_pass_texture::parameters>::Get();
-	NewPass->ShaderParameters = PushStruct(full_screen_pass_texture::parameters);
-	*((full_screen_pass_texture::parameters*)NewPass->ShaderParameters) = Parameters;
-
-	NewPass->RasterReflection = reflect<full_screen_pass_texture::raster_parameters>::Get();
-	NewPass->RasterParameters = PushStruct(full_screen_pass_texture::raster_parameters);
-	*((full_screen_pass_texture::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
-
-	Passes.push_back(NewPass);
-	Dispatches[NewPass] = [Pos, Scale, Offset, Dims, Atlas, ColorTarget = GfxColorTarget[BackBufferIndex]]
+	AddRasterPass<full_screen_pass_texture>("Textured Atlas Rectangle Draw", Parameters, RasterParameters, [Pos, Scale, Offset, Dims, Atlas, ColorTarget = ColorTarget[BackBufferIndex]]
 	(command_list* Cmd)
 	{
 		struct transform
@@ -430,43 +374,21 @@ PushRectangle(vec2 Pos, vec2 Scale, vec2 Offset, vec2 Dims, resource_descriptor&
 
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
-	};
-
-	PassToContext.emplace(NewPass, std::type_index(typeid(full_screen_pass_texture)));
-
-	auto FindIt = ContextMap.find(std::type_index(typeid(full_screen_pass_texture)));
-
-	if(FindIt == ContextMap.end())
-	{
-		GeneralShaderViewMap[std::type_index(typeid(full_screen_pass_texture))] = std::make_unique<full_screen_pass_texture>();
-	}
+	});
 }
 
 // TODO: move to instanced draw
 void global_graphics_context::
 PushCircle(vec2 Pos, float Radius, vec3 Color)
 {
-	shader_pass* NewPass = PushStruct(shader_pass);
-	NewPass->Name = string("Circle draw");
-	NewPass->Type = pass_type::graphics;
-
 	full_screen_pass_circle::raster_parameters RasterParameters = {};
-	RasterParameters.ColorTarget = GfxColorTarget[BackBufferIndex];
+	RasterParameters.ColorTarget = ColorTarget[BackBufferIndex];
 	RasterParameters.IndexBuffer = QuadIndexBuffer;
 
 	full_screen_pass_circle::parameters Parameters = {};
 	Parameters.Vertices = QuadVertexBuffer;
 
-	NewPass->ShaderReflection = reflect<full_screen_pass_circle::parameters>::Get();
-	NewPass->ShaderParameters = PushStruct(full_screen_pass_circle::parameters);
-	*((full_screen_pass_circle::parameters*)NewPass->ShaderParameters) = Parameters;
-
-	NewPass->RasterReflection = reflect<full_screen_pass_circle::raster_parameters>::Get();
-	NewPass->RasterParameters = PushStruct(full_screen_pass_circle::raster_parameters);
-	*((full_screen_pass_circle::raster_parameters*)NewPass->RasterParameters) = RasterParameters;
-
-	Passes.push_back(NewPass);
-	Dispatches[NewPass] = [Pos, Radius, Color, ColorTarget = GfxColorTarget[BackBufferIndex]]
+	AddRasterPass<full_screen_pass_circle>("Circle Draw", Parameters, RasterParameters, [Pos, Radius, Color, ColorTarget = ColorTarget[BackBufferIndex]]
 	(command_list* Cmd)
 	{
 		struct transform
@@ -486,38 +408,9 @@ PushCircle(vec2 Pos, float Radius, vec3 Color)
 
 		Cmd->SetConstant((void*)&Transform, sizeof(transform));
 		Cmd->DrawIndexed(0, 6, 0, 0, 1);
-	};
-
-	PassToContext.emplace(NewPass, std::type_index(typeid(full_screen_pass_circle)));
-
-	auto FindIt = ContextMap.find(std::type_index(typeid(full_screen_pass_circle)));
-
-	if(FindIt == ContextMap.end())
-	{
-		GeneralShaderViewMap[std::type_index(typeid(full_screen_pass_circle))] = std::make_unique<full_screen_pass_circle>();
-	}
+	});
 }
-
-void global_graphics_context::
-AddTransferPass(std::string Name, execute_func Exec)
-{
-	shader_pass* NewPass = PushStruct(shader_pass);
-	NewPass->Name = string(Name);
-	NewPass->Type = pass_type::transfer;
-	NewPass->ShaderParameters = nullptr;
-	NewPass->RasterParameters = nullptr;
-
-	Passes.push_back(NewPass);
-	Dispatches[NewPass] = Exec;
-	PassToContext.emplace(NewPass, std::type_index(typeid(transfer)));
-
-	auto FindIt = ContextMap.find(std::type_index(typeid(transfer)));
-
-	if(FindIt == ContextMap.end())
-	{
-		GeneralShaderViewMap[std::type_index(typeid(transfer))] = std::make_unique<transfer>();
-	}
-}
+#endif
 
 // TODO: Command parallelization maybe
 // TODO: Maybe compile render graph only once per change
@@ -744,7 +637,7 @@ Execute()
 	ExecutionContext->AcquireNextImage();
 	ExecutionContext->Begin();
 
-	texture* CurrentColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, GfxColorTarget[BackBufferIndex]);
+	texture* CurrentColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ColorTarget[BackBufferIndex]);
 	ExecutionContext->FillTexture(CurrentColorTarget, vec4(vec3(0), 1.0f));
 	ExecutionContext->SetViewport(0, 0, CurrentColorTarget->Width, CurrentColorTarget->Height);
 
@@ -796,16 +689,16 @@ Execute()
                     for (size_t i = 0; i < Data->IDs.size(); i++)
                     {
                         u64 ID = (*Data)[i];
-                        texture* ColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ID);
-                        DesiredColorTargets.push_back(ColorTarget);
+                        texture* NewColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ID);
+                        DesiredColorTargets.push_back(NewColorTarget);
                     }
 					if(ShouldRebind && ((BoundColorTargets.size() != DesiredColorTargets.size()) ||
 					   !std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin())))
 					{
-						for (texture* ColorTarget : DesiredColorTargets)
+						for (texture* NewColorTarget : DesiredColorTargets)
 						{
 							ExecutionContext->AttachmentImageBarriers.push_back({
-								ColorTarget, 
+								NewColorTarget, 
 								AF_ColorAttachmentWrite, 
 								barrier_state::color_attachment, 
 								SUBRESOURCES_ALL, 

@@ -7,7 +7,8 @@ Init(const std::vector<std::string>& args)
 
 	CreateGuiContext(&Window);
 
-	Registry.SetupSystems();
+	GuiVertexBuffer = Window.Gfx.GpuMemoryHeap->CreateBuffer("GuiVertexBuffer", sizeof(prim_vert), 128, RF_StorageBuffer);
+	GuiIndexBuffer  = Window.Gfx.GpuMemoryHeap->CreateBuffer("GuiIndexBuffer" , sizeof(u32)      , 128, RF_IndexBuffer);
 
 	AssetStore.AddFont("roboto", "../assets/fonts/OpenSans-Regular.ttf", MAX_FONT_SIZE);
 	SetGuiFont(AssetStore.GetFont("roboto"), 18);
@@ -50,12 +51,33 @@ Run()
 		std::string FrameSpeedString = "Frame: " + std::to_string(1000.0 / SmoothedFPS) + "ms, " + std::to_string(SmoothedFPS) + "fps";
 		GuiLabel(FrameSpeedString, vec2(0, Window.Height));
 
+		{
+			Window.Gfx.GpuMemoryHeap->UpdateBuffer(GuiVertexBuffer, GlobalGuiContext->Vertices.data(), sizeof(prim_vert), GlobalGuiContext->Vertices.size());
+			Window.Gfx.GpuMemoryHeap->UpdateBuffer(GuiIndexBuffer, GlobalGuiContext->Indices.data(), sizeof(u32), GlobalGuiContext->Indices.size());
+
+			primitive_2d::raster_parameters RasterParameters = {};
+			RasterParameters.IndexBuffer = GuiIndexBuffer;
+			RasterParameters.ColorTarget = Window.Gfx.ColorTarget[Window.Gfx.BackBufferIndex];
+
+			primitive_2d::parameters Parameters = {};
+			Parameters.Vertices = GuiVertexBuffer;
+			Parameters.Texture  = GlobalGuiContext->FontAtlas;
+
+			Window.Gfx.AddRasterPass<primitive_2d>("Gui Rendering", Parameters, RasterParameters, [IndexCount = GlobalGuiContext->Indices.size(), FramebufferDims = vec2(Window.Width, Window.Height)](command_list* Cmd)
+			{
+				Cmd->SetConstant((void*)FramebufferDims.E, sizeof(vec2));
+				Cmd->DrawIndexed(0, IndexCount, 0, 0, 1);
+			});
+		}
+
 		if(!Window.IsGfxPaused)
 		{
 			Window.Gfx.Compile();
 			Window.Gfx.Execute();
 		}
 
+		GlobalGuiContext->Vertices.clear();
+		GlobalGuiContext->Indices.clear();
 		Window.Gfx.SwapBuffers();
 		Window.UpdateStates();
 		Allocator.UpdateAndReset();

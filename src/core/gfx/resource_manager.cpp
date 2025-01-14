@@ -92,6 +92,30 @@ AllocateTextureInternal(const resource_descriptor& Desc, command_list* CommandLi
 }
 
 resource_descriptor gpu_memory_heap::
+CreateBuffer(const std::string& Name, void* Data, u64 Size, u32 Usage)
+{
+	resource_descriptor Descriptor;
+	if(!Unused.empty())
+	{
+		Descriptor.ID = Unused.back();
+		Unused.pop_back();
+	}
+	else
+	{
+		Descriptor.ID = NextID++;
+	}
+	Descriptor.Name  = Name;
+	Descriptor.Data  = (char*)calloc(Size, 1); // PushSize(Size * 1);
+	Descriptor.Size  = Size;
+	Descriptor.Count = 1;
+	Descriptor.Usage = Usage;
+	Descriptor.Type  = resource_descriptor_type::buffer;
+	memcpy(Descriptor.Data, Data, Size);
+	Descriptors[Descriptor.ID] = Descriptor;
+	return Descriptor;
+}
+
+resource_descriptor gpu_memory_heap::
 CreateBuffer(const std::string& Name, void* Data, u64 Size, u64 Count, u32 Usage)
 {
 	resource_descriptor Descriptor;
@@ -105,12 +129,34 @@ CreateBuffer(const std::string& Name, void* Data, u64 Size, u64 Count, u32 Usage
 		Descriptor.ID = NextID++;
 	}
 	Descriptor.Name  = Name;
-	Descriptor.Data  = (char*)calloc(Size, Count);
+	Descriptor.Data  = (char*)calloc(Size, Count); // PushSize(Size * Count);
 	Descriptor.Size  = Size;
 	Descriptor.Count = Count;
 	Descriptor.Usage = Usage;
 	Descriptor.Type  = resource_descriptor_type::buffer;
 	memcpy(Descriptor.Data, Data, Size * Count);
+	Descriptors[Descriptor.ID] = Descriptor;
+	return Descriptor;
+}
+
+resource_descriptor gpu_memory_heap::
+CreateBuffer(const std::string& Name, u64 Size, u32 Usage)
+{
+	resource_descriptor Descriptor;
+	if(!Unused.empty())
+	{
+		Descriptor.ID = Unused.back();
+		Unused.pop_back();
+	}
+	else
+	{
+		Descriptor.ID = NextID++;
+	}
+	Descriptor.Name  = Name;
+	Descriptor.Size  = Size;
+	Descriptor.Count = 1;
+	Descriptor.Usage = Usage;
+	Descriptor.Type  = resource_descriptor_type::buffer;
 	Descriptors[Descriptor.ID] = Descriptor;
 	return Descriptor;
 }
@@ -150,14 +196,15 @@ CreateTexture(const std::string& Name, void* Data, u32 Width, u32 Height, u32 De
 	{
 		Descriptor.ID = NextID++;
 	}
+	u32 PixelSize = GetPixelSize(Info.Format);
 	Descriptor.Name   = Name;
-	Descriptor.Data   = (char*)calloc(GetPixelSize(Info.Format), Width * Height * Depth);
+	Descriptor.Data   = (char*)calloc(PixelSize, Width * Height * Depth); // PushSize(PixelSize * Width * Height * Depth);
 	Descriptor.Width  = Width;
 	Descriptor.Height = Height;
 	Descriptor.Depth  = Depth;
 	Descriptor.Info   = Info;
 	Descriptor.Type   = resource_descriptor_type::texture;
-	memcpy(Descriptor.Data, Data, Width * Height * Depth * GetPixelSize(Info.Format));
+	memcpy(Descriptor.Data, Data, Width * Height * Depth * PixelSize);
 	Descriptors[Descriptor.ID] = Descriptor;
 	return Descriptor;
 }
@@ -273,6 +320,48 @@ GetTexture(command_list* CommandList, u64 ID)
 		return (texture*)Resources[ID];
 	}
 	return AllocateTextureInternal(GetResourceDescriptor(ID), CommandList);
+}
+
+void gpu_memory_heap::
+UpdateTexture(resource_descriptor& Desc, void* Data)
+{
+	texture* TextureToUpdate = GetTexture(Desc);
+	TextureToUpdate->Update(Gfx, Data);
+}
+
+void gpu_memory_heap::
+UpdateBuffer(resource_descriptor& Desc, void* Data, size_t Size)
+{
+	buffer* BufferToUpdate = GetBuffer(Desc);
+	if(Desc.Size < Size)
+	{
+		Desc.Size = (Size > 2 * Desc.Size) ? Size : 2 * Desc.Size;
+		delete BufferToUpdate;
+		if(Desc.Data) delete Desc.Data;
+		Desc.Data = (char*)calloc(Size, 1);
+		memcpy(Desc.Data, Data, Size);
+		AllocateBufferInternal(Desc);
+		return;
+	}
+	BufferToUpdate->Update(Gfx, Data);
+}
+
+void gpu_memory_heap::
+UpdateBuffer(resource_descriptor& Desc, void* Data, size_t Size, size_t Count)
+{
+	buffer* BufferToUpdate = GetBuffer(Desc);
+	if(Desc.Size * Desc.Count < Size * Count)
+	{
+		Desc.Size  =  Desc.Size;
+		Desc.Count = (Count > 2 * Desc.Count) ? Count : 2 * Desc.Count;
+		delete BufferToUpdate;
+		if(Desc.Data) delete Desc.Data;
+		Desc.Data  = (char*)calloc(Desc.Size, Desc.Count);
+		memcpy(Desc.Data, Data, Size * Count);
+		AllocateBufferInternal(Desc);
+		return;
+	}
+	BufferToUpdate->Update(Gfx, Data);
 }
 
 void gpu_memory_heap::

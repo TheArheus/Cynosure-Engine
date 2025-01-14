@@ -17,6 +17,8 @@ set GBufferCount=-DGBUFFER_COUNT=5
 set LightSourcesMax=-DLIGHT_SOURCES_MAX_COUNT=256
 set VoxelGridSize=-DVOXEL_SIZE=128
 
+set GameModuleName=path_finding_visualizer
+
 if not exist ..\build\ mkdir ..\build\
 if exist ..\build\game_module_*.pdb del /F /Q ..\build\game_module_*.pdb
 

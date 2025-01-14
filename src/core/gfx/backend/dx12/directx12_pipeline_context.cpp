@@ -388,7 +388,7 @@ ReadBack(texture* TextureToRead, void* Data)
 bool directx12_command_list::
 SetGraphicsPipelineState(render_context* Context)
 {
-	assert(Context->Type == pass_type::graphics);
+	assert(Context->Type == pass_type::raster);
 	if(Context == CurrentContext) return false;
 
 	CurrentContext = Context;
@@ -415,7 +415,7 @@ SetComputePipelineState(compute_context* Context)
 void directx12_command_list::
 SetConstant(void* Data, size_t Size)
 {
-	if(CurrentContext->Type == pass_type::graphics)
+	if(CurrentContext->Type == pass_type::raster)
 	{
 		directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(CurrentContext);
 		assert(ContextToBind->HavePushConstant);
@@ -469,7 +469,7 @@ EmplaceColorTarget(texture* RenderTexture)
 void directx12_command_list::
 SetColorTarget(const std::vector<texture*>& ColorAttachments, vec4 Clear)
 {
-	assert(CurrentContext->Type == pass_type::graphics);
+	assert(CurrentContext->Type == pass_type::raster);
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
 
 #if 0
@@ -505,7 +505,7 @@ SetColorTarget(const std::vector<texture*>& ColorAttachments, vec4 Clear)
 void directx12_command_list::
 SetDepthTarget(texture* DepthAttachment, vec2 Clear)
 {
-	assert(CurrentContext->Type == pass_type::graphics);
+	assert(CurrentContext->Type == pass_type::raster);
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
 
 	directx12_texture* Attachment = static_cast<directx12_texture*>(DepthAttachment);
@@ -521,7 +521,7 @@ SetDepthTarget(texture* DepthAttachment, vec2 Clear)
 void directx12_command_list::
 SetStencilTarget(texture* StencilAttachment, vec2 Clear)
 {
-	assert(CurrentContext->Type == pass_type::graphics);
+	assert(CurrentContext->Type == pass_type::raster);
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
 
 #if 0
@@ -656,7 +656,7 @@ BindShaderParameters(const array<binding_packet>& Data)
         }
     }
 
-    if (CurrentContext->Type == pass_type::graphics) 
+    if (CurrentContext->Type == pass_type::raster) 
 	{
         DX12SetRootDescriptors(
             static_cast<directx12_render_context*>(CurrentContext),
@@ -679,7 +679,7 @@ BindShaderParameters(const array<binding_packet>& Data)
 void directx12_command_list::
 BeginRendering(u32 RenderWidth, u32 RenderHeight)
 {
-	if(CurrentContext->Type != pass_type::graphics) return;
+	if(CurrentContext->Type != pass_type::raster) return;
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
 
 	CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
@@ -688,7 +688,7 @@ BeginRendering(u32 RenderWidth, u32 RenderHeight)
 void directx12_command_list::
 EndRendering()
 {
-	if(CurrentContext->Type != pass_type::graphics) return;
+	if(CurrentContext->Type != pass_type::raster) return;
 
 	ColorTargets.clear();
 	DepthStencilTarget = {};
@@ -697,7 +697,7 @@ EndRendering()
 void directx12_command_list::
 DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount)
 {
-	assert(CurrentContext->Type == pass_type::graphics);
+	assert(CurrentContext->Type == pass_type::raster);
 
 	CommandList->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 }
@@ -705,7 +705,7 @@ DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance,
 void directx12_command_list::
 DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize)
 {
-	assert(CurrentContext->Type == pass_type::graphics);
+	assert(CurrentContext->Type == pass_type::raster);
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
 
 	//BuffersToCommon.insert(IndirectCommands);
@@ -935,7 +935,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 {
 	directx12_backend* Gfx = static_cast<directx12_backend*>(Backend);
 	Device = Gfx->Device.Get();
-	Type = pass_type::graphics;
+	Type = pass_type::raster;
 	Info = InputData;
 
 	D3D12_RASTERIZER_DESC RasterDesc = {};

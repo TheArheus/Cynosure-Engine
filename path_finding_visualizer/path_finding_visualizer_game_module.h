@@ -104,6 +104,12 @@ class path_finding_visualizer : public game_module
 	pathfinding_algorithm CurrentAlgorithm;
 	heuristic_type CurrentHeuristic;
 
+	resource_descriptor VertexBuffer;
+	resource_descriptor IndexBuffer;
+
+	std::vector<prim_vert> Vertices;
+	std::vector<u32> Indices;
+
 	bool IsSearching = false;
 	bool StartUsed   = false;
 

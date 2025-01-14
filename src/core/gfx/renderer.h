@@ -86,14 +86,17 @@ public:
 	RENDERER_API general_context* GetOrCreateContext(shader_pass* Pass);
 	RENDERER_API bool SetContext(shader_pass* Pass, command_list* Context);
 
+	template<typename context_type, typename param_type, typename raster_param_type>
+	RENDERER_API void AddRasterPass(std::string Name, param_type Parameters, raster_param_type RasterParameters, execute_func Exec);
 	template<typename context_type, typename param_type>
-	RENDERER_API void AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec);
-	RENDERER_API void AddTransferPass(std::string Name, execute_func Exec);
+	RENDERER_API void AddComputePass(std::string Name, param_type Parameters, execute_func Exec);
 
+#if 0
 	RENDERER_API void PushCircle(vec2 Pos, float Radius, vec3 Color);
 	RENDERER_API void PushRectangle(vec2 Pos, vec2 Scale, vec3 Color);
 	RENDERER_API void PushRectangle(vec2 Pos, vec2 Scale, resource_descriptor& Texture);
 	RENDERER_API void PushRectangle(vec2 Pos, vec2 Scale, vec2 Offset, vec2 Dims, resource_descriptor& Atlas);
+#endif
 
 	RENDERER_API void Compile();
 	RENDERER_API void Execute();
@@ -120,17 +123,45 @@ public:
 	resource_descriptor QuadVertexBuffer;
 	resource_descriptor QuadIndexBuffer;
 
-	std::vector<resource_descriptor> GfxColorTarget;
-	resource_descriptor GfxDepthTarget;
+	std::vector<resource_descriptor> ColorTarget;
+	resource_descriptor DepthTarget;
 };
 
-template<typename context_type, typename param_type>
+template<typename context_type, typename param_type, typename raster_param_type>
 void global_graphics_context::
-AddPass(std::string Name, param_type Parameters, pass_type Type, execute_func Exec)
+AddRasterPass(std::string Name, param_type Parameters, raster_param_type RasterParameters, execute_func Exec)
 {
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string(Name);
-	NewPass->Type = Type;
+	NewPass->Type = pass_type::raster;
+
+	NewPass->ShaderReflection = reflect<param_type>::Get();
+	NewPass->ShaderParameters = PushStruct(param_type);
+	*((param_type*)NewPass->ShaderParameters) = Parameters;
+
+	NewPass->RasterReflection = reflect<raster_param_type>::Get();
+	NewPass->RasterParameters = PushStruct(raster_param_type);
+	*((raster_param_type*)NewPass->RasterParameters) = RasterParameters;
+
+	Passes.push_back(NewPass);
+	Dispatches[NewPass] = Exec;
+	PassToContext.emplace(NewPass, std::type_index(typeid(context_type)));
+
+	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));
+
+	if(FindIt == ContextMap.end())
+	{
+		GeneralShaderViewMap[std::type_index(typeid(context_type))] = std::make_unique<context_type>();
+	}
+}
+
+template<typename context_type, typename param_type>
+void global_graphics_context::
+AddComputePass(std::string Name, param_type Parameters, execute_func Exec)
+{
+	shader_pass* NewPass = PushStruct(shader_pass);
+	NewPass->Name = string(Name);
+	NewPass->Type = pass_type::compute;
 	NewPass->ShaderReflection = reflect<param_type>::Get();
 
 	NewPass->ShaderParameters = PushStruct(param_type);

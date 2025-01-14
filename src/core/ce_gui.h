@@ -10,6 +10,10 @@ struct ce_gui_context
 	resource_descriptor FontAtlas;
 	font_t* Font = nullptr;
 
+	std::vector<prim_vert> Vertices;
+	std::vector<u32> Indices;
+
+	u64 PrimitiveCount = 0;
 	double FontSize;
 	double Scale;
 };
@@ -106,6 +110,8 @@ void GuiLabel(const std::string& Str, vec2 BaselineStart = vec2(0))
 	double FontScale = GlobalGuiContext->Scale;
 	font_t* Font     = GlobalGuiContext->Font;
 
+	vec2 AtlasDims = vec2(GlobalGuiContext->FontAtlas.Width, GlobalGuiContext->FontAtlas.Height);
+
 	BaselineStart = BaselineStart + vec2(0.75f * FontScale, -(Font->MaxAscent + Font->MaxDescent) / float(FontScale));
 	float PutOffsetX = 0;
 	float PutOffsetY = 0;
@@ -148,7 +154,8 @@ void GuiLabel(const std::string& Str, vec2 BaselineStart = vec2(0))
 			vec2 OffsetPoint = vec2(CharacterFont.StartX, CharacterFont.StartY);
 			vec2 Scale = vec2(CharacterFont.Width / float(FontScale), float(CharacterFont.Height) / float(FontScale));
 			vec2 Dims = vec2(CharacterFont.Width, CharacterFont.Height);
-			GlobalGuiContext->Window->Gfx.PushRectangle(StartPoint, Scale, OffsetPoint, Dims, GlobalGuiContext->FontAtlas);
+
+			PushRectangle(GlobalGuiContext->Vertices, GlobalGuiContext->Indices, StartPoint, Scale, OffsetPoint, Dims, AtlasDims);
 		}
 
 		PutOffsetX += (CharacterFont.AdvanceX + Kerning) / FontScale;
@@ -182,7 +189,8 @@ bool GuiButton(const std::string& Label, vec2 Pos, vec2 Size)
 	float TextPosX = Left + (Size.x - LabelDims.x) * 0.5f;
 	float TextPosY = Top  - (Size.y - LabelDims.y) * 0.5f;
 
-	GlobalGuiContext->Window->Gfx.PushRectangle(Pos, Size, Color);
+	PushRectangle(GlobalGuiContext->Vertices, GlobalGuiContext->Indices, Pos, Size, Color);
+	//GlobalGuiContext->Window->Gfx.PushRectangle(Pos, Size, Color);
 	GuiLabel(Label, vec2(TextPosX, TextPosY));
 
 	return IsClicked;
@@ -216,12 +224,12 @@ bool GuiCheckBox(const std::string& Label, bool& Value, vec2 Pos)
 
     vec2 BoxPos = vec2((Left + Right)*0.5f, (Bottom + Top)*0.5f);
     vec2 BoxDims = vec2(BoxSize, BoxSize);
-    GlobalGuiContext->Window->Gfx.PushRectangle(BoxPos, BoxDims, BoxColor);
+	PushRectangle(GlobalGuiContext->Vertices, GlobalGuiContext->Indices, BoxPos, BoxDims, BoxColor);
 
     if (Value)
     {
         vec3 CheckColor = vec3(0.1f, 0.8f, 0.1f);
-        GlobalGuiContext->Window->Gfx.PushRectangle(BoxPos, BoxDims * 0.6f, CheckColor);
+		PushRectangle(GlobalGuiContext->Vertices, GlobalGuiContext->Indices, BoxPos, BoxDims * 0.6, CheckColor);
     }
 
     vec2 LabelPos = vec2(Right + 5.0f, Top);
@@ -233,7 +241,7 @@ bool GuiCheckBox(const std::string& Label, bool& Value, vec2 Pos)
 bool GuiRadioButton(const std::string& Label, int& CurrentValue, int ThisValue, vec2 Pos)
 {
 	double FontScale = GlobalGuiContext->Scale;
-    float Radius = 0.5f * FontScale;
+    float Radius = FontScale;
 
     float Left   = Pos.x - Radius;
     float Bottom = Pos.y - Radius;
@@ -257,14 +265,13 @@ bool GuiRadioButton(const std::string& Label, int& CurrentValue, int ThisValue, 
     vec3 CircleColor = vec3(0.3f, 0.3f, 0.3f);
     if (IsHovered) CircleColor = vec3(0.5f, 0.5f, 0.5f);
 
-    vec2 CirclePos = Pos;
-    vec2 CircleDims = vec2(Radius*2, Radius*2);
-    GlobalGuiContext->Window->Gfx.PushRectangle(CirclePos, CircleDims, CircleColor);
+    vec2 CirclePos  = Pos;
+	PushCircle(GlobalGuiContext->Vertices, GlobalGuiContext->Indices, CirclePos, Radius, CircleColor);
 
     if (CurrentValue == ThisValue)
     {
         vec3 InnerColor = vec3(0.1f, 0.8f, 0.1f);
-        GlobalGuiContext->Window->Gfx.PushRectangle(CirclePos, CircleDims * 0.5f, InnerColor);
+		PushCircle(GlobalGuiContext->Vertices, GlobalGuiContext->Indices, CirclePos, Radius * 0.65f, InnerColor);
     }
 
     vec2 LabelPos = vec2(Pos.x + Radius + 5, Pos.y + Radius);
@@ -294,22 +301,22 @@ bool GuiSlider(const std::string& Label, float& Value, float MinValue, float Max
     vec2 MousePos = vec2(GlobalGuiContext->Window->MouseX, GlobalGuiContext->Window->MouseY);
     bool LeftPressed   = GlobalGuiContext->Window->Buttons[EC_LBUTTON].IsDown;
     bool LeftClicked   = LeftPressed && !GlobalGuiContext->Window->Buttons[EC_LBUTTON].WasDown;
-    static bool isDragging = false;
+    static bool IsDragging = false;
 
     bool IsHovered = (MousePos.x >= SliderLeft && MousePos.x <= SliderRight &&
                       MousePos.y >= SliderBottom && MousePos.y <= SliderTop);
 
     if (IsHovered && LeftClicked)
     {
-        isDragging = true;
+        IsDragging = true;
     }
     if (!LeftPressed)
     {
-        isDragging = false;
+        IsDragging = false;
     }
 
-    bool valueChanged = false;
-    if (isDragging)
+    bool ValueChanged = false;
+    if (IsDragging)
     {
         float NewT = (MousePos.x - (Pos.x - HalfWidth)) / Width;
         if (NewT < 0.0f) NewT = 0.0f;
@@ -319,7 +326,7 @@ bool GuiSlider(const std::string& Label, float& Value, float MinValue, float Max
         if (fabs(NewValue - Value) > 0.0001f)
         {
             Value = NewValue;
-            valueChanged = true;
+            ValueChanged = true;
         }
 
         t = NewT;
@@ -329,13 +336,13 @@ bool GuiSlider(const std::string& Label, float& Value, float MinValue, float Max
     vec3 TrackColor = vec3(0.3f, 0.3f, 0.3f);
     vec2 TrackPos   = Pos; 
     vec2 TrackSize  = vec2(Width, TrackHeight);
-    GlobalGuiContext->Window->Gfx.PushRectangle(TrackPos, TrackSize, TrackColor);
+	PushRectangle(GlobalGuiContext->Vertices, GlobalGuiContext->Indices, TrackPos, TrackSize, TrackColor);
 
-    vec3 HandleColor = isDragging ? vec3(0.3f, 0.6f, 0.3f) : vec3(0.6f, 0.6f, 0.6f);
-    GlobalGuiContext->Window->Gfx.PushRectangle(vec2(HandleX, HandleY), vec2(HandleRadius*2, HandleRadius*2), HandleColor);
+    vec3 HandleColor = IsDragging ? vec3(0.3f, 0.6f, 0.3f) : vec3(0.6f, 0.6f, 0.6f);
+	PushRectangle(GlobalGuiContext->Vertices, GlobalGuiContext->Indices, vec2(HandleX, HandleY), vec2(HandleRadius*2), HandleColor);
 
     GuiLabel(Label, vec2(Pos.x - HalfWidth, Pos.y + 20.0f));
     GuiLabel(std::to_string(Value), vec2(Pos.x + HalfWidth + 10, Pos.y + 20.0f));
 
-    return valueChanged;
+    return ValueChanged;
 }

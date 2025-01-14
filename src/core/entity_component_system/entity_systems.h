@@ -200,7 +200,6 @@ struct registry
 	void RemoveEntity(entity Entity);
 	void KillEntity(entity Entity);
 
-	void SetupSystems();
 	void UpdateSystems(double dt);
 	void ClearAllEntities();
 	void ClearAll();

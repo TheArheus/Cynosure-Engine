@@ -13,6 +13,9 @@ ModuleStart()
 	CameFrom.resize(GridHeight, std::vector<std::pair<int,int>>(GridWidth, { -1, -1 }));
 	CostG.resize(GridHeight, std::vector<int>(GridWidth, INT_MAX));
 
+	VertexBuffer = Gfx.GpuMemoryHeap->CreateBuffer("Vertex Buffer", sizeof(prim_vert), 128, RF_StorageBuffer);
+	IndexBuffer  = Gfx.GpuMemoryHeap->CreateBuffer("Index Buffer" , sizeof(u32)      , 128, RF_IndexBuffer);
+
 	EventsDispatcher.Subscribe(this, &path_finding_visualizer::OnButtonHold);
 }
 
@@ -85,9 +88,31 @@ ModuleUpdate()
 				default:                 Color = vec3(1.0f);             break;
 			}
 
-            Gfx.PushRectangle(vec2(CellX, CellY) + 0.5f * vec2(CELL_SIZE), vec2(CELL_SIZE), Color);
+            PushRectangle(Vertices, Indices, vec2(CellX, CellY) + 0.5f * vec2(CELL_SIZE), vec2(CELL_SIZE), Color);
         }
     }
+
+	{
+		Gfx.GpuMemoryHeap->UpdateBuffer(VertexBuffer, Vertices.data(), sizeof(prim_vert), Vertices.size());
+		Gfx.GpuMemoryHeap->UpdateBuffer(IndexBuffer , Indices.data() , sizeof(u32), Indices.size());
+
+		primitive_2d::raster_parameters RasterParameters = {};
+		RasterParameters.IndexBuffer = IndexBuffer;
+		RasterParameters.ColorTarget = Gfx.ColorTarget[Gfx.BackBufferIndex];
+
+		primitive_2d::parameters Parameters = {};
+		Parameters.Vertices = VertexBuffer;
+		Parameters.Texture  = Gfx.ColorTarget[Gfx.BackBufferIndex]; // NOTE: this is temporary. I need to implement so that if I don't bind a texture there would be a null texture
+
+		Gfx.AddRasterPass<primitive_2d>("Primitive Rendering", Parameters, RasterParameters, [IndexCount = Indices.size(), FramebufferDims = vec2(Window.Width, Window.Height)](command_list* Cmd)
+		{
+			Cmd->SetConstant((void*)FramebufferDims.E, sizeof(vec2));
+			Cmd->DrawIndexed(0, IndexCount, 0, 0, 1);
+		});
+	}
+
+	Vertices.clear();
+	Indices.clear();
 }
 
 void path_finding_visualizer::

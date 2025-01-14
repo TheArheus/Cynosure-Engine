@@ -335,7 +335,7 @@ struct vulkan_resource_binder : public resource_binder
 	void SetContext(general_context* ContextToUse) override
 	{
 		SetIndices.clear();
-		if(ContextToUse->Type == pass_type::graphics)
+		if(ContextToUse->Type == pass_type::raster)
 		{
 			vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(ContextToUse);
 			PushDescriptors = ContextToBind->PushDescriptors;

@@ -7,7 +7,7 @@
 void arcanoid::
 ModuleStart()
 {
-	Registry.AddSystem<render_system>();
+	Registry.AddSystem<render_system>(Gfx);
 	Registry.AddSystem<movement_system>();
 	Registry.AddSystem<collision_system>(Window.Width, Window.Height);
 
@@ -29,7 +29,7 @@ ModuleUpdate()
 		case game_state::playing:
 		{
 			Registry.UpdateSystems(dt);
-			Registry.GetSystem<render_system>()->Render(Gfx);
+			Registry.GetSystem<render_system>()->Render(Gfx, vec2(Window.Width, Window.Height));
 		} break;
 
 		case game_state::paused:

@@ -274,6 +274,38 @@ struct reflect<full_screen_pass_texture::parameters>
     }
 };
 
+member_definition MembersOf__primitive_2d_raster_parameters[] = 
+{
+    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(primitive_2d::raster_parameters, IndexBuffer), 1},
+    {0, meta_type::gpu_color_target, "ColorTarget", sizeof(gpu_color_target), offsetof(primitive_2d::raster_parameters, ColorTarget), 1},
+};
+
+template<>
+struct reflect<primitive_2d::raster_parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__primitive_2d_raster_parameters, sizeof(MembersOf__primitive_2d_raster_parameters)/sizeof(MembersOf__primitive_2d_raster_parameters[0]) };
+        return &Meta;
+    }
+};
+
+member_definition MembersOf__primitive_2d_parameters[] = 
+{
+    {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(primitive_2d::parameters, Vertices), 1},
+    {0, meta_type::gpu_texture, "Texture", sizeof(gpu_texture), offsetof(primitive_2d::parameters, Texture), 1},
+};
+
+template<>
+struct reflect<primitive_2d::parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__primitive_2d_parameters, sizeof(MembersOf__primitive_2d_parameters)/sizeof(MembersOf__primitive_2d_parameters[0]) };
+        return &Meta;
+    }
+};
+
 member_definition MembersOf__debug_raster_parameters[] = 
 {
     {0, meta_type::gpu_buffer, "WorldUpdateBuffer", sizeof(gpu_buffer), offsetof(debug_raster::parameters, WorldUpdateBuffer), 1},

@@ -1,6 +1,6 @@
 #pragma once
 
-#define USE_CE_GUI 0
+#define USE_CE_GUI 1
 
 // TODO: Make this modules as independent as possible
 //       so that there would be only game dependent sources

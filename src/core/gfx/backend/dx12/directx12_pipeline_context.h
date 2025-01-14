@@ -248,7 +248,7 @@ public:
 
 	void SetContext(general_context* ContextToUse) override
 	{
-		if(ContextToUse->Type == pass_type::graphics)
+		if(ContextToUse->Type == pass_type::raster)
 		{
 			directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(ContextToUse);
 			ResourceBindingIdx = ContextToBind->ResourceBindingIdx;

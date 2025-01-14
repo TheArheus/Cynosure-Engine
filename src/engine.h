@@ -44,6 +44,9 @@ class engine
 	registry Registry;
 	asset_store AssetStore;
 
+	resource_descriptor GuiVertexBuffer;
+	resource_descriptor GuiIndexBuffer;
+
 	std::unique_ptr<game_module> Module;
 
 	scene_info ModuleInfo = {};
