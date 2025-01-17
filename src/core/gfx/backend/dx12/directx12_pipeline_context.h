@@ -69,7 +69,7 @@ struct directx12_command_list : public command_list
 	void EndRendering() override;
 
 	void DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount) override;
-	void DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize) override;
+	void DrawIndirect(u32 ObjectDrawCount, u32 CommandStructureSize) override;
 	void Dispatch(u32 X = 1, u32 Y = 1, u32 Z = 1) override;
 
 	void FillBuffer(buffer* Buffer, u32 Value) override;
@@ -244,10 +244,14 @@ public:
 
 	void DestroyObject() override 
 	{
+		CurrContext = nullptr;
 	}
 
-	void SetContext(general_context* ContextToUse) override
+	bool SetContext(general_context* ContextToUse) override
 	{
+		bool Result = CurrContext != ContextToUse;
+		CurrContext = ContextToUse;
+
 		if(ContextToUse->Type == pass_type::raster)
 		{
 			directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(ContextToUse);
@@ -268,6 +272,8 @@ public:
 			SamplersHeap = ContextToBind->SamplersHeap;
 			Device = ContextToBind->Device;
 		}
+
+		return Result;
 	}
 
 	void AppendStaticStorage(general_context* Context, const array<binding_packet>& Data, u32 Offset) override {};

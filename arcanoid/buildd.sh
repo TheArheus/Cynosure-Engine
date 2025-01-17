@@ -13,7 +13,7 @@ GameModuleName="arcanoid"
 mkdir -p ../build
 
 pushd ../build
-g++ $CommonCompFlags $DepthCascades $UseDebugColorBlend $GBufferCount $LightSourcesMax $VoxelGridSize /I"../src" /I"../src/core/vendor" "../$GameModuleName/${GameModuleName}_game_module.cpp" $CommonLinkFlags -shared -o "game_module.sce"
+g++ $CommonCompFlags $DepthCascades $UseDebugColorBlend $GBufferCount $LightSourcesMax $VoxelGridSize -I"../src" -I"../src/core/vendor" "../$GameModuleName/${GameModuleName}_game_module.cpp" $CommonLinkFlags -shared -o "game_module.sce"
 popd
 
 exit 0

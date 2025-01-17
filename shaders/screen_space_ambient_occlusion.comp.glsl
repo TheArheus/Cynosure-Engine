@@ -38,19 +38,10 @@ layout(binding = 3) uniform sampler2D DepthTarget;
 layout(binding = 4) uniform sampler2D GBuffer[GBUFFER_COUNT];
 layout(binding = 5) uniform writeonly image2D OcclusionTarget;
 
-vec3 ViewPosFromDepth1(vec2 TextCoord, float Depth) 
+vec3 ViewPosFromDepth(vec2 TextCoord, float Depth) 
 {
 	TextCoord.y = 1 - TextCoord.y;
     vec4 ClipSpacePosition = vec4(TextCoord * 2.0 - 1.0, Depth, 1.0);
-    vec4 ViewSpacePosition = inverse(WorldUpdate.Proj) * ClipSpacePosition;
-    ViewSpacePosition /= ViewSpacePosition.w;
-
-    return ViewSpacePosition.xyz;
-}
-
-vec3 ViewPosFromDepth2(vec2 TextCoord, float Depth) 
-{
-    vec4 ClipSpacePosition = vec4(TextCoord, Depth, 1.0);
     vec4 ViewSpacePosition = inverse(WorldUpdate.Proj) * ClipSpacePosition;
     ViewSpacePosition /= ViewSpacePosition.w;
 
@@ -68,17 +59,15 @@ void main()
     }
 
 	float CurrDepth = texelFetch(DepthTarget, ivec2(TextCoord), 0).r;
-#if 0
 	if(CurrDepth == 1.0)
 	{
 		imageStore(OcclusionTarget, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(0), 1));
 		return;
 	}
-#endif
 
-	vec3  CoordVS = ViewPosFromDepth1(TextCoord / TextureDims, CurrDepth);
+	vec3  CoordVS = ViewPosFromDepth(TextCoord / TextureDims, CurrDepth);
 
-	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[2], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
+	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[1], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
 	vec3  FragmentNormalVS = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(FragmentNormalWS, 1)).xyz);
 	vec2  Rotation = texture(NoiseTexture, TextCoord).xy;
 
@@ -98,7 +87,13 @@ void main()
 		Offset.xyz /= Offset.w;
 		Offset.xy   = Offset.xy * vec2(0.5) + 0.5;
 
-		vec3 SampledPosVS = ViewPosFromDepth2(Offset.xy, texture(DepthTarget, Offset.xy).x);
+		if (Offset.x < 0.0 || Offset.x > 1.0 ||
+			Offset.y < 0.0 || Offset.y > 1.0)
+		{
+			continue;
+		}
+
+		vec3 SampledPosVS = ViewPosFromDepth(Offset.xy, texture(DepthTarget, Offset.xy).x);
 
 		float Range = smoothstep(0.0, 1.0, Radius / abs(CoordVS.z - SampledPosVS.z));
 		OcclusionResult += (((SampledPosVS.z - 0.005) > SamplePosVS.z) ? 1.0 : 0.0) * Range;

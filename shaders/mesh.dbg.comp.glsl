@@ -85,13 +85,15 @@ void main()
 	uint DrawIndex = gl_GlobalInvocationID.x;
 	if(DrawIndex >= DrawCount) return;
 
-	uint CommandIdx = MeshDrawCommandData[DrawIndex].MeshIndex - 1;
+	uint CommandIdx = MeshDrawCommandData[DrawIndex].MeshIndex;
 	if(DrawIndex == 0)
 	{
+#if 0
 		for(uint MI = 0; MI < MeshCount; ++MI)
 		{
 			IndirectDrawIndexedCommands[MI].InstanceCount = 0;
 		}
+#endif
 		IndirectDrawIndexedCommandsCounter = MeshCount;
 	}
 

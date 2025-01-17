@@ -55,7 +55,8 @@ class engine
 	void UpdateModule();
 
 public:
-	engine(const std::vector<std::string>& args) : Window("3D Renderer") { Init(args); };
+	engine(const std::vector<std::string>& args) : Window(1240, 720, "3D Renderer") { Allocator = new global_memory_allocator; Init(args); }
+	~engine() { delete Allocator; }
 
 	void Init(const std::vector<std::string>& args);
 	int Run();

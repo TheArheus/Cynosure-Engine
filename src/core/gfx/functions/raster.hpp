@@ -2,6 +2,13 @@
 
 struct debug_raster : public shader_graphics_view_context
 {
+	shader_input() raster_parameters
+	{
+		gpu_index_buffer IndexBuffer;
+		gpu_indirect_buffer IndirectBuffer;
+		gpu_color_target ColorTarget;
+	};
+
 	shader_input() parameters
 	{
 		gpu_buffer WorldUpdateBuffer;
@@ -15,9 +22,13 @@ struct debug_raster : public shader_graphics_view_context
 	{
 		utils::render_context::input_data SetupData = {};
 
-		SetupData.UseColor	 = true;
-		SetupData.UseDepth	 = true;
-		SetupData.CullMode   = cull_mode::back;
+		SetupData.UseColor = true;
+		SetupData.UseDepth = true;
+		SetupData.UseBlend = false;
+		//SetupData.BlendSrc = blend_factor::src_alpha;
+		//SetupData.BlendDst = blend_factor::one_minus_src_alpha;
+		SetupData.CullMode = cull_mode::back;
+		SetupData.Topology = topology::triangle_list;
 
 		return SetupData;
 	}
@@ -38,6 +49,14 @@ struct debug_raster : public shader_graphics_view_context
 
 struct gbuffer_raster : public shader_graphics_view_context
 {
+	shader_input() raster_parameters
+	{
+		gpu_index_buffer IndexBuffer;
+		gpu_indirect_buffer IndirectBuffer;
+		gpu_color_target ColorTarget;
+		gpu_depth_target DepthTarget;
+	};
+
 	shader_input() parameters
 	{
 		gpu_buffer WorldUpdateBuffer;
@@ -56,9 +75,13 @@ struct gbuffer_raster : public shader_graphics_view_context
 	{
 		utils::render_context::input_data SetupData = {};
 
-		SetupData.UseColor	 = true;
-		SetupData.UseDepth	 = true;
-		SetupData.CullMode   = cull_mode::back;
+		SetupData.UseColor = true;
+		SetupData.UseDepth = true;
+		SetupData.UseBlend = false;
+		//SetupData.BlendSrc = blend_factor::src_alpha;
+		//SetupData.BlendDst = blend_factor::one_minus_src_alpha;
+		SetupData.CullMode = cull_mode::back;
+		SetupData.Topology = topology::triangle_list;
 
 		return SetupData;
 	}
@@ -79,6 +102,12 @@ struct gbuffer_raster : public shader_graphics_view_context
 
 struct voxelization : public shader_graphics_view_context
 {
+	shader_input() raster_parameters
+	{
+		gpu_index_buffer IndexBuffer;
+		gpu_indirect_buffer IndirectBuffer;
+	};
+
 	shader_input() parameters
 	{
 		gpu_buffer WorldUpdateBuffer;
@@ -101,6 +130,10 @@ struct voxelization : public shader_graphics_view_context
 		utils::render_context::input_data SetupData = {};
 
 		SetupData.UseConservativeRaster = true;
+		SetupData.UseBlend = false;
+		//SetupData.BlendSrc = blend_factor::src_alpha;
+		//SetupData.BlendDst = blend_factor::one_minus_src_alpha;
+		SetupData.Topology = topology::triangle_list;
 
 		return SetupData;
 	}
@@ -124,7 +157,7 @@ struct color_pass : public shader_compute_view_context
 		gpu_buffer RandomSamplesBuffer;
 
 		gpu_texture PrevColorTarget;
-		gpu_texture GfxDepthTarget;
+		gpu_texture DepthTarget;
 		gpu_texture VolumetricLightTexture;
 		gpu_texture IndirectLightTexture;
 		gpu_texture RandomAnglesTexture;

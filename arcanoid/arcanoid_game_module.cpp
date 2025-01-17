@@ -266,6 +266,7 @@ OnButtonHold(key_hold_event& Event)
 
 extern "C" GameModuleCreateFunc(GameModuleCreate)
 {
+	Allocator = NewAllocator;
 	ImGui::SetCurrentContext(NewWindow.imguiContext.get());
 	GlobalGuiContext = NewContext;
 	game_module* Ptr = new arcanoid(NewWindow, NewEventDispatcher, NewRegistry, NewGfx);

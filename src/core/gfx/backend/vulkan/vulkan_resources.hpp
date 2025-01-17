@@ -60,6 +60,7 @@ struct vulkan_buffer : public buffer
 
 	void Update(renderer_backend* Backend, void* Data) override
 	{
+		if(!Data) return;
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->Update(this, Data);
@@ -68,6 +69,7 @@ struct vulkan_buffer : public buffer
 
 	void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
 	{
+		if(!Data) return;
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->UpdateSize(this, Data, UpdateByteSize);
@@ -76,6 +78,7 @@ struct vulkan_buffer : public buffer
 
 	void ReadBack(renderer_backend* Backend, void* Data) override
 	{
+		if(!Data) return;
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->ReadBack(this, Data);
@@ -84,6 +87,7 @@ struct vulkan_buffer : public buffer
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
 	{
+		if(!Data) return;
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->ReadBackSize(this, Data, UpdateByteSize);
@@ -236,6 +240,7 @@ struct vulkan_texture : public texture
 
 	void Update(renderer_backend* Backend, void* Data) override
 	{
+		if(!Data) return;
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->Update(this, Data);
@@ -244,6 +249,7 @@ struct vulkan_texture : public texture
 
 	void ReadBack(renderer_backend* Backend, void* Data) override
 	{
+		if(!Data) return;
 		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->ReadBack(this, Data);

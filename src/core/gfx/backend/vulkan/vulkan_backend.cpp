@@ -441,11 +441,6 @@ DestroyObject()
 	ImGui_ImplVulkan_Shutdown();
 	imguiContext = nullptr;
 
-	for(auto& [Hash, Module] : CompiledShaders)
-	{
-		vkDestroyShaderModule(Device, Module.Handle, nullptr);
-	}
-
     if (!Features13.dynamicRendering && ImGuiRenderPass != VK_NULL_HANDLE)
     {
         vkDestroyRenderPass(Device, ImGuiRenderPass, nullptr);

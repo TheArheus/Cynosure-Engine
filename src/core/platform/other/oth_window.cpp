@@ -278,6 +278,7 @@ bool window::
 IsFileLocked(const std::filesystem::path& FilePath)
 {
     int fd = open(FilePath.c_str(), O_RDWR);
+#if 0
     if (fd < 0)
         return false;
 
@@ -292,4 +293,15 @@ IsFileLocked(const std::filesystem::path& FilePath)
         close(fd);
         return true;
     }
+#else
+    if (fd < 0)
+    {
+        return true;
+    }
+    else
+    {
+		close(fd);
+        return false;
+    }
+#endif
 }

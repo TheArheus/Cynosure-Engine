@@ -17,6 +17,8 @@ set GBufferCount=-DGBUFFER_COUNT=5
 set LightSourcesMax=-DLIGHT_SOURCES_MAX_COUNT=256
 set VoxelGridSize=-DVOXEL_SIZE=128
 
+for /f "delims=" %%i in ('python get_llvm_flags_clang.py') do set "llvm_flags=%%i"
+
 if not exist ..\build\ mkdir ..\build\
 
 pushd ..\build\

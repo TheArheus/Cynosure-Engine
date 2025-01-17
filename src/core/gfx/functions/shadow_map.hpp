@@ -2,6 +2,13 @@
 
 struct mesh_shadow : public shader_graphics_view_context
 {
+	shader_input() raster_parameters
+	{
+		gpu_index_buffer IndexBuffer;
+		gpu_indirect_buffer IndirectBuffer;
+		gpu_depth_target DepthTarget;
+	};
+
 	shader_input() parameters
 	{
 		gpu_buffer VertexBuffer;
@@ -14,7 +21,11 @@ struct mesh_shadow : public shader_graphics_view_context
 		utils::render_context::input_data SetupData = {};
 
 		SetupData.UseDepth = true;
+		SetupData.UseBlend = false;
+		//SetupData.BlendSrc = blend_factor::src_alpha;
+		//SetupData.BlendDst = blend_factor::one_minus_src_alpha;
 		SetupData.CullMode = cull_mode::front;
+		SetupData.Topology = topology::triangle_list;
 
 		return SetupData;
 	}
@@ -33,6 +44,13 @@ struct mesh_shadow : public shader_graphics_view_context
 template<u32 FaceIdx = 0>
 struct point_shadow : public shader_graphics_view_context
 {
+	shader_input() raster_parameters
+	{
+		gpu_index_buffer IndexBuffer;
+		gpu_indirect_buffer IndirectBuffer;
+		gpu_depth_target DepthTarget;
+	};
+
 	shader_input() parameters
 	{
 		gpu_buffer VertexBuffer;
@@ -63,6 +81,13 @@ struct point_shadow : public shader_graphics_view_context
 
 struct depth_prepass : public shader_graphics_view_context
 {
+	shader_input() raster_parameters
+	{
+		gpu_index_buffer IndexBuffer;
+		gpu_indirect_buffer IndirectBuffer;
+		gpu_depth_target DepthTarget;
+	};
+
 	struct parameters
 	{
 		gpu_buffer VertexBuffer;
@@ -75,6 +100,11 @@ struct depth_prepass : public shader_graphics_view_context
 		utils::render_context::input_data SetupData = {};
 
 		SetupData.UseDepth = true;
+		SetupData.UseBlend = false;
+		//SetupData.BlendSrc = blend_factor::src_alpha;
+		//SetupData.BlendDst = blend_factor::one_minus_src_alpha;
+		SetupData.CullMode = cull_mode::front;
+		SetupData.Topology = topology::triangle_list;
 
 		return SetupData;
 	}

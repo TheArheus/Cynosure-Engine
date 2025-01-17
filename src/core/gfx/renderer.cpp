@@ -26,11 +26,12 @@
 // NOTE: I wish this creation was not that ugly
 global_graphics_context::
 #ifdef _WIN32
-global_graphics_context(backend_type _BackendType, HINSTANCE Instance, HWND Window, ImGuiContext* imguiContext)
+global_graphics_context(backend_type _BackendType, HINSTANCE Instance, HWND Window, ImGuiContext* imguiContext, global_memory_allocator* NewAllocator)
 #else
 global_graphics_context(backend_type _BackendType, GLFWwindow* Window)
 #endif
 {
+	Allocator = NewAllocator;
 	if(_BackendType == backend_type::vulkan)
 #ifdef _WIN32
 		Backend = new vulkan_backend(Instance, Window, imguiContext);
@@ -53,7 +54,7 @@ global_graphics_context(backend_type _BackendType, GLFWwindow* Window)
 	TextureInputData.MipLevels = 1;
 	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
-	TextureInputData.Usage     = TF_ColorAttachment | TF_Sampled;
+	TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled;
 	for(u32 i = 0; i < Backend->ImageCount; i++)
 	{
 		ColorTarget.push_back(GpuMemoryHeap->CreateTexture("ColorTarget" + std::to_string(i), Backend->Width, Backend->Height, 1, TextureInputData));
@@ -108,6 +109,7 @@ global_graphics_context(global_graphics_context&& Oth) noexcept
       ContextMap(std::move(Oth.ContextMap)),
       GeneralShaderViewMap(std::move(Oth.GeneralShaderViewMap)),
       Dispatches(std::move(Oth.Dispatches)),
+      SetupDispatches(std::move(Oth.SetupDispatches)),
       PassToContext(std::move(Oth.PassToContext)),
       Passes(std::move(Oth.Passes)),
       CurrentContext(Oth.CurrentContext),
@@ -136,6 +138,7 @@ operator=(global_graphics_context&& Oth) noexcept
         ContextMap = std::move(Oth.ContextMap);
         GeneralShaderViewMap = std::move(Oth.GeneralShaderViewMap);
         Dispatches = std::move(Oth.Dispatches);
+        SetupDispatches = std::move(Oth.SetupDispatches);
         PassToContext = std::move(Oth.PassToContext);
         Passes = std::move(Oth.Passes);
         CurrentContext = Oth.CurrentContext;
@@ -144,6 +147,7 @@ operator=(global_graphics_context&& Oth) noexcept
         BackBufferIndex = Oth.BackBufferIndex;
 
 		ColorTarget = std::move(Oth.ColorTarget);
+		DepthTarget = std::move(Oth.DepthTarget);
 
 		QuadVertexBuffer = std::move(Oth.QuadVertexBuffer);
 		QuadIndexBuffer  = std::move(Oth.QuadIndexBuffer);
@@ -421,14 +425,13 @@ Compile()
 {
 	std::unordered_map<u64, resource_lifetime> Lifetimes;
 	std::unordered_map<u64, resource_state> LastKnownResourceStates;
-	std::vector<u64> CurrParamsToBind;
+	std::vector<bound_resource> CurrParamsToBind;
 
 	for(u32 PassIndex = 0; PassIndex < Passes.size(); PassIndex++)
 	{
 		shader_pass* Pass = Passes[PassIndex];
-		if(Pass->Type == pass_type::transfer) continue;
 		general_context* UseContext = GetOrCreateContext(Pass);
-		Binder->SetContext(UseContext);
+		Pass->IsNewContext = Binder->SetContext(UseContext);
 
 		u32   MemberIdx  = 0;
 		u32   StaticOffs = 0;
@@ -441,7 +444,7 @@ Compile()
 		std::vector<texture_barrier> AttachmentImageBarriers;
 
 		std::vector<binding_packet> Packets;
-		std::vector<u64> ParamsToBind;
+		std::vector<bound_resource> ParamsToBind;
 		std::vector<u64> InputIDs;
 		std::vector<u64> OutputIDs;
 
@@ -453,6 +456,7 @@ Compile()
 			if(Member->Type == meta_type::gpu_buffer)
 			{
 				gpu_buffer* Data = (gpu_buffer*)((uptr)ShaderParameters + Member->Offset);
+				assert(Data->ID != ~0ull);
 
 				auto& Lifetime = Lifetimes[Data->ID];
 				Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
@@ -475,7 +479,7 @@ Compile()
 				}
 				LastState = NewState;
 
-				ParamsToBind.push_back(Data->ID);
+				ParamsToBind.push_back({Data->ID});
 				if(!Parameter.IsWritable)
 				{
 					InputIDs.push_back(Data->ID);
@@ -496,8 +500,8 @@ Compile()
 				Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
 
 				binding_packet NewPacket;
-				NewPacket.Resources = array<resource*>(1);
-				NewPacket.Resources[0] = GpuMemoryHeap->GetTexture(Data->ID);
+				NewPacket.Resources = array<resource*>(Data->ID != ~0ull);
+				NewPacket.Resources[0] = Data->ID == ~0ull ? nullptr : GpuMemoryHeap->GetTexture(Data->ID);
 				NewPacket.SubresourceIndex = Data->SubresourceIdx == SUBRESOURCES_ALL ? 0 : Data->SubresourceIdx;
 				NewPacket.Mips = Data->SubresourceIdx;
 				Packets.push_back(NewPacket);
@@ -510,14 +514,14 @@ Compile()
 				NewState.Valid = true;
 				auto& LastState = LastKnownResourceStates[Data->ID];
 
-				if(!LastState.Valid || LastState != NewState)
+				if(Data->ID != ~0ull && (!LastState.Valid || LastState != NewState))
 				{
 					texture* CurrentTexture = (texture*)NewPacket.Resources[0];
 					AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, NewPacket.Mips, Parameter.ShaderToUse});
 				}
 				LastState = NewState;
 
-				ParamsToBind.push_back(Data->ID);
+				ParamsToBind.push_back({Data->ID, NewPacket.Mips});
 				if(!Parameter.IsWritable)
 				{
 					InputIDs.push_back(Data->ID);
@@ -560,7 +564,7 @@ Compile()
 					}
 					LastState = NewState;
 
-					ParamsToBind.push_back(ID);
+					ParamsToBind.push_back({ID, NewPacket.Mips});
 					if(!Parameter.IsWritable)
 					{
 						InputIDs.push_back(ID);
@@ -601,6 +605,9 @@ Compile()
 						Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
 
 						NewPacket.Resources[i] = GpuMemoryHeap->GetTexture((*Data)[i]);
+
+						texture* CurrentTexture = (texture*)NewPacket.Resources[i];
+						AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, NewPacket.Mips, Parameter.ShaderToUse});
 					}
 					Packets.push_back(NewPacket);
 				}
@@ -629,7 +636,6 @@ Compile()
 }
 
 // TODO: Consider of pushing pass work in different thread if some of them are not dependent and can use different queue type
-// TODO: Better viewport setup
 void global_graphics_context::
 Execute()
 {
@@ -639,7 +645,6 @@ Execute()
 
 	texture* CurrentColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ColorTarget[BackBufferIndex]);
 	ExecutionContext->FillTexture(CurrentColorTarget, vec4(vec3(0), 1.0f));
-	ExecutionContext->SetViewport(0, 0, CurrentColorTarget->Width, CurrentColorTarget->Height);
 
 	// NOTE: Little binding cache for some of the resources:
 	buffer*  BoundVertexBuffer = nullptr;
@@ -651,14 +656,10 @@ Execute()
 	for(u32 PassIndex = 0; PassIndex < Passes.size(); PassIndex++)
 	{
 		shader_pass* Pass = Passes[PassIndex];
-		bool ShouldRebind = SetContext(Pass, ExecutionContext) || Pass->ParamsChanged;
+		bool ShouldRebind = Pass->ParamsChanged || Pass->IsNewContext;
 
-        if (ShouldRebind && RenderingActive)
-        {
-			ExecutionContext->EndRendering();
-			RenderingActive = false;
-        }
-
+		bool ColorTargetChanged = false;
+		bool DepthTargetChanged = false;
 		buffer* DesiredIndexBuffer = nullptr;
 		std::vector<texture*> DesiredColorTargets; 
 		texture* DesiredDepthTarget = nullptr;
@@ -680,6 +681,12 @@ Execute()
                         ExecutionContext->AttachmentBufferBarriers.push_back({DesiredIndexBuffer, AF_IndexRead, PSF_VertexInput});
                     }
                 }
+				else if (Member->Type == meta_type::gpu_indirect_buffer)
+				{
+                    gpu_indirect_buffer* Data = (gpu_indirect_buffer*)((uptr)RasterParameters + Member->Offset);
+                    ExecutionContext->IndirectCommands = GpuMemoryHeap->GetBuffer(ExecutionContext, Data->ID);
+					ExecutionContext->AttachmentBufferBarriers.push_back({ExecutionContext->IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
+				}
                 else if (Member->Type == meta_type::gpu_color_target)
                 {
                     gpu_color_target* Data = (gpu_color_target*)((uptr)RasterParameters + Member->Offset);
@@ -692,9 +699,10 @@ Execute()
                         texture* NewColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ID);
                         DesiredColorTargets.push_back(NewColorTarget);
                     }
-					if(ShouldRebind && ((BoundColorTargets.size() != DesiredColorTargets.size()) ||
+					if(((BoundColorTargets.size() != DesiredColorTargets.size()) ||
 					   !std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin())))
 					{
+						ColorTargetChanged = true;
 						for (texture* NewColorTarget : DesiredColorTargets)
 						{
 							ExecutionContext->AttachmentImageBarriers.push_back({
@@ -707,14 +715,13 @@ Execute()
 						}
 					}
                 }
-#if 0
                 else if (Member->Type == meta_type::gpu_depth_target)
                 {
                     gpu_depth_target* Data = (gpu_depth_target*)((uptr)RasterParameters + Member->Offset);
-                    texture* DepthTarget = GpuMemoryHeap->GetTexture(ExecutionContext, (*Data)[0]);
-                    DesiredDepthTarget = DepthTarget;
-					if (ShouldRebind && BoundDepthTarget != DesiredDepthTarget)
+                    DesiredDepthTarget = GpuMemoryHeap->GetTexture(ExecutionContext, Data->ID);
+					if (BoundDepthTarget != DesiredDepthTarget)
 					{
+						DepthTargetChanged = true;
 						ExecutionContext->AttachmentImageBarriers.push_back({
 							DesiredDepthTarget, 
 							AF_DepthStencilAttachmentWrite, 
@@ -724,9 +731,20 @@ Execute()
 						});
 					}
                 }
-#endif
             }
         }
+
+		bool NeedsNewRenderPass = ColorTargetChanged || DepthTargetChanged;
+
+        if (RenderingActive && (NeedsNewRenderPass || ShouldRebind))
+        {
+			ExecutionContext->EndRendering();
+			RenderingActive = false;
+        }
+
+		SetContext(Pass, ExecutionContext);
+
+		SetupDispatches[Pass](ExecutionContext);
 
 		ExecutionContext->AttachmentBufferBarriers.insert(ExecutionContext->AttachmentBufferBarriers.end(), Pass->BufferBarriers.begin(), Pass->BufferBarriers.end());
 		ExecutionContext->AttachmentImageBarriers.insert(ExecutionContext->AttachmentImageBarriers.end(), Pass->TextureBarriers.begin(), Pass->TextureBarriers.end());
@@ -740,42 +758,39 @@ Execute()
 			BoundIndexBuffer = DesiredIndexBuffer;
 		}
 
-		if (DesiredColorTargets.size() && ShouldRebind)
+        if (Pass->Type == pass_type::raster && !RenderingActive)
         {
-			if ((BoundColorTargets.size() != DesiredColorTargets.size()) ||
-				!std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin()))
+			if (DesiredColorTargets.size())
 			{
-				ExecutionContext->SetColorTarget(DesiredColorTargets);
-				BoundColorTargets = DesiredColorTargets;
+				if (ColorTargetChanged)
+				{
+					ExecutionContext->SetColorTarget(DesiredColorTargets);
+					BoundColorTargets = DesiredColorTargets;
+				} 
+				else
+				{
+					ExecutionContext->SetColorTarget(BoundColorTargets);
+				}
 			}
-			else
+
+			if (DesiredDepthTarget)
 			{
-				ExecutionContext->SetColorTarget(BoundColorTargets);
+				if (DepthTargetChanged)
+				{
+					ExecutionContext->SetDepthTarget(DesiredDepthTarget);
+					BoundDepthTarget = DesiredDepthTarget;
+				}
+				else
+				{
+					ExecutionContext->SetDepthTarget(BoundDepthTarget);
+				}
 			}
-        }
 
-#if 0
-		if (DesiredDepthTarget && ShouldRebind)
-        {
-            if (BoundDepthTarget != DesiredDepthTarget)
-            {
-                ExecutionContext->SetDepthTarget(DesiredDepthTarget);
-                BoundDepthTarget = DesiredDepthTarget;
-            }
-            else
-            {
-                ExecutionContext->SetDepthTarget(BoundDepthTarget);
-            }
-        }
-#endif
-
-		ExecutionContext->BindShaderParameters(Pass->Bindings);
-
-        if (ShouldRebind || !RenderingActive)
-        {
-            ExecutionContext->BeginRendering(Backend->Width, Backend->Height);
+            ExecutionContext->BeginRendering(Pass->Width, Pass->Height);
             RenderingActive = true;
         }
+
+		ExecutionContext->BindShaderParameters(Pass->Bindings);
 
 		Dispatches[Pass](ExecutionContext);
 
@@ -802,12 +817,12 @@ SwapBuffers()
 {
 	for(shader_pass* Pass : Passes)
 	{
-		if(Pass->Type == pass_type::transfer) continue;
 		ContextMap[PassToContext.at(Pass)]->Clear();
 	}
 
 	Passes.clear();
 	Dispatches.clear();
+	SetupDispatches.clear();
 	PassToContext.clear();
 
 	BackBufferIndex = (BackBufferIndex + 1) % Backend->ImageCount;

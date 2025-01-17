@@ -219,7 +219,7 @@ End()
 	PlaceEndOfFrameBarriers();
 	Gfx->CommandQueue->Execute(&CommandList);
 	Gfx->Fence->Flush(Gfx->CommandQueue);
-	CurrentContext = nullptr;
+	CurrContext = nullptr;
 }
 
 void directx12_command_list::
@@ -228,7 +228,7 @@ EndOneTime()
 	PlaceEndOfFrameBarriers();
 	Gfx->CommandQueue->ExecuteAndRemove(&CommandList);
 	Gfx->Fence->Flush(Gfx->CommandQueue);
-	CurrentContext = nullptr;
+	CurrContext = nullptr;
 }
 
 void directx12_command_list::
@@ -240,7 +240,7 @@ Present()
 
 	Gfx->SwapChain->Present(0, Gfx->TearingSupport * DXGI_PRESENT_ALLOW_TEARING);
 	Gfx->BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
-	CurrentContext = nullptr;
+	CurrContext = nullptr;
 }
 
 void directx12_command_list::
@@ -389,9 +389,9 @@ bool directx12_command_list::
 SetGraphicsPipelineState(render_context* Context)
 {
 	assert(Context->Type == pass_type::raster);
-	if(Context == CurrentContext) return false;
+	if(Context == CurrContext) return false;
 
-	CurrentContext = Context;
+	CurrContext = Context;
 	directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(Context);
 	CommandList->SetGraphicsRootSignature(ContextToBind->RootSignatureHandle.Get());
 	CommandList->SetPipelineState(ContextToBind->Pipeline.Get());
@@ -403,9 +403,9 @@ bool directx12_command_list::
 SetComputePipelineState(compute_context* Context)
 {
 	assert(Context->Type == pass_type::compute);
-	if(Context == CurrentContext) return false;
+	if(Context == CurrContext) return false;
 
-	CurrentContext = Context;
+	CurrContext = Context;
 	directx12_compute_context* ContextToBind = static_cast<directx12_compute_context*>(Context);
 	CommandList->SetComputeRootSignature(ContextToBind->RootSignatureHandle.Get());
 	CommandList->SetPipelineState(ContextToBind->Pipeline.Get());
@@ -415,15 +415,15 @@ SetComputePipelineState(compute_context* Context)
 void directx12_command_list::
 SetConstant(void* Data, size_t Size)
 {
-	if(CurrentContext->Type == pass_type::raster)
+	if(CurrContext->Type == pass_type::raster)
 	{
-		directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(CurrentContext);
+		directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(CurrContext);
 		assert(ContextToBind->HavePushConstant);
 		CommandList->SetGraphicsRoot32BitConstants(ContextToBind->PushConstantOffset, Size / sizeof(u32), Data, 0);
 	}
-	else if(CurrentContext->Type == pass_type::compute)
+	else if(CurrContext->Type == pass_type::compute)
 	{
-		directx12_compute_context* ContextToBind = static_cast<directx12_compute_context*>(CurrentContext);
+		directx12_compute_context* ContextToBind = static_cast<directx12_compute_context*>(CurrContext);
 		assert(ContextToBind->HavePushConstant);
 		CommandList->SetComputeRoot32BitConstants(ContextToBind->PushConstantOffset, Size / sizeof(u32), Data, 0);
 	}
@@ -432,10 +432,10 @@ SetConstant(void* Data, size_t Size)
 void directx12_command_list::
 SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight)
 {
-	D3D12_VIEWPORT Viewport = {(r32)StartX, (r32)(Gfx->Height - StartY), (r32)RenderWidth, -(r32)RenderHeight, 0, 1};
+	D3D12_VIEWPORT Viewport = {(r32)StartX, (r32)(GfxHeight - StartY), (r32)RenderWidth, -(r32)RenderHeight, 0, 1};
 	CommandList->RSSetViewports(1, &Viewport);
 
-	D3D12_RECT Scissors = {(LONG)StartX, (LONG)(Gfx->Height - (RenderHeight + StartY)), (LONG)RenderWidth, (LONG)RenderHeight};
+	D3D12_RECT Scissors = {(LONG)StartX, (LONG)(GfxHeight - (RenderHeight + StartY)), (LONG)RenderWidth, (LONG)RenderHeight};
 	CommandList->RSSetScissorRects(1, &Scissors);
 }
 
@@ -469,8 +469,8 @@ EmplaceColorTarget(texture* RenderTexture)
 void directx12_command_list::
 SetColorTarget(const std::vector<texture*>& ColorAttachments, vec4 Clear)
 {
-	assert(CurrentContext->Type == pass_type::raster);
-	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
+	assert(CurrContext->Type == pass_type::raster);
+	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
 
 #if 0
 	if(EnableMultiview)
@@ -505,8 +505,8 @@ SetColorTarget(const std::vector<texture*>& ColorAttachments, vec4 Clear)
 void directx12_command_list::
 SetDepthTarget(texture* DepthAttachment, vec2 Clear)
 {
-	assert(CurrentContext->Type == pass_type::raster);
-	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
+	assert(CurrContext->Type == pass_type::raster);
+	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
 
 	directx12_texture* Attachment = static_cast<directx12_texture*>(DepthAttachment);
 	TexturesToCommon.insert(Attachment);
@@ -521,8 +521,8 @@ SetDepthTarget(texture* DepthAttachment, vec2 Clear)
 void directx12_command_list::
 SetStencilTarget(texture* StencilAttachment, vec2 Clear)
 {
-	assert(CurrentContext->Type == pass_type::raster);
-	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
+	assert(CurrContext->Type == pass_type::raster);
+	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
 
 #if 0
 	directx12_texture* Attachment = static_cast<directx12_texture*>(StencilAttachment);
@@ -543,7 +543,7 @@ void directx12_command_list::
 BindShaderParameters(const array<binding_packet>& Data)
 {
 	if(!Data.size()) return;
-    directx12_resource_binder Binder(Gfx, CurrentContext);
+    directx12_resource_binder Binder(Gfx, CurrContext);
 
 	u32 Offset = 0;
     auto DX12BindImageSampler = [&](const binding_packet& Packet, const descriptor_param& Parameter, u32 LayoutIdx) 
@@ -605,9 +605,9 @@ BindShaderParameters(const array<binding_packet>& Data)
         }
     };
 
-    for (u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[0].size(); ++ParamIdx, ++Offset) 
+    for (u32 ParamIdx = 0; ParamIdx < CurrContext->ParameterLayout[0].size(); ++ParamIdx, ++Offset) 
 	{
-        const auto& Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
+        const auto& Parameter = CurrContext->ParameterLayout[0][ParamIdx];
         if (Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform) 
 		{
 			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
@@ -615,11 +615,11 @@ BindShaderParameters(const array<binding_packet>& Data)
         } 
     }
 
-	for (u32 LayoutIdx = 1; LayoutIdx < CurrentContext->ParameterLayout.size(); ++LayoutIdx) 
+	for (u32 LayoutIdx = 1; LayoutIdx < CurrContext->ParameterLayout.size(); ++LayoutIdx) 
 	{
-		for(u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx, ++Offset)
+		for(u32 ParamIdx = 0; ParamIdx < CurrContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx, ++Offset)
 		{
-			const descriptor_param& Parameter = CurrentContext->ParameterLayout[LayoutIdx][ParamIdx];
+			const descriptor_param& Parameter = CurrContext->ParameterLayout[LayoutIdx][ParamIdx];
 			if(Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform)
 			{
 				assert(false && "Buffer in static storage. Currently is not available, use buffers in the inputs");
@@ -636,9 +636,9 @@ BindShaderParameters(const array<binding_packet>& Data)
 	}
 
 	Offset = 0;
-    for (u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[0].size(); ++ParamIdx, ++Offset) 
+    for (u32 ParamIdx = 0; ParamIdx < CurrContext->ParameterLayout[0].size(); ++ParamIdx, ++Offset) 
 	{
-        const auto& Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
+        const auto& Parameter = CurrContext->ParameterLayout[0][ParamIdx];
         if (Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform) 
 		{
 			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
@@ -656,19 +656,19 @@ BindShaderParameters(const array<binding_packet>& Data)
         }
     }
 
-    if (CurrentContext->Type == pass_type::raster) 
+    if (CurrContext->Type == pass_type::raster) 
 	{
         DX12SetRootDescriptors(
-            static_cast<directx12_render_context*>(CurrentContext),
+            static_cast<directx12_render_context*>(CurrContext),
             &ID3D12GraphicsCommandList::SetGraphicsRootDescriptorTable,
             &ID3D12GraphicsCommandList::SetGraphicsRootShaderResourceView,
             &ID3D12GraphicsCommandList::SetGraphicsRootUnorderedAccessView
         );
     } 
-	else if (CurrentContext->Type == pass_type::compute) 
+	else if (CurrContext->Type == pass_type::compute) 
 	{
         DX12SetRootDescriptors(
-            static_cast<directx12_compute_context*>(CurrentContext),
+            static_cast<directx12_compute_context*>(CurrContext),
             &ID3D12GraphicsCommandList::SetComputeRootDescriptorTable,
             &ID3D12GraphicsCommandList::SetComputeRootShaderResourceView,
             &ID3D12GraphicsCommandList::SetComputeRootUnorderedAccessView
@@ -679,8 +679,12 @@ BindShaderParameters(const array<binding_packet>& Data)
 void directx12_command_list::
 BeginRendering(u32 RenderWidth, u32 RenderHeight)
 {
-	if(CurrentContext->Type != pass_type::raster) return;
-	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
+	if(!CurrContext) return;
+	if(CurrContext->Type != pass_type::raster) return;
+	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
+
+	GfxWidth  = RenderWidth;
+	GfxHeight = RenderHeight;
 
 	CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
 }
@@ -688,7 +692,9 @@ BeginRendering(u32 RenderWidth, u32 RenderHeight)
 void directx12_command_list::
 EndRendering()
 {
-	if(CurrentContext->Type != pass_type::raster) return;
+	if(!CurrContext) return;
+	PrevContext = CurrContext;
+	if(CurrContext->Type != pass_type::raster) return;
 
 	ColorTargets.clear();
 	DepthStencilTarget = {};
@@ -697,33 +703,34 @@ EndRendering()
 void directx12_command_list::
 DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount)
 {
-	assert(CurrentContext->Type == pass_type::raster);
+	assert(CurrContext->Type == pass_type::raster);
 
 	CommandList->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 }
 
 void directx12_command_list::
-DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize)
+DrawIndirect(u32 ObjectDrawCount, u32 CommandStructureSize)
 {
-	assert(CurrentContext->Type == pass_type::raster);
-	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrentContext);
+	assert(CurrContext->Type == pass_type::raster);
+	assert(IndirectCommands);
 
-	//BuffersToCommon.insert(IndirectCommands);
-	//AttachmentBufferBarriers.push_back({IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
+	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
 
 	directx12_buffer* Indirect = static_cast<directx12_buffer*>(IndirectCommands);
 	CommandList->ExecuteIndirect(Context->IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), !Context->HaveDrawID * 4, Indirect->CounterHandle.Get(), 0);
+
+	IndirectCommands = nullptr;
 }
 
 void directx12_command_list::
 Dispatch(u32 X, u32 Y, u32 Z)
 {
-	assert(CurrentContext->Type == pass_type::compute);
+	assert(CurrContext->Type == pass_type::compute);
 
 	SetBufferBarriers(AttachmentBufferBarriers);
 	SetImageBarriers(AttachmentImageBarriers);
 
-	directx12_compute_context* Context = static_cast<directx12_compute_context*>(CurrentContext);
+	directx12_compute_context* Context = static_cast<directx12_compute_context*>(CurrContext);
 	CommandList->Dispatch((X + Context->BlockSizeX - 1) / Context->BlockSizeX, (Y + Context->BlockSizeY - 1) / Context->BlockSizeY, (Z + Context->BlockSizeZ - 1) / Context->BlockSizeZ);
 
 	AttachmentImageBarriers.clear();

@@ -399,7 +399,9 @@ End()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	CommandQueue->Execute(&CommandList);
-	CurrentContext = nullptr;
+
+	PrevContext = nullptr;
+	CurrContext = nullptr;
 }
 
 void vulkan_command_list::
@@ -407,7 +409,9 @@ EndOneTime()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	CommandQueue->ExecuteAndRemove(&CommandList);
-	CurrentContext = nullptr;
+
+	PrevContext = nullptr;
+	CurrContext = nullptr;
 }
 
 void vulkan_command_list::
@@ -424,7 +428,9 @@ Present()
 	PresentInfo.pSwapchains = &Gfx->Swapchain;
 	PresentInfo.pImageIndices = &BackBufferIndex;
 	vkQueuePresentKHR(CommandQueue->Handle, &PresentInfo);
-	CurrentContext = nullptr;
+
+	PrevContext = nullptr;
+	CurrContext = nullptr;
 }
 
 
@@ -649,9 +655,9 @@ ReadBack(texture* TextureToRead, void* Data)
 void vulkan_command_list::
 SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 {
-	assert(CurrentContext->Type == pass_type::raster);
+	assert(CurrContext->Type == pass_type::raster);
 
-	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 
 	VkRenderingAttachmentInfoKHR* ColorInfo = PushArray(VkRenderingAttachmentInfoKHR, ColorTargets.size());
 	for(u32 AttachmentIdx = 0; AttachmentIdx < ColorTargets.size(); ++AttachmentIdx)
@@ -680,10 +686,10 @@ SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 void vulkan_command_list::
 SetDepthTarget(texture* Target, vec2 Clear)
 {
-	assert(CurrentContext->Type == pass_type::raster);
+	assert(CurrContext->Type == pass_type::raster);
 	TexturesToCommon.insert(Target);
 
-	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	vulkan_texture* Attachment = static_cast<vulkan_texture*>(Target);
 
 	VkRenderingAttachmentInfoKHR* DepthInfo = PushStruct(VkRenderingAttachmentInfoKHR);
@@ -705,12 +711,12 @@ SetDepthTarget(texture* Target, vec2 Clear)
 void vulkan_command_list::
 SetStencilTarget(texture* Target, vec2 Clear)
 {
-	assert(CurrentContext->Type == pass_type::raster);
+	assert(CurrContext->Type == pass_type::raster);
 
 	AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, PSF_EarlyFragment});
 	TexturesToCommon.insert(Target);
 
-	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	vulkan_texture* Attachment = static_cast<vulkan_texture*>(Target);
 
 	VkRenderingAttachmentInfoKHR* StencilInfo = PushStruct(VkRenderingAttachmentInfoKHR);
@@ -733,30 +739,30 @@ void vulkan_command_list::
 BindShaderParameters(const array<binding_packet>& Data)
 {
 	if(!Data.size()) return;
-	vulkan_resource_binder Binder(Gfx, CurrentContext);
+	vulkan_resource_binder Binder(Gfx, CurrContext);
 
 	VkPipelineLayout Layout = {};
 	VkPipelineBindPoint BindPoint = {};
-	if(CurrentContext->Type == pass_type::raster)
+	if(CurrContext->Type == pass_type::raster)
 	{
-		vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(CurrentContext);
+		vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(CurrContext);
 
 		BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		Layout = ContextToBind->RootSignatureHandle;
 	}
-	else if(CurrentContext->Type == pass_type::compute)
+	else if(CurrContext->Type == pass_type::compute)
 	{
-		vulkan_compute_context* ContextToBind = static_cast<vulkan_compute_context*>(CurrentContext);
+		vulkan_compute_context* ContextToBind = static_cast<vulkan_compute_context*>(CurrContext);
 
 		BindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
 		Layout = ContextToBind->RootSignatureHandle;
 	}
 
 	u32 Offset = 0;
-	u32 ParamCount = CurrentContext->ParameterLayout[0].size();
+	u32 ParamCount = CurrContext->ParameterLayout[0].size();
 	for(u32 ParamIdx = 0; ParamIdx < ParamCount; ++ParamIdx, ++Offset)
 	{
-		descriptor_param Parameter = CurrentContext->ParameterLayout[0][ParamIdx];
+		descriptor_param Parameter = CurrContext->ParameterLayout[0][ParamIdx];
 		if(Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform)
 		{
 			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
@@ -786,11 +792,11 @@ BindShaderParameters(const array<binding_packet>& Data)
 		}
 	}
 
-	for(u32 LayoutIdx = 1; LayoutIdx < CurrentContext->ParameterLayout.size(); ++LayoutIdx)
+	for(u32 LayoutIdx = 1; LayoutIdx < CurrContext->ParameterLayout.size(); ++LayoutIdx)
 	{
-		for(u32 ParamIdx = 0; ParamIdx < CurrentContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx, ++Offset)
+		for(u32 ParamIdx = 0; ParamIdx < CurrContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx, ++Offset)
 		{
-			descriptor_param Parameter = CurrentContext->ParameterLayout[LayoutIdx][ParamIdx];
+			descriptor_param Parameter = CurrContext->ParameterLayout[LayoutIdx][ParamIdx];
 			if(Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform)
 			{
 				assert(false && "Buffer in static storage. Currently is not available, use buffers in the inputs");
@@ -828,9 +834,12 @@ BindShaderParameters(const array<binding_packet>& Data)
 void vulkan_command_list::
 BeginRendering(u32 RenderWidth, u32 RenderHeight)
 {
-	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
-
+	if(!CurrContext) return;
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	if(Context->Type != pass_type::raster) return;
+
+	GfxWidth  = RenderWidth;
+	GfxHeight = RenderHeight;
 
 	RenderingInfo.renderArea = RenderPassInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
 	RenderingInfo.layerCount = 1;
@@ -865,15 +874,20 @@ BeginRendering(u32 RenderWidth, u32 RenderHeight)
 void vulkan_command_list::
 EndRendering()
 {
-	if(CurrentContext->Type != pass_type::raster) return;
+	if(!CurrContext) return;
+	PrevContext = CurrContext;
+	if(CurrContext->Type != pass_type::raster) return;
 
-	if(!Gfx->Features13.dynamicRendering)
+	if(PrevContext && PrevContext->Type == pass_type::raster)
 	{
-		vkCmdEndRenderPass(CommandList);
-	}
-	else
-	{
-		vkCmdEndRenderingKHR(CommandList);
+		if(!Gfx->Features13.dynamicRendering)
+		{
+			vkCmdEndRenderPass(CommandList);
+		}
+		else
+		{
+			vkCmdEndRenderingKHR(CommandList);
+		}
 	}
 
 	AttachmentViews.clear();
@@ -889,8 +903,8 @@ EndRendering()
 void vulkan_render_context::
 Draw(u32 FirstVertex, u32 VertexCount, u32 FirstInstance, u32 InstanceCount)
 {
-	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
-	assert(CurrentContext->Type == pass_type::raster);
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
+	assert(CurrContext->Type == pass_type::raster);
 
 	SetBufferBarriers(AttachmentBufferBarriers);
 	SetImageBarriers(AttachmentImageBarriers);
@@ -905,35 +919,35 @@ Draw(u32 FirstVertex, u32 VertexCount, u32 FirstInstance, u32 InstanceCount)
 void vulkan_command_list::
 DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount)
 {
-	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
-	assert(CurrentContext->Type == pass_type::raster);
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
+	assert(CurrContext->Type == pass_type::raster);
 
 	vkCmdDrawIndexed(CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 }
 
 void vulkan_command_list::
-DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize)
+DrawIndirect(u32 ObjectDrawCount, u32 CommandStructureSize)
 {
-	assert(CurrentContext->Type == pass_type::raster);
+	assert(CurrContext->Type == pass_type::raster);
+	assert(IndirectCommands);
 
-	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	vulkan_buffer* IndirectCommandsAttachment = static_cast<vulkan_buffer*>(IndirectCommands);
 
-	//BuffersToCommon.insert(IndirectCommands);
-	//AttachmentBufferBarriers.push_back({IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
-
 	vkCmdDrawIndexedIndirectCount(CommandList, IndirectCommandsAttachment->Handle, 4, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
+
+	IndirectCommands = nullptr;
 }
 
 void vulkan_command_list::
 Dispatch(u32 X, u32 Y, u32 Z)
 {
-	assert(CurrentContext->Type == pass_type::compute);
+	assert(CurrContext->Type == pass_type::compute);
 
 	SetBufferBarriers(AttachmentBufferBarriers);
 	SetImageBarriers(AttachmentImageBarriers);
 
-	vulkan_compute_context* Context = static_cast<vulkan_compute_context*>(CurrentContext);
+	vulkan_compute_context* Context = static_cast<vulkan_compute_context*>(CurrContext);
 	vkCmdDispatch(CommandList, (X + Context->BlockSizeX - 1) / Context->BlockSizeX, (Y + Context->BlockSizeY - 1) / Context->BlockSizeY, (Z + Context->BlockSizeZ - 1) / Context->BlockSizeZ);
 
 	AttachmentImageBarriers.clear();
@@ -944,9 +958,9 @@ bool vulkan_command_list::
 SetGraphicsPipelineState(render_context* Context)
 {
 	assert(Context->Type == pass_type::raster);
-	if(Context == CurrentContext) return false;
+	if(Context == CurrContext) return false;
 
-	CurrentContext = Context;
+	CurrContext = Context;
 	vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(Context);
 	vkCmdBindPipeline(CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, ContextToBind->Pipeline);
 
@@ -966,9 +980,9 @@ bool vulkan_command_list::
 SetComputePipelineState(compute_context* Context)
 {
 	assert(Context->Type == pass_type::compute);
-	if(Context == CurrentContext) return false;
+	if(Context == CurrContext) return false;
 
-	CurrentContext = Context;
+	CurrContext = Context;
 	vulkan_compute_context* ContextToBind = static_cast<vulkan_compute_context*>(Context);
 	vkCmdBindPipeline(CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, ContextToBind->Pipeline);
 
@@ -987,14 +1001,14 @@ SetComputePipelineState(compute_context* Context)
 void vulkan_command_list::
 SetConstant(void* Data, size_t Size)
 {
-	if(CurrentContext->Type == pass_type::raster)
+	if(CurrContext->Type == pass_type::raster)
 	{
-		vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(CurrentContext);
+		vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(CurrContext);
 		vkCmdPushConstants(CommandList, ContextToBind->RootSignatureHandle, ContextToBind->ConstantRange.stageFlags, 0, Size, Data);
 	}
-	else if(CurrentContext->Type == pass_type::compute)
+	else if(CurrContext->Type == pass_type::compute)
 	{
-		vulkan_compute_context* ContextToBind = static_cast<vulkan_compute_context*>(CurrentContext);
+		vulkan_compute_context* ContextToBind = static_cast<vulkan_compute_context*>(CurrContext);
 		vkCmdPushConstants(CommandList, ContextToBind->RootSignatureHandle, ContextToBind->ConstantRange.stageFlags, 0, Size, Data);
 	}
 }
@@ -1002,12 +1016,12 @@ SetConstant(void* Data, size_t Size)
 void vulkan_command_list::
 SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight)
 {
-	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrentContext);
+	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 
-	VkViewport Viewport = {(float)StartX, (float)(Gfx->Height - StartY), (float)RenderWidth, -(float)RenderHeight, 0, 1};
+	VkViewport Viewport = {(float)StartX, (float)(GfxHeight - StartY), (float)RenderWidth, -(float)RenderHeight, 0, 1};
 	vkCmdSetViewport(CommandList, 0, 1, &Viewport);
 
-	VkRect2D Scissor = {{(s32)StartX, (s32)(Gfx->Height - (RenderHeight + StartY))}, {RenderWidth, RenderHeight}};
+	VkRect2D Scissor = {{(s32)StartX, (s32)(GfxHeight - (RenderHeight + StartY))}, {RenderWidth, RenderHeight}};
 	vkCmdSetScissor(CommandList, 0, 1, &Scissor);
 }
 

@@ -64,6 +64,7 @@ struct directx12_buffer : public buffer
 
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
+		if(!Data) return;
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->Update(this, Data);
@@ -72,6 +73,7 @@ struct directx12_buffer : public buffer
 
 	void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
 	{
+		if(!Data) return;
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->UpdateSize(this, Data, UpdateByteSize);
@@ -80,6 +82,7 @@ struct directx12_buffer : public buffer
 
 	void ReadBack(renderer_backend* Backend, void* Data) override
 	{
+		if(!Data) return;
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->ReadBack(this, Data);
@@ -88,6 +91,7 @@ struct directx12_buffer : public buffer
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
 	{
+		if(!Data) return;
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->ReadBackSize(this, Data, UpdateByteSize);
@@ -100,7 +104,7 @@ struct directx12_buffer : public buffer
 		WithCounter = NewUsage & RF_WithCounter;
 
 		Name = DebugName;
-		Size = NewSize * Count + WithCounter * sizeof(u32);
+		Size = NewSize * Count;// + WithCounter * sizeof(u32);
 		Usage = NewUsage;
 		CounterOffset = NewSize * Count;
 
@@ -256,6 +260,7 @@ struct directx12_texture : public texture
 
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
+		if(!Data) return;
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->Update(this, Data);
@@ -264,6 +269,7 @@ struct directx12_texture : public texture
 
 	void ReadBack(renderer_backend* Backend, void* Data) override 
 	{
+		if(!Data) return;
 		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
 		Cmd->Begin();
 		Cmd->ReadBack(this, Data);

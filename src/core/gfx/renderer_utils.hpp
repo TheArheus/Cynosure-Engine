@@ -1,26 +1,21 @@
 #pragma once
 
 #if defined(__clang__) || defined(__GNUC__)
-	#define shader_input(...) struct __attribute__((annotate("shader-input" #__VA_ARGS__)))
-	#define shader_param(...) __attribute__((annotate("shader-param;" #__VA_ARGS__)))
+	#define shader_input(...) struct __attribute__((annotate("reflection;" #__VA_ARGS__)))
+	#define shader_param(...) __attribute__((annotate("reflection;" #__VA_ARGS__)))
 #else
 	#define shader_input(...) struct
 	#define shader_param(...)
 #endif
 
-struct draw_indexed_indirect_command
+struct indirect_draw_indexed_command
 {
+	u32 DrawID;
     u32 IndexCount;
     u32 InstanceCount;
     u32 FirstIndex;
     s32 VertexOffset;
     u32 FirstInstance;
-};
-
-struct indirect_draw_indexed_command
-{
-	u32 DrawID;
-	draw_indexed_indirect_command DrawArg;
 };
 
 struct prim_vert
@@ -648,6 +643,7 @@ struct binding_packet
 	array<resource*> Resources;
 	u64 SubresourceIndex = SUBRESOURCES_ALL;
 	u64 Mips = SUBRESOURCES_ALL;
+	bool IsNotBound = false;
 };
 
 struct buffer_barrier
@@ -718,7 +714,7 @@ struct command_list
 	virtual void EndRendering() = 0;
 
 	virtual void DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance, u32 InstanceCount) = 0;
-	virtual void DrawIndirect(buffer* IndirectCommands, u32 ObjectDrawCount, u32 CommandStructureSize) = 0;
+	virtual void DrawIndirect(u32 ObjectDrawCount, u32 CommandStructureSize) = 0;
 	virtual void Dispatch(u32 X = 1, u32 Y = 1, u32 Z = 1) = 0;
 
 	virtual void FillBuffer(buffer* Buffer, u32 Value) = 0;
@@ -740,7 +736,9 @@ struct command_list
 	u32 GfxWidth;
 	u32 GfxHeight;
 
-	general_context* CurrentContext = nullptr;
+	buffer* IndirectCommands = nullptr;
+	general_context* CurrContext = nullptr;
+	general_context* PrevContext = nullptr;
 
 	std::unordered_set<buffer*>  BuffersToCommon;
 	std::unordered_set<texture*> TexturesToCommon;
@@ -759,7 +757,7 @@ struct resource_binder
 	resource_binder(const resource_binder&) = delete;
 	resource_binder operator=(const resource_binder&) = delete;
 
-	virtual void SetContext(general_context* ContextToUse) = 0;
+	virtual bool SetContext(general_context* ContextToUse) = 0;
 
 	virtual void AppendStaticStorage(general_context* Context, const array<binding_packet>& Data, u32 Offset) = 0;
 	virtual void BindStaticStorage(renderer_backend* GeneralBackend) = 0;
@@ -771,6 +769,8 @@ struct resource_binder
 	virtual void SetSampledImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 	virtual void SetStorageImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 	virtual void SetImageSampler(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
+
+	general_context* CurrContext = nullptr;
 };
 
 

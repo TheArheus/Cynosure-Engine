@@ -2,6 +2,7 @@
 
 #include <time.h>
 #include <dlfcn.h>
+#include <sys/file.h>
 
 #include <glfw/glfw3native.h>
 #include <glfw/glfw3.h>

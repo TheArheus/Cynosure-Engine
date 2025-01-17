@@ -2,8 +2,8 @@
 void engine::
 Init(const std::vector<std::string>& args)
 {
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 
 	CreateGuiContext(&Window);
 
@@ -63,8 +63,11 @@ Run()
 			Parameters.Vertices = GuiVertexBuffer;
 			Parameters.Texture  = GlobalGuiContext->FontAtlas;
 
-			Window.Gfx.AddRasterPass<primitive_2d>("Gui Rendering", Parameters, RasterParameters, [IndexCount = GlobalGuiContext->Indices.size(), FramebufferDims = vec2(Window.Width, Window.Height)](command_list* Cmd)
+			// TODO: Viewport to be the size of the layout width and height from position x and y
+			Window.Gfx.AddRasterPass<primitive_2d>("Gui Rendering", Window.Width, Window.Height, Parameters, RasterParameters, 
+			[IndexCount = GlobalGuiContext->Indices.size(), FramebufferDims = vec2(Window.Width, Window.Height)](command_list* Cmd)
 			{
+				Cmd->SetViewport(0, 0, FramebufferDims.x, FramebufferDims.y);
 				Cmd->SetConstant((void*)FramebufferDims.E, sizeof(vec2));
 				Cmd->DrawIndexed(0, IndexCount, 0, 0, 1);
 			});
@@ -80,7 +83,7 @@ Run()
 		GlobalGuiContext->Indices.clear();
 		Window.Gfx.SwapBuffers();
 		Window.UpdateStates();
-		Allocator.UpdateAndReset();
+		Allocator->UpdateAndReset();
 	}
 
 	window::EventsDispatcher.Reset();
@@ -157,7 +160,7 @@ LoadModule()
         return;
     }
 
-    Module.reset(GameModuleCreate(Window, window::EventsDispatcher, Registry, Window.Gfx, GlobalGuiContext));
+    Module.reset(GameModuleCreate(Allocator, Window, window::EventsDispatcher, Registry, Window.Gfx, GlobalGuiContext));
 
     ModuleInfo.Name             = OriginalPath.stem().string();
     ModuleInfo.Path             = OriginalPath.string();

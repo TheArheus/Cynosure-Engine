@@ -16,6 +16,16 @@
   #define RENDERER_API
 #endif
 
+#if defined(_MSC_VER)
+    #define PACKED_STRUCT(...) \
+        __pragma(pack(push, 1)) struct __declspec(align(4)) __VA_ARGS__ __pragma(pack(pop))
+#elif defined(__GNUC__) || defined(__clang__)
+    #define PACKED_STRUCT(...) \
+        struct __attribute__((packed, aligned(4))) __VA_ARGS__
+#else
+    #error "Compiler not supported for PACKED_STRUCT macro."
+#endif
+
 #include <array>
 #include <bitset>
 #include <cassert>

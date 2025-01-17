@@ -769,7 +769,13 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 		{
 			for (const auto& [Binding, Param] : Bindings)
 			{
-				ParameterLayout[Set][Binding] = Param;
+				ParameterLayout[Set][Binding].Type         = Param.Type;
+				ParameterLayout[Set][Binding].Count        = Param.Count;
+				ParameterLayout[Set][Binding].IsWritable   = Param.IsWritable;
+				ParameterLayout[Set][Binding].ImageType    = Param.ImageType;
+				ParameterLayout[Set][Binding].ShaderToUse |= Param.ShaderToUse;
+				ParameterLayout[Set][Binding].BarrierState = Param.BarrierState;
+				ParameterLayout[Set][Binding].AspectMask   = Param.AspectMask;
 			}
 		}
 		CompiledShaders[Path].ParameterLayout.insert(ParameterLayoutTemp.begin(), ParameterLayoutTemp.end());

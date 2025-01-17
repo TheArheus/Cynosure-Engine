@@ -102,10 +102,11 @@ ModuleUpdate()
 
 		primitive_2d::parameters Parameters = {};
 		Parameters.Vertices = VertexBuffer;
-		Parameters.Texture  = Gfx.ColorTarget[Gfx.BackBufferIndex]; // NOTE: this is temporary. I need to implement so that if I don't bind a texture there would be a null texture
 
-		Gfx.AddRasterPass<primitive_2d>("Primitive Rendering", Parameters, RasterParameters, [IndexCount = Indices.size(), FramebufferDims = vec2(Window.Width, Window.Height)](command_list* Cmd)
+		Gfx.AddRasterPass<primitive_2d>("Primitive Rendering", Window.Width, Window.Height, Parameters, RasterParameters, 
+		[IndexCount = Indices.size(), FramebufferDims = vec2(Window.Width, Window.Height)](command_list* Cmd)
 		{
+			Cmd->SetViewport(0, 0, FramebufferDims.x, FramebufferDims.y);
 			Cmd->SetConstant((void*)FramebufferDims.E, sizeof(vec2));
 			Cmd->DrawIndexed(0, IndexCount, 0, 0, 1);
 		});
@@ -429,6 +430,7 @@ OnButtonHold(key_hold_event& Event)
 
 extern "C" GameModuleCreateFunc(GameModuleCreate)
 {
+	Allocator = NewAllocator;
 	ImGui::SetCurrentContext(NewWindow.imguiContext.get());
 	GlobalGuiContext = NewContext;
 	game_module* Ptr = new path_finding_visualizer(NewWindow, NewEventDispatcher, NewRegistry, NewGfx);

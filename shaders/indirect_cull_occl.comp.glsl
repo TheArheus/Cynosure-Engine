@@ -84,7 +84,7 @@ void main()
 	uint DrawIndex = gl_GlobalInvocationID.x;
 	if(DrawIndex >= DrawCount) return;
 
-	uint MeshIndex = MeshDrawCommandData[DrawIndex].MeshIndex - 1;
+	uint MeshIndex = MeshDrawCommandData[DrawIndex].MeshIndex;
 
 	mat4 Proj = MeshCullingCommonInput.Proj;
 	mat4 View = MeshCullingCommonInput.View;

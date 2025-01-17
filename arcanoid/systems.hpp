@@ -52,10 +52,11 @@ struct render_system : public entity_system
 
 			primitive_2d::parameters Parameters = {};
 			Parameters.Vertices = VertexBuffer;
-			Parameters.Texture  = Gfx.ColorTarget[Gfx.BackBufferIndex]; // NOTE: this is temporary. I need to implement so that if I don't bind a texture there would be a null texture
 
-			Gfx.AddRasterPass<primitive_2d>("Primitive Rendering", Parameters, RasterParameters, [IndexCount = Indices.size(), FramebufferDims](command_list* Cmd)
+			Gfx.AddRasterPass<primitive_2d>("Primitive Rendering", FramebufferDims.x, FramebufferDims.y, Parameters, RasterParameters, 
+			[IndexCount = Indices.size(), FramebufferDims](command_list* Cmd)
 			{
+				Cmd->SetViewport(0, 0, FramebufferDims.x, FramebufferDims.y);
 				Cmd->SetConstant((void*)FramebufferDims.E, sizeof(vec2));
 				Cmd->DrawIndexed(0, IndexCount, 0, 0, 1);
 			});

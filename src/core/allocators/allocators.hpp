@@ -138,19 +138,19 @@ private:
 	std::vector<std::unique_ptr<linear_allocator>> MemoryBlocks;
 };
 
-inline global_memory_allocator Allocator;
+inline global_memory_allocator* Allocator = nullptr;
 
-#define PushStructConstruct(Type, ...) new (Allocator.Allocate(sizeof(Type), alignof(Type))) Type(__VA_ARGS__)
+#define PushStructConstruct(Type, ...) new (Allocator->Allocate(sizeof(Type), alignof(Type))) Type(__VA_ARGS__)
 #define PushArrayConstruct(Type, Count, ...) \
     { \
-        Type* memory = (Type*)Allocator.Allocate(sizeof(Type) * Count, alignof(Type)); \
+        Type* memory = (Type*)Allocator->Allocate(sizeof(Type) * Count, alignof(Type)); \
         for (size_t i = 0; i < Count; ++i) { \
             new (&memory[i]) Type(__VA_ARGS__); \
         } \
     }
-#define PushStruct(Type) (Type*)Allocator.Allocate(sizeof(Type), alignof(Type))
-#define PushArray(Type, Count) (Type*)Allocator.Allocate(sizeof(Type) * Count, alignof(Type))
-#define PushSize(Size) Allocator.Allocate(Size)
+#define PushStruct(Type) (Type*)Allocator->Allocate(sizeof(Type), alignof(Type))
+#define PushArray(Type, Count) (Type*)Allocator->Allocate(sizeof(Type) * Count, alignof(Type))
+#define PushSize(Size) Allocator->Allocate(Size)
 
 
 // TODO: use another default allocator

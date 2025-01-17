@@ -61,7 +61,8 @@ public:
         {
             if (const AnnotateAttr* Annot = dyn_cast<AnnotateAttr>(Attr))
             {
-                if (Annot->getAnnotation() == "shader-input")
+				std::string Annotation = Annot->getAnnotation().str();
+                if (Annotation.find("reflection") != std::string::npos)
                 {
                     IsAnnotated = true;
                     break;

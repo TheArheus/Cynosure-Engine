@@ -312,13 +312,13 @@ void window::SetTitle(std::string& Title)
 void window::InitVulkanGraphics()
 {
 	ImGui::SetCurrentContext(imguiContext.get());
-	Gfx = global_graphics_context(backend_type::vulkan, WindowClass.Inst, Handle, imguiContext.get());
+	Gfx = global_graphics_context(backend_type::vulkan, WindowClass.Inst, Handle, imguiContext.get(), Allocator);
 }
 
 void window::InitDirectx12Graphics()
 {
 	ImGui::SetCurrentContext(imguiContext.get());
-	Gfx = global_graphics_context(backend_type::directx12, WindowClass.Inst, Handle, imguiContext.get());
+	Gfx = global_graphics_context(backend_type::directx12, WindowClass.Inst, Handle, imguiContext.get(), Allocator);
 }
 
 void* window::
@@ -355,7 +355,7 @@ void window::SleepFor(double Time)
 bool window::
 IsFileLocked(const std::filesystem::path& FilePath)
 {
-    HANDLE fileHandle = CreateFileW(
+    HANDLE FileHandle = CreateFileW(
         FilePath.wstring().c_str(),
         GENERIC_READ | GENERIC_WRITE,
         0,
@@ -365,13 +365,13 @@ IsFileLocked(const std::filesystem::path& FilePath)
         nullptr
     );
 
-    if (fileHandle == INVALID_HANDLE_VALUE)
+    if (FileHandle == INVALID_HANDLE_VALUE)
     {
         return true;
     }
     else
     {
-        CloseHandle(fileHandle);
+        CloseHandle(FileHandle);
         return false;
     }
 }

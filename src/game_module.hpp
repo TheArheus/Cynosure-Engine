@@ -25,5 +25,5 @@ public:
 	bool IsInitialized = false;
 };
 
-#define GameModuleCreateFunc(name) game_module* name(window& NewWindow, event_bus& NewEventDispatcher, registry& NewRegistry, global_graphics_context& NewGfx, ce_gui_context* NewContext)
+#define GameModuleCreateFunc(name) game_module* name(global_memory_allocator* NewAllocator, window& NewWindow, event_bus& NewEventDispatcher, registry& NewRegistry, global_graphics_context& NewGfx, ce_gui_context* NewContext)
 typedef GameModuleCreateFunc(game_module_create);

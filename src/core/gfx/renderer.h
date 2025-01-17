@@ -9,6 +9,9 @@ struct shader_pass
 	string Name;
 	pass_type Type;
 
+	u32 Width  = 0;
+	u32 Height = 0;
+
 	void* ShaderParameters;
 	meta_descriptor* ShaderReflection;
 
@@ -23,6 +26,7 @@ struct shader_pass
 	array<u64> Outputs;
 
 	bool ParamsChanged = false;
+	bool IsNewContext  = false;
 };
 
 struct resource_lifetime
@@ -53,6 +57,17 @@ struct resource_state
 	}
 };
 
+struct bound_resource
+{
+    u64 ResourceID;
+    u64 SubresourceIdx;
+
+    bool operator==(const bound_resource& other) const
+    {
+        return (ResourceID == other.ResourceID && SubresourceIdx == other.SubresourceIdx);
+    }
+};
+
 class global_graphics_context
 {
 	global_graphics_context(const global_graphics_context&) = delete;
@@ -71,7 +86,7 @@ public:
 	RENDERER_API global_graphics_context() = default;
 
 #ifdef _WIN32
-	RENDERER_API global_graphics_context(backend_type _BackendType, HINSTANCE Instance, HWND Window, ImGuiContext* imguiContext);
+	RENDERER_API global_graphics_context(backend_type _BackendType, HINSTANCE Instance, HWND Window, ImGuiContext* imguiContext, global_memory_allocator* NewAllocator);
 #else
 	RENDERER_API global_graphics_context(backend_type _BackendType, GLFWwindow* Window);
 #endif
@@ -87,7 +102,7 @@ public:
 	RENDERER_API bool SetContext(shader_pass* Pass, command_list* Context);
 
 	template<typename context_type, typename param_type, typename raster_param_type>
-	RENDERER_API void AddRasterPass(std::string Name, param_type Parameters, raster_param_type RasterParameters, execute_func Exec);
+	RENDERER_API void AddRasterPass(std::string Name, u32 Width, u32 Height, param_type Parameters, raster_param_type RasterParameters, execute_func Exec, execute_func SetupExec = [](command_list* Cmd){});
 	template<typename context_type, typename param_type>
 	RENDERER_API void AddComputePass(std::string Name, param_type Parameters, execute_func Exec);
 
@@ -108,6 +123,7 @@ public:
 	std::unordered_map<std::type_index, std::unique_ptr<shader_view_context>> GeneralShaderViewMap;
 	
 	std::unordered_map<shader_pass*, execute_func> Dispatches;
+	std::unordered_map<shader_pass*, execute_func> SetupDispatches;
 	std::unordered_map<shader_pass*, std::type_index> PassToContext;
 
 	std::vector<shader_pass*> Passes;
@@ -129,11 +145,13 @@ public:
 
 template<typename context_type, typename param_type, typename raster_param_type>
 void global_graphics_context::
-AddRasterPass(std::string Name, param_type Parameters, raster_param_type RasterParameters, execute_func Exec)
+AddRasterPass(std::string Name, u32 Width, u32 Height, param_type Parameters, raster_param_type RasterParameters, execute_func Exec, execute_func SetupExec)
 {
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string(Name);
 	NewPass->Type = pass_type::raster;
+	NewPass->Width  = Width;
+	NewPass->Height = Height;
 
 	NewPass->ShaderReflection = reflect<param_type>::Get();
 	NewPass->ShaderParameters = PushStruct(param_type);
@@ -145,6 +163,7 @@ AddRasterPass(std::string Name, param_type Parameters, raster_param_type RasterP
 
 	Passes.push_back(NewPass);
 	Dispatches[NewPass] = Exec;
+	SetupDispatches[NewPass] = SetupExec;
 	PassToContext.emplace(NewPass, std::type_index(typeid(context_type)));
 
 	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));
@@ -172,6 +191,7 @@ AddComputePass(std::string Name, param_type Parameters, execute_func Exec)
 
 	Passes.push_back(NewPass);
 	Dispatches[NewPass] = Exec;
+	SetupDispatches[NewPass] = [](command_list* Cmd){};
 	PassToContext.emplace(NewPass, std::type_index(typeid(context_type)));
 
 	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));

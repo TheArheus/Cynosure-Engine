@@ -21,7 +21,6 @@ enum class pass_type
 {
 	raster,
 	compute,
-	transfer,
 };
 
 enum class preferred_gpu_type
