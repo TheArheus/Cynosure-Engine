@@ -61,17 +61,16 @@ struct light_source
 layout(set = 0, binding = 0)  readonly buffer b0 { global_world_data WorldUpdate; };
 layout(set = 0, binding = 1)  readonly buffer b1 { light_source LightSources[LIGHT_SOURCES_MAX_COUNT]; };
 layout(set = 0, binding = 2)  readonly buffer b2 { vec2 PoissonDisk[SAMPLES_COUNT]; };
-layout(set = 0, binding = 3)  readonly buffer b3 { vec4 HemisphereSamples[SAMPLES_COUNT]; };
-layout(set = 0, binding = 4)  uniform sampler2D PrevColorTarget;
-layout(set = 0, binding = 5)  uniform sampler2D DepthTarget;
-layout(set = 0, binding = 6)  uniform sampler2D VolumetricLightTexture;
-layout(set = 0, binding = 7)  uniform sampler2D IndirectLightTexture;
-layout(set = 0, binding = 8)  uniform sampler3D RandomAnglesTexture;
-layout(set = 0, binding = 9)  uniform sampler2D GBuffer[GBUFFER_COUNT];
-layout(set = 0, binding = 10) uniform sampler2D AmbientOcclusionBuffer;
-layout(set = 0, binding = 11) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
-layout(set = 0, binding = 12) uniform writeonly image2D ColorTarget;
-layout(set = 0, binding = 13) uniform writeonly image2D BrightTarget;
+layout(set = 0, binding = 3)  uniform sampler2D PrevColorTarget;
+layout(set = 0, binding = 4)  uniform sampler2D DepthTarget;
+layout(set = 0, binding = 5)  uniform sampler2D VolumetricLightTexture;
+layout(set = 0, binding = 6)  uniform sampler2D IndirectLightTexture;
+layout(set = 0, binding = 7)  uniform sampler3D RandomAnglesTexture;
+layout(set = 0, binding = 8)  uniform sampler2D GBuffer[GBUFFER_COUNT];
+layout(set = 0, binding = 9)  uniform sampler2D AmbientOcclusionBuffer;
+layout(set = 0, binding = 10) uniform sampler2D ShadowMap[DEPTH_CASCADES_COUNT];
+layout(set = 0, binding = 11) uniform writeonly image2D ColorTarget;
+layout(set = 0, binding = 12) uniform writeonly image2D BrightTarget;
 
 layout(set = 1, binding = 0) uniform sampler2D ShadowMaps[LIGHT_SOURCES_MAX_COUNT];
 layout(set = 2, binding = 0) uniform samplerCube PointShadowMaps[LIGHT_SOURCES_MAX_COUNT];

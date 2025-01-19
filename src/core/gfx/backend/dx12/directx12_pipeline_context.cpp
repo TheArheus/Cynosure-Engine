@@ -572,6 +572,9 @@ BindShaderParameters(const array<binding_packet>& Data)
 	{
         Binder.SetStorageBufferView(BufferToBind);
         BuffersToCommon.insert(BufferToBind);
+		BuffersToCommon.insert(BufferToBind->UpdateBuffer);
+		BuffersToCommon.insert(BufferToBind->UploadBuffer);
+		//if(BufferToBind->WithCounter) 
         AttachmentBufferBarriers.push_back({BufferToBind, Parameter.AspectMask, Parameter.ShaderToUse});
     };
 
@@ -717,7 +720,7 @@ DrawIndirect(u32 ObjectDrawCount, u32 CommandStructureSize)
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
 
 	directx12_buffer* Indirect = static_cast<directx12_buffer*>(IndirectCommands);
-	CommandList->ExecuteIndirect(Context->IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), !Context->HaveDrawID * 4, Indirect->CounterHandle.Get(), 0);
+	CommandList->ExecuteIndirect(Context->IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), (!Context->HaveDrawID)*4, Indirect->CounterHandle.Get(), 0);
 
 	IndirectCommands = nullptr;
 }
@@ -1059,10 +1062,11 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 		}
 	}
 
+	u32 DrawConstantIdx = ~0ul;
 	if(HaveDrawID)
 	{
+		DrawConstantIdx = Parameters.size();
 		DrawConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-		DrawConstantDesc.Constants.ShaderRegister = HavePushConstant;
 		DrawConstantDesc.Constants.Num32BitValues = 1;
 		DrawConstantDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 		Parameters.push_back(DrawConstantDesc);
@@ -1070,13 +1074,13 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 
 	if(HavePushConstant)
 	{
+		PushConstantOffset = Parameters.size();
 		PushConstantDesc.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+		PushConstantDesc.Constants.ShaderRegister = HaveDrawID;
 		PushConstantDesc.Constants.Num32BitValues = PushConstantSize / sizeof(u32);
 		PushConstantDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 		Parameters.push_back(PushConstantDesc);
 	}
-
-	PushConstantOffset = Parameters.size() - HavePushConstant;
 
 	size_t LastSlashPos = GlobalName.find_last_of('/');
     size_t LastDotPos = GlobalName.find_last_of('.');
@@ -1141,8 +1145,7 @@ directx12_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op 
 	std::vector<D3D12_INDIRECT_ARGUMENT_DESC> IndirectArgs;
 	D3D12_INDIRECT_ARGUMENT_DESC IndirectArg = {};
 	IndirectArg.Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
-	IndirectArg.Constant.RootParameterIndex = Parameters.size() - 1;
-	IndirectArg.Constant.DestOffsetIn32BitValues = 0;
+	IndirectArg.Constant.RootParameterIndex = DrawConstantIdx;
 	IndirectArg.Constant.Num32BitValuesToSet = 1;
 	if(HaveDrawID) IndirectArgs.push_back(IndirectArg);
 	IndirectArg = {};
@@ -1228,12 +1231,11 @@ directx12_compute_context(renderer_backend* Backend, const std::string& Shader, 
 
 	if(HavePushConstant)
 	{
+		PushConstantOffset = Parameters.size();
 		PushConstantDesc.Constants.Num32BitValues = PushConstantSize / sizeof(u32);
 		PushConstantDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 		Parameters.push_back(PushConstantDesc);
 	}
-
-	PushConstantOffset = Parameters.size() - HavePushConstant;
 
 	size_t LastSlashPos = Shader.find_last_of('/');
     size_t LastDotPos = Shader.find_last_of('.');

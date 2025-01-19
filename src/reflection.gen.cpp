@@ -432,7 +432,6 @@ member_definition MembersOf__color_pass_parameters[] =
     {0, meta_type::gpu_buffer, "WorldUpdateBuffer", sizeof(gpu_buffer), offsetof(color_pass::parameters, WorldUpdateBuffer), 1},
     {0, meta_type::gpu_buffer, "LightSourcesBuffer", sizeof(gpu_buffer), offsetof(color_pass::parameters, LightSourcesBuffer), 1},
     {0, meta_type::gpu_buffer, "PoissonDiskBuffer", sizeof(gpu_buffer), offsetof(color_pass::parameters, PoissonDiskBuffer), 1},
-    {0, meta_type::gpu_buffer, "RandomSamplesBuffer", sizeof(gpu_buffer), offsetof(color_pass::parameters, RandomSamplesBuffer), 1},
     {0, meta_type::gpu_texture, "PrevColorTarget", sizeof(gpu_texture), offsetof(color_pass::parameters, PrevColorTarget), 1},
     {0, meta_type::gpu_texture, "DepthTarget", sizeof(gpu_texture), offsetof(color_pass::parameters, DepthTarget), 1},
     {0, meta_type::gpu_texture, "VolumetricLightTexture", sizeof(gpu_texture), offsetof(color_pass::parameters, VolumetricLightTexture), 1},

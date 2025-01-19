@@ -267,6 +267,7 @@ dx12_descriptor_type GetDXSpvDescriptorType(const std::vector<op_info>& ShaderIn
 	}
 }
 
+
 // TODO: Implement a better shader compilation
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
 LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, descriptor_param>>& ParameterLayout, std::map<u32, std::map<u32, u32>>& NewBindings, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
@@ -877,6 +878,13 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 				HlslCode = Compiler.compile();
 
+				const std::string Start = "cbuffer pushConstant";
+				size_t PushConstantStartPos = HlslCode.find(Start);
+				if (PushConstantStartPos != std::string::npos)
+				{
+					HlslCode.insert(PushConstantStartPos + Start.size(), " : register(b"+std::to_string(HaveDrawID)+", space0)");
+				}
+
 				CompiledShaders[Path].NewBindings = NewBindings;
 			}
 			catch(const std::exception& e)
@@ -893,7 +901,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 		if(HaveDrawID) 
 		{ 
-			HlslCode.insert(0, "cbuffer root_constant\n{\n\tuint RootDrawID : register(c0, space"+std::to_string(HavePushConstant)+");\n};\n\n"); 
+			HlslCode.insert(0, "cbuffer draw_constant : register(b0, space0)\n{\n\tuint RootDrawID;\n};\n\n"); 
 			std::string ReplaceString = "DrawID = 0u";
 			size_t DrawIdPos = HlslCode.find(ReplaceString);
 			if (DrawIdPos != std::string::npos)

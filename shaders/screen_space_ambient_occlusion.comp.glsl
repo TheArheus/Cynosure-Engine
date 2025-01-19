@@ -53,6 +53,7 @@ void main()
 {
 	vec2 TextureDims = textureSize(GBuffer[0], 0).xy;
 	vec2 TextCoord   = gl_GlobalInvocationID.xy;
+	vec2 NoiseUV     = (gl_GlobalInvocationID.xy + 0.5) / TextureDims;
     if (TextCoord.x >= TextureDims.x || TextCoord.y >= TextureDims.y || TextCoord.x < 0 || TextCoord.y < 0) 
 	{
         return;
@@ -69,7 +70,7 @@ void main()
 
 	vec3  FragmentNormalWS = normalize(texelFetch(GBuffer[1], ivec2(TextCoord), 0).xyz * 2.0 - 1.0);
 	vec3  FragmentNormalVS = normalize((transpose(inverse(WorldUpdate.DebugView)) * vec4(FragmentNormalWS, 1)).xyz);
-	vec2  Rotation = texture(NoiseTexture, TextCoord).xy;
+	vec2  Rotation = texture(NoiseTexture, NoiseUV).xy;
 
 	vec3  Tangent   = normalize(vec3(Rotation, 0) - FragmentNormalVS * dot(vec3(Rotation, 0), FragmentNormalVS));
 	vec3  Bitangent = cross(FragmentNormalVS, Tangent);
@@ -85,7 +86,7 @@ void main()
 		vec4 Offset = vec4(SamplePosVS, 1.0);
 		Offset = WorldUpdate.Proj * Offset;
 		Offset.xyz /= Offset.w;
-		Offset.xy   = Offset.xy * vec2(0.5) + 0.5;
+		Offset.xy   = Offset.xy * vec2(0.5, -0.5) + 0.5;
 
 		if (Offset.x < 0.0 || Offset.x > 1.0 ||
 			Offset.y < 0.0 || Offset.y > 1.0)

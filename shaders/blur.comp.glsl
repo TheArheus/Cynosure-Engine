@@ -10,7 +10,8 @@ layout(push_constant) uniform pushConstant
 	float IsHorizontal;
 };
 
-const float ConvSize = 9.0;
+const int KERNEL_RADIUS = 4;
+const int KERNEL_SIZE   = 2 * KERNEL_RADIUS + 1;
 
 float Gaussian(float x, float sigma) {
     return (1.0 / sqrt(2.0 * 3.14159 * sigma * sigma)) * exp(-(x * x) / (2.0 * sigma * sigma));
@@ -25,27 +26,35 @@ void main()
     }
 
 	vec4  Result = vec4(0.0);
-	float SampleCount = 0.0;
-	float ConvX = floor((ConvSize / 3.0) + 0.5);
-	float ConvY = floor((ConvSize / 3.0) + 0.5);
-	float Weights[9];
-    for (int i = 0; i < ConvSize; ++i) {
-        float x = float(i) - float(ConvSize - 1) / 2.0;
+	float Weights[KERNEL_SIZE];
+	float SumWeights = 0.0;
+    for (int i = 0; i < KERNEL_SIZE; ++i) {
+        float x = float(i - KERNEL_RADIUS);
         Weights[i] = Gaussian(x, 1.0);
+		SumWeights += Weights[i];
     }
 	if(IsHorizontal == 0)
 	{
-		for(float x = -ConvX; x <= ConvX; x++)
+		for(float x = -KERNEL_RADIUS; x <= KERNEL_RADIUS; x++)
 		{
-			Result += texelFetch(InTexture, ivec2(TextCoord + vec2(x, 0)), 0) * Weights[int(x + ConvX)];
+			ivec2 ClampedCoord = ivec2(
+				clamp(TextCoord.x + int(x), 0, int(TextureDims.x) - 1),
+				clamp(TextCoord.y,          0, int(TextureDims.y) - 1)
+			);
+			Result += texelFetch(InTexture, ClampedCoord, 0) * Weights[int(x + KERNEL_RADIUS)];
 		}
 	}
 	else
 	{
-		for(float y = -ConvY; y <= ConvY; y++)
+		for(float y = -KERNEL_RADIUS; y <= KERNEL_RADIUS; y++)
 		{
-			Result += texelFetch(InTexture, ivec2(TextCoord + vec2(0, y)), 0) * Weights[int(y + ConvY)];
+			ivec2 ClampedCoord = ivec2(
+				clamp(TextCoord.x,          0, int(TextureDims.x) - 1),
+				clamp(TextCoord.y + int(y), 0, int(TextureDims.y) - 1)
+			);
+			Result += texelFetch(InTexture, ClampedCoord, 0) * Weights[int(y + KERNEL_RADIUS)];
 		}
 	}
-	imageStore(OutTexture, ivec2(TextCoord), texelFetch(InTexture, ivec2(TextCoord), 0));
+	Result /= SumWeights;
+	imageStore(OutTexture, ivec2(TextCoord), Result);
 }

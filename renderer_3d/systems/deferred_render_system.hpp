@@ -674,7 +674,6 @@ struct deferred_raster_system : public entity_system
 			Parameters.WorldUpdateBuffer = WorldUpdateBuffer;
 			Parameters.LightSourcesBuffer = LightSourcesBuffer;
 			Parameters.PoissonDiskBuffer = PoissonDiskBuffer;
-			Parameters.RandomSamplesBuffer = RandomSamplesBuffer;
 			Parameters.PrevColorTarget = Gfx.ColorTarget[(Gfx.BackBufferIndex + 1) % 2];
 			Parameters.DepthTarget = Gfx.DepthTarget;
 			Parameters.VolumetricLightTexture = VolumetricLightOut;

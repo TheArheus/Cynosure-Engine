@@ -154,7 +154,6 @@ struct color_pass : public shader_compute_view_context
 		gpu_buffer WorldUpdateBuffer;
 		gpu_buffer LightSourcesBuffer;
 		gpu_buffer PoissonDiskBuffer;
-		gpu_buffer RandomSamplesBuffer;
 
 		gpu_texture PrevColorTarget;
 		gpu_texture DepthTarget;
