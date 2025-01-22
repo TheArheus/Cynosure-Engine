@@ -3,9 +3,9 @@
 layout(location = 0) in vec4 InPos;
 layout(push_constant) uniform pushConstant 
 { 
-	mat4  ShadowMatrix; 
 	vec4  LightPos; 
 	float FarZ;
+	uint  LightIdx;
 };
 
 void main() 

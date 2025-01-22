@@ -2,8 +2,8 @@
 void engine::
 Init(const std::vector<std::string>& args)
 {
-	//Window.InitVulkanGraphics();
-	Window.InitDirectx12Graphics();
+	Window.InitVulkanGraphics();
+	//Window.InitDirectx12Graphics();
 
 	CreateGuiContext(&Window);
 
@@ -64,8 +64,8 @@ Run()
 			Parameters.Texture  = GlobalGuiContext->FontAtlas;
 
 			// TODO: Viewport to be the size of the layout width and height from position x and y
-			Window.Gfx.AddRasterPass<primitive_2d>("Gui Rendering", Window.Width, Window.Height, Parameters, RasterParameters, 
-			[IndexCount = GlobalGuiContext->Indices.size(), FramebufferDims = vec2(Window.Width, Window.Height)](command_list* Cmd)
+			Window.Gfx.AddRasterPass<primitive_2d>("Gui Rendering", Window.Gfx.Backend->Width, Window.Gfx.Backend->Height, Parameters, RasterParameters, 
+			[IndexCount = GlobalGuiContext->Indices.size(), FramebufferDims = vec2(Window.Gfx.Backend->Width, Window.Gfx.Backend->Height)](command_list* Cmd)
 			{
 				Cmd->SetViewport(0, 0, FramebufferDims.x, FramebufferDims.y);
 				Cmd->SetConstant((void*)FramebufferDims.E, sizeof(vec2));

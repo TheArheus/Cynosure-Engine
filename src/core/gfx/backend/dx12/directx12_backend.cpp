@@ -379,6 +379,7 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 			ShaderCode = ShaderCode.substr(0, LineEnd) + "\n" + ShaderDefinesResult + ShaderCode.substr(LineEnd);
 		}
 
+		std::string HlslCode;
 		if (ShaderType == shader_stage::geometry || 
 			ShaderType == shader_stage::tessellation_control || 
 			ShaderType == shader_stage::tessellation_eval)
@@ -462,6 +463,9 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 			SpirvCode.resize(BlobDataSize / sizeof(uint32_t));
 			memcpy(SpirvCode.data(), BlobDataPtr, BlobDataSize);
+
+			HlslCode.insert(0, ShaderCode);
+			HlslCode.insert(0, ShaderDefinesResult);
 		}
 		else
 		{
@@ -533,264 +537,253 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 			glslang::GlslangToSpv(*Intermediate, SpirvCode);
 
 			glslang::FinalizeProcess();
-		}
 
-		std::vector<op_info> ShaderInfo;
-		std::set<u32> DescriptorIndices;
-		ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices, nullptr, nullptr, nullptr, LocalSizeX, LocalSizeY, LocalSizeZ);
+			std::vector<op_info> ShaderInfo;
+			std::set<u32> DescriptorIndices;
+			ParseSpirv(SpirvCode, ShaderInfo, DescriptorIndices, nullptr, nullptr, nullptr, LocalSizeX, LocalSizeY, LocalSizeZ);
 
-		CompiledShaders[Path].LocalSizeX = LocalSizeX ? *LocalSizeX : 0;
-		CompiledShaders[Path].LocalSizeY = LocalSizeY ? *LocalSizeY : 0;
-		CompiledShaders[Path].LocalSizeZ = LocalSizeZ ? *LocalSizeZ : 0;
+			CompiledShaders[Path].LocalSizeX = LocalSizeX ? *LocalSizeX : 0;
+			CompiledShaders[Path].LocalSizeY = LocalSizeY ? *LocalSizeY : 0;
+			CompiledShaders[Path].LocalSizeZ = LocalSizeZ ? *LocalSizeZ : 0;
 
-		std::map<u32, std::map<u32, u32>> ShaderToUse;
-		std::map<u32, std::map<u32, u32>> ParameterOffsets;
-		std::map<u32, std::map<u32, descriptor_param>> ParameterLayoutTemp;
-		for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
-		{
-			const op_info& Var = ShaderInfo[VariableIdx];
-			if (Var.OpCode == SpvOpVariable && Var.StorageClass == SpvStorageClassPushConstant)
+			std::map<u32, std::map<u32, u32>> ShaderToUse;
+			std::map<u32, std::map<u32, u32>> ParameterOffsets;
+			std::map<u32, std::map<u32, descriptor_param>> ParameterLayoutTemp;
+			for(u32 VariableIdx = 0; VariableIdx < ShaderInfo.size(); VariableIdx++)
 			{
-				const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
-				const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
-				HavePushConstant = true;
-
-				PushConstantSize += GetSpvVariableSize(ShaderInfo, PointerType);
-			}
-			else if (Var.OpCode == SpvOpVariable && Var.IsDescriptor)
-			{
-				const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
-
-				u32 Size = ~0u;
-				u32 StorageClass = Var.StorageClass;
-				bool NonWritable = false;
-				dx12_descriptor_type DescriptorType;
-				image_type& ImageType = ParameterLayoutTemp[Var.Set][Var.Binding].ImageType;
-				if(VariableType.OpCode == SpvOpTypePointer)
+				const op_info& Var = ShaderInfo[VariableIdx];
+				if (Var.OpCode == SpvOpVariable && Var.StorageClass == SpvStorageClassPushConstant)
 				{
+					const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
 					const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
+					HavePushConstant = true;
 
-					if(PointerType.OpCode == SpvOpTypeArray)
+					PushConstantSize += GetSpvVariableSize(ShaderInfo, PointerType);
+				}
+				else if (Var.OpCode == SpvOpVariable && Var.IsDescriptor)
+				{
+					const op_info& VariableType = ShaderInfo[Var.TypeId[0]];
+
+					u32 Size = ~0u;
+					u32 StorageClass = Var.StorageClass;
+					bool NonWritable = false;
+					dx12_descriptor_type DescriptorType;
+					image_type& ImageType = ParameterLayoutTemp[Var.Set][Var.Binding].ImageType;
+					if(VariableType.OpCode == SpvOpTypePointer)
 					{
-						const op_info& ArrayInfo = ShaderInfo[PointerType.TypeId[0]];
-						const op_info& SizeInfo  = ShaderInfo[PointerType.SizeId];
+						const op_info& PointerType = ShaderInfo[VariableType.TypeId[0]];
 
-						Size = SizeInfo.Constant;
-						NonWritable = ArrayInfo.NonWritable;
+						if(PointerType.OpCode == SpvOpTypeArray)
+						{
+							const op_info& ArrayInfo = ShaderInfo[PointerType.TypeId[0]];
+							const op_info& SizeInfo  = ShaderInfo[PointerType.SizeId];
 
-						DescriptorType = GetDXSpvDescriptorType(ShaderInfo, ArrayInfo, ImageType, StorageClass, NonWritable);
-					}
-					else if(PointerType.OpCode == SpvOpTypeRuntimeArray)
-					{
-						const op_info& ArrayInfo = ShaderInfo[PointerType.TypeId[0]];
+							Size = SizeInfo.Constant;
+							NonWritable = ArrayInfo.NonWritable;
 
-						NonWritable = ArrayInfo.NonWritable;
+							DescriptorType = GetDXSpvDescriptorType(ShaderInfo, ArrayInfo, ImageType, StorageClass, NonWritable);
+						}
+						else if(PointerType.OpCode == SpvOpTypeRuntimeArray)
+						{
+							const op_info& ArrayInfo = ShaderInfo[PointerType.TypeId[0]];
 
-						DescriptorType = GetDXSpvDescriptorType(ShaderInfo, ArrayInfo, ImageType, StorageClass, NonWritable);
+							NonWritable = ArrayInfo.NonWritable;
+
+							DescriptorType = GetDXSpvDescriptorType(ShaderInfo, ArrayInfo, ImageType, StorageClass, NonWritable);
+						}
+						else
+						{
+							NonWritable = PointerType.NonWritable;
+							DescriptorType = GetDXSpvDescriptorType(ShaderInfo, PointerType, ImageType, StorageClass, NonWritable);
+						}
 					}
 					else
 					{
-						NonWritable = PointerType.NonWritable;
-						DescriptorType = GetDXSpvDescriptorType(ShaderInfo, PointerType, ImageType, StorageClass, NonWritable);
-					}
-				}
-				else
-				{
-					NonWritable = VariableType.NonWritable;
-					DescriptorType = GetDXSpvDescriptorType(ShaderInfo, VariableType, ImageType, StorageClass, NonWritable);
-				}
-
-				if(DescriptorType == dx12_descriptor_type::unordered_access)
-				{
-					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::buffer_storage;
-					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = true;
-				}
-				else if(DescriptorType == dx12_descriptor_type::shader_resource || DescriptorType == dx12_descriptor_type::constant_buffer)
-				{
-					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::buffer_uniform;
-					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = false;
-				}
-				else if(DescriptorType == dx12_descriptor_type::image)
-				{
-					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::texture_storage;
-					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = true;
-				}
-				else if(DescriptorType == dx12_descriptor_type::sampler)
-				{
-					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
-					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = false;
-				}
-				else if(DescriptorType == dx12_descriptor_type::combined_image_sampler)
-				{
-					ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
-					ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = false;
-				}
-
-				if((DescriptorType == dx12_descriptor_type::image || 
-					DescriptorType == dx12_descriptor_type::sampler || 
-					DescriptorType == dx12_descriptor_type::combined_image_sampler) && Size == ~0u)
-					Size = 1;
-
-				if(Size != ~0u)
-				{
-					ParameterOffsets[Var.Set][Var.Binding] = Size;
-					D3D12_DESCRIPTOR_RANGE* ParameterRange = PushStruct(D3D12_DESCRIPTOR_RANGE);
-					switch(DescriptorType)
-					{
-					case dx12_descriptor_type::shader_resource:
-					{
-						ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-						ParameterRange->BaseShaderRegister = Var.Binding;
-						ParameterRange->NumDescriptors = Size;
-						ParameterRange->RegisterSpace = Var.Set;
-						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
-
-						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
-					} break;
-					case dx12_descriptor_type::image:
-					case dx12_descriptor_type::unordered_access:
-					{
-						ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-						ParameterRange->BaseShaderRegister = Var.Binding;
-						ParameterRange->NumDescriptors = Size;
-						ParameterRange->RegisterSpace = Var.Set;
-						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
-
-						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::general;
-						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
-					} break;
-					case dx12_descriptor_type::constant_buffer:
-					{
-						ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-						ParameterRange->BaseShaderRegister = Var.Binding;
-						ParameterRange->NumDescriptors = Size;
-						ParameterRange->RegisterSpace = Var.Set;
-						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
-
-						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
-					} break;
-					case dx12_descriptor_type::combined_image_sampler:
-					{
-						ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-						ParameterRange->BaseShaderRegister = Var.Binding;
-						ParameterRange->NumDescriptors = Size;
-						ParameterRange->RegisterSpace = Var.Set;
-						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-						D3D12_DESCRIPTOR_RANGE* ParameterRange1 = PushStruct(D3D12_DESCRIPTOR_RANGE);
-						ParameterRange1->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
-						ParameterRange1->BaseShaderRegister = Var.Binding;
-						ParameterRange1->NumDescriptors = Size;
-						ParameterRange1->RegisterSpace = Var.Set;
-						ParameterRange1->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-						D3D12_ROOT_PARAMETER& Parameter1 = ShaderRootLayout[Var.Set][Var.Binding][1];
-						Parameter1.ParameterType    = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-						Parameter1.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
-						Parameter1.DescriptorTable  = {1, ParameterRange1};
-
-						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
-						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER]     += Size;
-
-						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
-					} break;
-					case dx12_descriptor_type::sampler:
-					{
-						ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
-						ParameterRange->BaseShaderRegister = Var.Binding;
-						ParameterRange->NumDescriptors = Size;
-						ParameterRange->RegisterSpace = Var.Set;
-						ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER]     += Size;
-
-						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
-					} break;
+						NonWritable = VariableType.NonWritable;
+						DescriptorType = GetDXSpvDescriptorType(ShaderInfo, VariableType, ImageType, StorageClass, NonWritable);
 					}
 
-					D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[Var.Set][Var.Binding][0];
-					Parameter.ParameterType    = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-					Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
-					Parameter.DescriptorTable  = {1, ParameterRange};
-
-					ParameterLayoutTemp[Var.Set][Var.Binding].Count = Size;
-					//ParameterLayoutTemp[Var.Set][Var.Binding].ImageType = TextureType;
-					ParameterLayoutTemp[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
-				}
-				else
-				{
-					ParameterOffsets[Var.Set][Var.Binding] = 0;
-					D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[Var.Set][Var.Binding][0];
-					switch(DescriptorType)
+					if(DescriptorType == dx12_descriptor_type::unordered_access)
 					{
-					case dx12_descriptor_type::shader_resource:
-					{
-						Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-
-						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
-					} break;
-					case dx12_descriptor_type::unordered_access:
-					{
-						Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
-
-						ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::general;
-						ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
-					} break;
-					case dx12_descriptor_type::constant_buffer:
-					{
-						Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-
-						ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
-						ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
-					} break;
+						ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::buffer_storage;
+						ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = true;
 					}
-					DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += 1;
-					Parameter.Descriptor.ShaderRegister = Var.Binding;
-					Parameter.Descriptor.RegisterSpace  = Var.Set;
-					Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
+					else if(DescriptorType == dx12_descriptor_type::shader_resource || DescriptorType == dx12_descriptor_type::constant_buffer)
+					{
+						ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::buffer_uniform;
+						ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = false;
+					}
+					else if(DescriptorType == dx12_descriptor_type::image)
+					{
+						ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::texture_storage;
+						ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = true;
+					}
+					else if(DescriptorType == dx12_descriptor_type::sampler)
+					{
+						ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
+						ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = false;
+					}
+					else if(DescriptorType == dx12_descriptor_type::combined_image_sampler)
+					{
+						ParameterLayoutTemp[Var.Set][Var.Binding].Type = resource_type::texture_sampler;
+						ParameterLayoutTemp[Var.Set][Var.Binding].IsWritable = false;
+					}
 
-					ParameterLayoutTemp[Var.Set][Var.Binding].Count = 1;
-					ParameterLayoutTemp[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
+					if((DescriptorType == dx12_descriptor_type::image || 
+						DescriptorType == dx12_descriptor_type::sampler || 
+						DescriptorType == dx12_descriptor_type::combined_image_sampler) && Size == ~0u)
+						Size = 1;
+
+					if(Size != ~0u)
+					{
+						ParameterOffsets[Var.Set][Var.Binding] = Size;
+						D3D12_DESCRIPTOR_RANGE* ParameterRange = PushStruct(D3D12_DESCRIPTOR_RANGE);
+						switch(DescriptorType)
+						{
+						case dx12_descriptor_type::shader_resource:
+						{
+							ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+							ParameterRange->BaseShaderRegister = Var.Binding;
+							ParameterRange->NumDescriptors = Size;
+							ParameterRange->RegisterSpace = Var.Set;
+							ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+							DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
+
+							ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+							ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						} break;
+						case dx12_descriptor_type::image:
+						case dx12_descriptor_type::unordered_access:
+						{
+							ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+							ParameterRange->BaseShaderRegister = Var.Binding;
+							ParameterRange->NumDescriptors = Size;
+							ParameterRange->RegisterSpace = Var.Set;
+							ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+							DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
+
+							ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::general;
+							ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
+						} break;
+						case dx12_descriptor_type::constant_buffer:
+						{
+							ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+							ParameterRange->BaseShaderRegister = Var.Binding;
+							ParameterRange->NumDescriptors = Size;
+							ParameterRange->RegisterSpace = Var.Set;
+							ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+							DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
+
+							ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+							ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						} break;
+						case dx12_descriptor_type::combined_image_sampler:
+						{
+							ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+							ParameterRange->BaseShaderRegister = Var.Binding;
+							ParameterRange->NumDescriptors = Size;
+							ParameterRange->RegisterSpace = Var.Set;
+							ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+							D3D12_DESCRIPTOR_RANGE* ParameterRange1 = PushStruct(D3D12_DESCRIPTOR_RANGE);
+							ParameterRange1->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+							ParameterRange1->BaseShaderRegister = Var.Binding;
+							ParameterRange1->NumDescriptors = Size;
+							ParameterRange1->RegisterSpace = Var.Set;
+							ParameterRange1->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+							D3D12_ROOT_PARAMETER& Parameter1 = ShaderRootLayout[Var.Set][Var.Binding][1];
+							Parameter1.ParameterType    = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+							Parameter1.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
+							Parameter1.DescriptorTable  = {1, ParameterRange1};
+
+							DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += Size;
+							DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER]     += Size;
+
+							ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+							ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						} break;
+						case dx12_descriptor_type::sampler:
+						{
+							ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+							ParameterRange->BaseShaderRegister = Var.Binding;
+							ParameterRange->NumDescriptors = Size;
+							ParameterRange->RegisterSpace = Var.Set;
+							ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+							DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER]     += Size;
+
+							ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+							ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						} break;
+						}
+
+						D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[Var.Set][Var.Binding][0];
+						Parameter.ParameterType    = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+						Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
+						Parameter.DescriptorTable  = {1, ParameterRange};
+
+						ParameterLayoutTemp[Var.Set][Var.Binding].Count = Size;
+						//ParameterLayoutTemp[Var.Set][Var.Binding].ImageType = TextureType;
+						ParameterLayoutTemp[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
+					}
+					else
+					{
+						ParameterOffsets[Var.Set][Var.Binding] = 0;
+						D3D12_ROOT_PARAMETER& Parameter = ShaderRootLayout[Var.Set][Var.Binding][0];
+						switch(DescriptorType)
+						{
+						case dx12_descriptor_type::shader_resource:
+						{
+							Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+
+							ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+							ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						} break;
+						case dx12_descriptor_type::unordered_access:
+						{
+							Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
+
+							ParameterLayoutTemp[Var.Set][Var.Binding].BarrierState = barrier_state::general;
+							ParameterLayoutTemp[Var.Set][Var.Binding].AspectMask = AF_ShaderWrite;
+						} break;
+						case dx12_descriptor_type::constant_buffer:
+						{
+							Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+
+							ParameterLayout[Var.Set][Var.Binding].BarrierState = barrier_state::shader_read;
+							ParameterLayout[Var.Set][Var.Binding].AspectMask = AF_ShaderRead;
+						} break;
+						}
+						DescriptorHeapSizes[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV] += 1;
+						Parameter.Descriptor.ShaderRegister = Var.Binding;
+						Parameter.Descriptor.RegisterSpace  = Var.Set;
+						Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; //GetDXVisibility(ShaderType);
+
+						ParameterLayoutTemp[Var.Set][Var.Binding].Count = 1;
+						ParameterLayoutTemp[Var.Set][Var.Binding].ShaderToUse |= GetShaderFlag(ShaderType);
+					}
 				}
 			}
-		}
 
-		for (const auto& [Set, Bindings] : ParameterLayoutTemp)
-		{
-			for (const auto& [Binding, Param] : Bindings)
+			for (const auto& [Set, Bindings] : ParameterLayoutTemp)
 			{
-				ParameterLayout[Set][Binding].Type         = Param.Type;
-				ParameterLayout[Set][Binding].Count        = Param.Count;
-				ParameterLayout[Set][Binding].IsWritable   = Param.IsWritable;
-				ParameterLayout[Set][Binding].ImageType    = Param.ImageType;
-				ParameterLayout[Set][Binding].ShaderToUse |= Param.ShaderToUse;
-				ParameterLayout[Set][Binding].BarrierState = Param.BarrierState;
-				ParameterLayout[Set][Binding].AspectMask   = Param.AspectMask;
+				for (const auto& [Binding, Param] : Bindings)
+				{
+					ParameterLayout[Set][Binding].Type         = Param.Type;
+					ParameterLayout[Set][Binding].Count        = Param.Count;
+					ParameterLayout[Set][Binding].IsWritable   = Param.IsWritable;
+					ParameterLayout[Set][Binding].ImageType    = Param.ImageType;
+					ParameterLayout[Set][Binding].ShaderToUse |= Param.ShaderToUse;
+					ParameterLayout[Set][Binding].BarrierState = Param.BarrierState;
+					ParameterLayout[Set][Binding].AspectMask   = Param.AspectMask;
+				}
 			}
-		}
-		CompiledShaders[Path].ParameterLayout.insert(ParameterLayoutTemp.begin(), ParameterLayoutTemp.end());
-		CompiledShaders[Path].ShaderRootLayout.insert(ShaderRootLayout.begin(), ShaderRootLayout.end());
-		CompiledShaders[Path].DescriptorHeapSizes.insert(DescriptorHeapSizes.begin(), DescriptorHeapSizes.end());
-		CompiledShaders[Path].HavePushConstant = HavePushConstant;
-		CompiledShaders[Path].PushConstantSize = PushConstantSize;
-		CompiledShaders[Path].HaveDrawID = HaveDrawID;
+			CompiledShaders[Path].ParameterLayout.insert(ParameterLayoutTemp.begin(), ParameterLayoutTemp.end());
 
-		std::string HlslCode;
-		if (ShaderType != shader_stage::geometry &&
-			ShaderType != shader_stage::tessellation_control &&
-			ShaderType != shader_stage::tessellation_eval)
-		{
 			try
 			{
 				spirv_cross::CompilerHLSL Compiler(SpirvCode.data(), SpirvCode.size());
@@ -878,13 +871,6 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 
 				HlslCode = Compiler.compile();
 
-				const std::string Start = "cbuffer pushConstant";
-				size_t PushConstantStartPos = HlslCode.find(Start);
-				if (PushConstantStartPos != std::string::npos)
-				{
-					HlslCode.insert(PushConstantStartPos + Start.size(), " : register(b"+std::to_string(HaveDrawID)+", space0)");
-				}
-
 				CompiledShaders[Path].NewBindings = NewBindings;
 			}
 			catch(const std::exception& e)
@@ -893,11 +879,21 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
 				return {};
 			}
 		}
-		else
+
+		CompiledShaders[Path].ShaderRootLayout.insert(ShaderRootLayout.begin(), ShaderRootLayout.end());
+		CompiledShaders[Path].DescriptorHeapSizes.insert(DescriptorHeapSizes.begin(), DescriptorHeapSizes.end());
+		CompiledShaders[Path].HavePushConstant = HavePushConstant;
+		CompiledShaders[Path].PushConstantSize = PushConstantSize;
+		CompiledShaders[Path].HaveDrawID = HaveDrawID;
+
 		{
-			HlslCode.insert(0, ShaderCode);
-			HlslCode.insert(0, ShaderDefinesResult);
-		} 
+			const std::string Start = "cbuffer pushConstant";
+			size_t PushConstantStartPos = HlslCode.find(Start);
+			if (PushConstantStartPos != std::string::npos)
+			{
+				HlslCode.insert(PushConstantStartPos + Start.size(), " : register(b"+std::to_string(HaveDrawID)+", space0)");
+			}
+		}
 
 		if(HaveDrawID) 
 		{ 
@@ -1004,6 +1000,37 @@ LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, st
                 std::cerr << "Failed to retrieve compiled shader code." << std::endl;
                 return {};
             }
+		}
+
+		DxcBuffer ReflectionBuffer = {};
+		ReflectionBuffer.Ptr  = Code->GetBufferPointer();
+		ReflectionBuffer.Size = Code->GetBufferSize();
+
+		ComPtr<ID3D12ShaderReflection> Reflector = nullptr;
+		hr = DxcUtils->CreateReflection(&ReflectionBuffer, IID_PPV_ARGS(&Reflector));
+		if (Reflector && (ShaderType == shader_stage::geometry ||
+			ShaderType == shader_stage::tessellation_control ||
+			ShaderType == shader_stage::tessellation_eval))
+		{
+			D3D12_SHADER_DESC ShaderDesc;
+			Reflector->GetDesc(&ShaderDesc);
+			for (u32 i = 0; i < ShaderDesc.ConstantBuffers; ++i)
+			{
+				ID3D12ShaderReflectionConstantBuffer* ConstBuffer = Reflector->GetConstantBufferByIndex(i);
+				D3D12_SHADER_BUFFER_DESC BufferDesc;
+				ConstBuffer->GetDesc(&BufferDesc);
+				int f = 5;
+			}
+
+			for (u32 i = 0; i < ShaderDesc.BoundResources; ++i)
+			{
+				D3D12_SHADER_INPUT_BIND_DESC BindDesc;
+				Reflector->GetResourceBindingDesc(i, &BindDesc);
+				if(BindDesc.Type == D3D_SIT_STRUCTURED)
+				{
+					ParameterLayout[BindDesc.Space][BindDesc.BindPoint].ShaderToUse |= GetShaderFlag(ShaderType);
+				}
+			}
 		}
 
 		Result.BytecodeLength  = Code->GetBufferSize();

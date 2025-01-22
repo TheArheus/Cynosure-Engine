@@ -10,19 +10,13 @@ gpu_memory_heap::
 		delete Resource;
 	}
 
-	for (auto& [ID, Descriptor] : Descriptors)
-	{
-		if(Descriptor.Data) free(Descriptor.Data);
-		Descriptor.Data = nullptr;
-	}
-
 	Resources.clear();
 	Descriptors.clear();
 	Unused.clear();
 }
 
 buffer* gpu_memory_heap::
-AllocateBufferInternal(const resource_descriptor& Desc, command_list* CommandList)
+AllocateBufferInternal(resource_descriptor& Desc, command_list* CommandList)
 {
 	buffer* NewBuffer = nullptr;
 	switch(Gfx->Type)
@@ -52,12 +46,13 @@ AllocateBufferInternal(const resource_descriptor& Desc, command_list* CommandLis
 			break;
 #endif
 	}
+	Desc.Data = nullptr;
 	Resources[Desc.ID] = NewBuffer;
 	return NewBuffer;
 }
 
 texture* gpu_memory_heap::
-AllocateTextureInternal(const resource_descriptor& Desc, command_list* CommandList)
+AllocateTextureInternal(resource_descriptor& Desc, command_list* CommandList)
 {
 	texture* NewTexture = nullptr;
 	switch(Gfx->Type)
@@ -87,6 +82,7 @@ AllocateTextureInternal(const resource_descriptor& Desc, command_list* CommandLi
 			break;
 #endif
 	}
+	Desc.Data = nullptr;
 	Resources[Desc.ID] = NewTexture;
 	return NewTexture;
 }
@@ -105,7 +101,7 @@ CreateBuffer(const std::string& Name, void* Data, u64 Size, u32 Usage)
 		Descriptor.ID = NextID++;
 	}
 	Descriptor.Name  = Name;
-	Descriptor.Data  = (char*)calloc(Size, 1); // PushSize(Size * 1);
+	Descriptor.Data  = (char*)PushSize(Size);
 	Descriptor.Size  = Size;
 	Descriptor.Count = 1;
 	Descriptor.Usage = Usage;
@@ -129,7 +125,7 @@ CreateBuffer(const std::string& Name, void* Data, u64 Size, u64 Count, u32 Usage
 		Descriptor.ID = NextID++;
 	}
 	Descriptor.Name  = Name;
-	Descriptor.Data  = (char*)calloc(Size, Count); // PushSize(Size * Count);
+	Descriptor.Data  = (char*)PushSize(Size * Count);
 	Descriptor.Size  = Size;
 	Descriptor.Count = Count;
 	Descriptor.Usage = Usage;
@@ -198,7 +194,7 @@ CreateTexture(const std::string& Name, void* Data, u32 Width, u32 Height, u32 De
 	}
 	u32 PixelSize = GetPixelSize(Info.Format);
 	Descriptor.Name   = Name;
-	Descriptor.Data   = (char*)calloc(PixelSize, Width * Height * Depth); // PushSize(PixelSize * Width * Height * Depth);
+	Descriptor.Data   = (char*)PushSize(PixelSize * Width * Height * Depth);
 	Descriptor.Width  = Width;
 	Descriptor.Height = Height;
 	Descriptor.Depth  = Depth;
@@ -232,17 +228,17 @@ CreateTexture(const std::string& Name, u32 Width, u32 Height, u32 Depth, const u
 	return Descriptor;
 }
 
-[[nodiscard]] resource_descriptor gpu_memory_heap::
+[[nodiscard]] resource_descriptor& gpu_memory_heap::
 GetResourceDescriptor(u64 ID)
 {
+	static resource_descriptor InvalidDesc;
 	if(Descriptors.find(ID) != Descriptors.end())
 		return Descriptors[ID];
-	return {};
+	return InvalidDesc;
 }
 
-// TODO: if the texture is still not created, create it here so that gather would work correctly here
 [[nodiscard]] buffer* gpu_memory_heap::
-GetBuffer(const resource_descriptor& Desc)
+GetBuffer(resource_descriptor& Desc)
 {
 	if(Resources.find(Desc.ID) != Resources.end())
 	{
@@ -258,11 +254,12 @@ GetBuffer(u64 ID)
 	{
 		return (buffer*)Resources[ID];
 	}
-	return AllocateBufferInternal(GetResourceDescriptor(ID));
+	resource_descriptor& Desc = GetResourceDescriptor(ID);
+	return AllocateBufferInternal(Desc);
 }
 
 [[nodiscard]] buffer* gpu_memory_heap::
-GetBuffer(command_list* CommandList, const resource_descriptor& Desc)
+GetBuffer(command_list* CommandList, resource_descriptor& Desc)
 {
 	if(Resources.find(Desc.ID) != Resources.end())
 	{
@@ -278,12 +275,12 @@ GetBuffer(command_list* CommandList, u64 ID)
 	{
 		return (buffer*)Resources[ID];
 	}
-	return AllocateBufferInternal(GetResourceDescriptor(ID), CommandList);
+	resource_descriptor& Desc = GetResourceDescriptor(ID);
+	return AllocateBufferInternal(Desc, CommandList);
 }
 
-// TODO: if the texture is still not created, create it here so that gather would work correctly here
 [[nodiscard]] texture* gpu_memory_heap::
-GetTexture(const resource_descriptor& Desc)
+GetTexture(resource_descriptor& Desc)
 {
 	if(Resources.find(Desc.ID) != Resources.end())
 	{
@@ -299,11 +296,12 @@ GetTexture(u64 ID)
 	{
 		return (texture*)Resources[ID];
 	}
-	return AllocateTextureInternal(GetResourceDescriptor(ID));
+	resource_descriptor& Desc = GetResourceDescriptor(ID);
+	return AllocateTextureInternal(Desc);
 }
 
 [[nodiscard]] texture* gpu_memory_heap::
-GetTexture(command_list* CommandList, const resource_descriptor& Desc)
+GetTexture(command_list* CommandList, resource_descriptor& Desc)
 {
 	if(Resources.find(Desc.ID) != Resources.end())
 	{
@@ -319,7 +317,8 @@ GetTexture(command_list* CommandList, u64 ID)
 	{
 		return (texture*)Resources[ID];
 	}
-	return AllocateTextureInternal(GetResourceDescriptor(ID), CommandList);
+	resource_descriptor& Desc = GetResourceDescriptor(ID);
+	return AllocateTextureInternal(Desc, CommandList);
 }
 
 void gpu_memory_heap::
@@ -337,13 +336,12 @@ UpdateBuffer(resource_descriptor& Desc, void* Data, size_t Size)
 	{
 		Desc.Size = (Size > 2 * Desc.Size) ? Size : 2 * Desc.Size;
 		delete BufferToUpdate;
-		if(Desc.Data) delete Desc.Data;
-		Desc.Data = (char*)calloc(Size, 1);
+		Desc.Data = (char*)PushSize(Size);
 		memcpy(Desc.Data, Data, Size);
 		AllocateBufferInternal(Desc);
 		return;
 	}
-	BufferToUpdate->Update(Gfx, Data);
+	BufferToUpdate->UpdateSize(Gfx, Data, Size);
 }
 
 void gpu_memory_heap::
@@ -355,13 +353,12 @@ UpdateBuffer(resource_descriptor& Desc, void* Data, size_t Size, size_t Count)
 		Desc.Size  =  Desc.Size;
 		Desc.Count = (Count > 2 * Desc.Count) ? Count : 2 * Desc.Count;
 		delete BufferToUpdate;
-		if(Desc.Data) delete Desc.Data;
-		Desc.Data  = (char*)calloc(Desc.Size, Desc.Count);
+		Desc.Data  = (char*)PushSize(Desc.Size * Desc.Count);
 		memcpy(Desc.Data, Data, Size * Count);
 		AllocateBufferInternal(Desc);
 		return;
 	}
-	BufferToUpdate->Update(Gfx, Data);
+	BufferToUpdate->UpdateSize(Gfx, Data, Size * Count);
 }
 
 void gpu_memory_heap::

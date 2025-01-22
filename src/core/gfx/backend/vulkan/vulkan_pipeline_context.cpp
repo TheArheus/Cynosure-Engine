@@ -608,7 +608,7 @@ Update(texture* TextureToUpdate, void* Data)
 	Region.imageSubresource.aspectMask = Texture->Aspect;
 	Region.imageSubresource.mipLevel = 0;
 	Region.imageSubresource.baseArrayLayer = 0;
-	Region.imageSubresource.layerCount = Texture->Info.Layers;
+	Region.imageSubresource.layerCount = Texture->Info.Type != image_type::Texture3D ? Texture->Depth : 1;
 	Region.imageOffset = {0, 0, 0};
 	Region.imageExtent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
 	vkCmdCopyBufferToImage(CommandList, Texture->Temp, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
@@ -640,7 +640,7 @@ ReadBack(texture* TextureToRead, void* Data)
 	Region.imageSubresource.aspectMask = Texture->Aspect;
 	Region.imageSubresource.mipLevel = 0;
 	Region.imageSubresource.baseArrayLayer = 0;
-	Region.imageSubresource.layerCount = Texture->Info.Layers;
+	Region.imageSubresource.layerCount = Texture->Info.Type != image_type::Texture3D ? Texture->Depth : 1;
 	Region.imageOffset = {0, 0, 0};
 	Region.imageExtent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
 
@@ -665,6 +665,7 @@ SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 		vulkan_texture* Attachment = static_cast<vulkan_texture*>(ColorTargets[AttachmentIdx]);
 		TexturesToCommon.insert(ColorTargets[AttachmentIdx]);
 
+		LayerCount = Attachment->Info.Type != image_type::Texture3D ? Attachment->Depth : 1;
 		ColorInfo[AttachmentIdx].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
 		ColorInfo[AttachmentIdx].pNext = nullptr;
 		ColorInfo[AttachmentIdx].imageView = Attachment->Views[0];
@@ -689,6 +690,7 @@ SetDepthTarget(texture* Target, vec2 Clear)
 	assert(CurrContext->Type == pass_type::raster);
 	TexturesToCommon.insert(Target);
 
+	LayerCount = Target->Info.Type != image_type::Texture3D ? Target->Depth : 1;
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	vulkan_texture* Attachment = static_cast<vulkan_texture*>(Target);
 
@@ -842,12 +844,11 @@ BeginRendering(u32 RenderWidth, u32 RenderHeight)
 	GfxHeight = RenderHeight;
 
 	RenderingInfo.renderArea = RenderPassInfo.renderArea = {{}, {RenderWidth, RenderHeight}};
-	RenderingInfo.layerCount = 1;
-	//RenderingInfo.viewMask   = EnableMultiview * (1 << Face);
+	RenderingInfo.layerCount = LayerCount;
 	FramebufferCreateInfo.renderPass = Context->RenderPass;
 	FramebufferCreateInfo.width  = RenderWidth;
 	FramebufferCreateInfo.height = RenderHeight;
-	FramebufferCreateInfo.layers = 1;
+	FramebufferCreateInfo.layers = LayerCount;
 	RenderPassInfo.renderPass = Context->RenderPass;
 
 	if(!Gfx->Features13.dynamicRendering)
@@ -875,7 +876,10 @@ void vulkan_command_list::
 EndRendering()
 {
 	if(!CurrContext) return;
+
+	LayerCount = 1;
 	PrevContext = CurrContext;
+
 	if(CurrContext->Type != pass_type::raster) return;
 
 	if(PrevContext && PrevContext->Type == pass_type::raster)
@@ -1244,9 +1248,8 @@ DebugGuiBegin(texture* RenderTarget)
 	vulkan_texture* Clr = static_cast<vulkan_texture*>(RenderTarget);
 
 	VkRenderingInfoKHR RenderingInfoGui = {VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
-	RenderingInfoGui.renderArea = {{}, {u32(Gfx->Width), u32(Gfx->Height)}};
+	RenderingInfoGui.renderArea = {{}, {u32(RenderTarget->Width), u32(RenderTarget->Height)}};
 	RenderingInfoGui.layerCount = 1;
-	RenderingInfoGui.viewMask   = 0;
 
 	VkRenderingAttachmentInfoKHR ColorInfo = {VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR};
 	ColorInfo.imageView = Clr->Views[0];
@@ -1520,7 +1523,6 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	PipelineRenderingCreateInfo.colorAttachmentCount    = ColorTargetFormats.size();
 	PipelineRenderingCreateInfo.pColorAttachmentFormats = InputData.UseColor ? ColorTargetFormats.data() : nullptr;
 	PipelineRenderingCreateInfo.depthAttachmentFormat   = InputData.UseDepth ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED;
-	PipelineRenderingCreateInfo.viewMask = InputData.UseMultiview * InputData.ViewMask;
 
 	VkPipelineVertexInputStateCreateInfo VertexInputState = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 

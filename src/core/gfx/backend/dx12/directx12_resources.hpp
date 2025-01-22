@@ -293,7 +293,7 @@ struct directx12_texture : public texture
         D3D12_RESOURCE_DESC ResourceDesc = {};
         ResourceDesc.Width = Width;
         ResourceDesc.Height = Height;
-        ResourceDesc.DepthOrArraySize = Depth;
+        ResourceDesc.DepthOrArraySize = DepthOrArraySize;
         ResourceDesc.MipLevels = Info.MipLevels;
         ResourceDesc.SampleDesc.Count = 1;
         ResourceDesc.SampleDesc.Quality = 0;
@@ -367,32 +367,32 @@ struct directx12_texture : public texture
 					SrvDesc.TextureCube.MipLevels       = 1;
 					SrvDesc.TextureCube.MostDetailedMip = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture1D && Info.Layers == 1)
+				else if (Info.Type == image_type::Texture1D && DepthOrArraySize == 1)
 				{
 					SrvDesc.ViewDimension             = D3D12_SRV_DIMENSION_TEXTURE1D;
 					SrvDesc.Texture1D.MipLevels       = 1;
 					SrvDesc.Texture1D.MostDetailedMip = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture1D && Info.Layers > 1)
+				else if (Info.Type == image_type::Texture1D && DepthOrArraySize > 1)
 				{
 					SrvDesc.ViewDimension                  = D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
 					SrvDesc.Texture1DArray.MipLevels       = 1;
 					SrvDesc.Texture1DArray.MostDetailedMip = MipIdx;
-					SrvDesc.Texture1DArray.ArraySize       = Info.Layers;
+					SrvDesc.Texture1DArray.ArraySize       = DepthOrArraySize;
 					SrvDesc.Texture1DArray.FirstArraySlice = 0;
 				}
-				else if (Info.Type == image_type::Texture2D && Info.Layers == 1)
+				else if (Info.Type == image_type::Texture2D && DepthOrArraySize == 1)
 				{
 					SrvDesc.ViewDimension             = D3D12_SRV_DIMENSION_TEXTURE2D;
 					SrvDesc.Texture2D.MipLevels       = 1;
 					SrvDesc.Texture2D.MostDetailedMip = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture2D && Info.Layers > 1)
+				else if (Info.Type == image_type::Texture2D && DepthOrArraySize > 1)
 				{
 					SrvDesc.ViewDimension                  = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
 					SrvDesc.Texture2DArray.MipLevels       = 1;
 					SrvDesc.Texture2DArray.MostDetailedMip = MipIdx;
-					SrvDesc.Texture2DArray.ArraySize       = Info.Layers;
+					SrvDesc.Texture2DArray.ArraySize       = DepthOrArraySize;
 					SrvDesc.Texture2DArray.FirstArraySlice = 0;
 				}
 				else if (Info.Type == image_type::Texture3D)
@@ -419,28 +419,28 @@ struct directx12_texture : public texture
 				MipIdx < Info.MipLevels;
 				++MipIdx)
 			{
-				if (Info.Type == image_type::Texture1D && Info.Layers == 1)
+				if (Info.Type == image_type::Texture1D && DepthOrArraySize == 1)
 				{
 					UavDesc.ViewDimension      = D3D12_UAV_DIMENSION_TEXTURE1D;
 					UavDesc.Texture1D.MipSlice = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture1D && Info.Layers > 1)
+				else if (Info.Type == image_type::Texture1D && DepthOrArraySize > 1)
 				{
 					UavDesc.ViewDimension                  = D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
 					UavDesc.Texture1DArray.MipSlice	       = MipIdx;
-					UavDesc.Texture1DArray.ArraySize       = Info.Layers;
+					UavDesc.Texture1DArray.ArraySize       = DepthOrArraySize;
 					UavDesc.Texture1DArray.FirstArraySlice = 0;
 				}
-				else if (Info.Type == image_type::Texture2D && Info.Layers == 1)
+				else if (Info.Type == image_type::Texture2D && DepthOrArraySize == 1)
 				{
 					UavDesc.ViewDimension      = D3D12_UAV_DIMENSION_TEXTURE2D;
 					UavDesc.Texture2D.MipSlice = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture2D && Info.Layers > 1)
+				else if (Info.Type == image_type::Texture2D && DepthOrArraySize > 1)
 				{
 					UavDesc.ViewDimension                  = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
 					UavDesc.Texture2DArray.MipSlice        = MipIdx;
-					UavDesc.Texture2DArray.ArraySize       = Info.Layers;
+					UavDesc.Texture2DArray.ArraySize       = DepthOrArraySize;
 					UavDesc.Texture2DArray.FirstArraySlice = 0;
 				}
 				else if (Info.Type == image_type::Texture3D)
@@ -472,40 +472,36 @@ struct directx12_texture : public texture
 
 				if (Info.Usage & image_flags::TF_CubeMap)
 				{
-					for(u32 FaceIdx = 0; FaceIdx < 6; ++FaceIdx)
-					{
-						RtvDesc.ViewDimension                  = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
-						RtvDesc.Texture2DArray.ArraySize       = 1;
-						RtvDesc.Texture2DArray.FirstArraySlice = FaceIdx;
-						RtvDesc.Texture2DArray.MipSlice        = MipIdx;
+					RtvDesc.ViewDimension                  = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+					RtvDesc.Texture2DArray.ArraySize       = DepthOrArraySize;
+					RtvDesc.Texture2DArray.FirstArraySlice = 0;
+					RtvDesc.Texture2DArray.MipSlice        = MipIdx;
 
-						Gfx->Device->CreateRenderTargetView(Handle.Get(), &RtvDesc, RenderTargetView);
-						RenderTargetViews.push_back(RenderTargetView);
-						RenderTargetView = Gfx->ColorTargetHeap->GetNextCpuHandle();
-					}
-					continue;
+					Gfx->Device->CreateRenderTargetView(Handle.Get(), &RtvDesc, RenderTargetView);
+					RenderTargetViews.push_back(RenderTargetView);
+					RenderTargetView = Gfx->ColorTargetHeap->GetNextCpuHandle();
 				}
-				else if (Info.Type == image_type::Texture1D && Info.Layers == 1)
+				else if (Info.Type == image_type::Texture1D && DepthOrArraySize == 1)
 				{
 					RtvDesc.ViewDimension      = D3D12_RTV_DIMENSION_TEXTURE1D;
 					RtvDesc.Texture1D.MipSlice = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture1D && Info.Layers > 1)
+				else if (Info.Type == image_type::Texture1D && DepthOrArraySize > 1)
 				{
 					RtvDesc.ViewDimension                  = D3D12_RTV_DIMENSION_TEXTURE1DARRAY;
-					RtvDesc.Texture1DArray.ArraySize       = Info.Layers;
+					RtvDesc.Texture1DArray.ArraySize       = DepthOrArraySize;
 					RtvDesc.Texture1DArray.FirstArraySlice = 0;
 					RtvDesc.Texture1DArray.MipSlice        = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture2D && Info.Layers == 1)
+				else if (Info.Type == image_type::Texture2D && DepthOrArraySize == 1)
 				{
 					RtvDesc.ViewDimension      = D3D12_RTV_DIMENSION_TEXTURE2D;
 					RtvDesc.Texture2D.MipSlice = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture2D && Info.Layers > 1)
+				else if (Info.Type == image_type::Texture2D && DepthOrArraySize > 1)
 				{
 					RtvDesc.ViewDimension                  = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
-					RtvDesc.Texture2DArray.ArraySize       = Info.Layers;
+					RtvDesc.Texture2DArray.ArraySize       = DepthOrArraySize;
 					RtvDesc.Texture2DArray.FirstArraySlice = 0;
 					RtvDesc.Texture2DArray.MipSlice        = MipIdx;
 				}
@@ -537,40 +533,36 @@ struct directx12_texture : public texture
 
 				if (Info.Usage & image_flags::TF_CubeMap)
 				{
-					for(u32 FaceIdx = 0; FaceIdx < 6; ++FaceIdx)
-					{
-						DepthStencilDesc.ViewDimension                  = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
-						DepthStencilDesc.Texture2DArray.ArraySize       = Info.Layers;
-						DepthStencilDesc.Texture2DArray.FirstArraySlice = FaceIdx;
-						DepthStencilDesc.Texture2DArray.MipSlice        = 1;
+					DepthStencilDesc.ViewDimension                  = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+					DepthStencilDesc.Texture2DArray.ArraySize       = DepthOrArraySize;
+					DepthStencilDesc.Texture2DArray.FirstArraySlice = 0;
+					DepthStencilDesc.Texture2DArray.MipSlice        = MipIdx;
 
-						Gfx->Device->CreateDepthStencilView(Handle.Get(), &DepthStencilDesc, DepthStencilView);
-						DepthStencilViews.push_back(DepthStencilView);
-						DepthStencilView = Gfx->DepthStencilHeap->GetNextCpuHandle();
-					}
-					continue;
+					Gfx->Device->CreateDepthStencilView(Handle.Get(), &DepthStencilDesc, DepthStencilView);
+					DepthStencilViews.push_back(DepthStencilView);
+					DepthStencilView = Gfx->DepthStencilHeap->GetNextCpuHandle();
 				}
-				else if (Info.Type == image_type::Texture1D && Info.Layers == 1)
+				else if (Info.Type == image_type::Texture1D && DepthOrArraySize == 1)
 				{
 					DepthStencilDesc.ViewDimension      = D3D12_DSV_DIMENSION_TEXTURE1D;
 					DepthStencilDesc.Texture1D.MipSlice = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture1D && Info.Layers > 1)
+				else if (Info.Type == image_type::Texture1D && DepthOrArraySize > 1)
 				{
 					DepthStencilDesc.ViewDimension                  = D3D12_DSV_DIMENSION_TEXTURE1DARRAY;
-					DepthStencilDesc.Texture1DArray.ArraySize       = Info.Layers;
+					DepthStencilDesc.Texture1DArray.ArraySize       = DepthOrArraySize;
 					DepthStencilDesc.Texture1DArray.FirstArraySlice = 0;
 					DepthStencilDesc.Texture1DArray.MipSlice        = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture2D && Info.Layers == 1)
+				else if (Info.Type == image_type::Texture2D && DepthOrArraySize == 1)
 				{
 					DepthStencilDesc.ViewDimension      = D3D12_DSV_DIMENSION_TEXTURE2D;
 					DepthStencilDesc.Texture2D.MipSlice = MipIdx;
 				}
-				else if (Info.Type == image_type::Texture2D && Info.Layers > 1)
+				else if (Info.Type == image_type::Texture2D && DepthOrArraySize > 1)
 				{
 					DepthStencilDesc.ViewDimension                  = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
-					DepthStencilDesc.Texture2DArray.ArraySize       = Info.Layers;
+					DepthStencilDesc.Texture2DArray.ArraySize       = DepthOrArraySize;
 					DepthStencilDesc.Texture2DArray.FirstArraySlice = 0;
 					DepthStencilDesc.Texture2DArray.MipSlice        = MipIdx;
 				}

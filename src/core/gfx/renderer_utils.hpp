@@ -228,7 +228,6 @@ namespace utils
 			image_type Type;
 			u32 Usage;
 			u32 MipLevels;
-			u32 Layers;
 			barrier_state InitialState;
 			sampler_info SamplerInfo;
 		};
@@ -263,7 +262,6 @@ namespace std
             hash_combine(Result, hash<u64>{}(static_cast<u64>(id.Type)));
             hash_combine(Result, hash<u32>{}(id.Usage));
             hash_combine(Result, hash<u32>{}(id.MipLevels));
-            hash_combine(Result, hash<u32>{}(id.Layers));
             hash_combine(Result, hash<u64>{}(static_cast<u64>(id.InitialState)));
             return Result;
         }
@@ -804,14 +802,6 @@ struct shader_compute_view_context : public shader_view_context
 	virtual ~shader_compute_view_context() override = default;
 
 	std::string Shader;
-};
-
-struct transfer : public shader_view_context
-{
-};
-
-struct full_screen : public shader_graphics_view_context
-{
 };
 
 #pragma pack(push, 1)

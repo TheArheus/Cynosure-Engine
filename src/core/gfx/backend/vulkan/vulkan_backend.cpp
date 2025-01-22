@@ -334,7 +334,6 @@ vulkan_backend(GLFWwindow* Handle)
 	utils::texture::input_data TextureInputData = {};
 	TextureInputData.Type	   = image_type::Texture1D;
 	TextureInputData.MipLevels = 1;
-	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
 	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_ColorTexture;
 	TextureInputData.InitialState = barrier_state::shader_read;
@@ -344,9 +343,8 @@ vulkan_backend(GLFWwindow* Handle)
 	TextureInputData.Type	   = image_type::Texture3D;
 	NullTexture3D = new vulkan_texture(this, "NullT_3D", nullptr, 1, 1, 1, TextureInputData);
 	TextureInputData.Type	   = image_type::Texture2D;
-	TextureInputData.Layers    = 6;
 	TextureInputData.Usage    |= image_flags::TF_CubeMap;
-	NullTextureCube = new vulkan_texture(this, "NullT_CUBE", nullptr, 1, 1, 1, TextureInputData);
+	NullTextureCube = new vulkan_texture(this, "NullT_CUBE", nullptr, 1, 1, 6, TextureInputData);
 
 	VkDescriptorPoolSize ImGuiPoolSizes[] = 
 	{

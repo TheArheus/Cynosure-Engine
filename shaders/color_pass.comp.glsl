@@ -107,6 +107,31 @@ vec4 QuatMul(vec4 lhs, vec4 rhs)
 	return vec4(lhs.xyz * rhs.w + rhs.xyz * lhs.w + cross(lhs.xyz, rhs.xyz), dot(-lhs.xyz, rhs.xyz) + lhs.w * rhs.w);
 }
 
+float GetShadowFactor(sampler2D ShadowSampler, vec2 ShadowUV, float FragZ)
+{
+	vec4 evsm = texture(ShadowSampler, ShadowUV); 
+	float z   = evsm.x;    // z
+	float z2  = evsm.y;    // z^2
+	float e_p = evsm.z;    // e^(+αz)
+	float e_n = evsm.w;    // e^(-αz)
+
+	// 1) Variance part
+	float Variance = max(z2 - z*z, 0.0001);
+	float d = (FragZ) - z;
+	float p_vsm = Variance / (Variance + d*d);
+
+	// 2) Exponential part
+	float FragEP = exp( 40 * FragZ);
+	float p_plus = clamp(FragEP / e_p, 0.0, 1.0);
+
+	float FragEN = exp(-40 * FragZ);
+	float p_minus = clamp(FragEN / e_n, 0.0, 1.0);
+
+	// 3) Combine
+	float Result = min(p_vsm, min(p_plus, p_minus));
+	return Result;
+}
+
 float GetSearchWidth(float LightSize, float ReceiverDepth, float Near)
 {
     return LightSize * (ReceiverDepth - Near) / ReceiverDepth;
@@ -169,7 +194,7 @@ float GetShadow(sampler2D ShadowSampler, vec4 PositionInLightSpace, vec2 Rotatio
 		vec2 Offset = vec2(Rotation.x * PoissonDisk[SampleIdx].x - Rotation.y * PoissonDisk[SampleIdx].y,
 						   Rotation.y * PoissonDisk[SampleIdx].x + Rotation.x * PoissonDisk[SampleIdx].y);
 
-		float ShadowDepth = texture(ShadowSampler, ShadowCoord + Offset*SearchSize).r;
+		float ShadowDepth = GetShadowFactor(ShadowSampler, ShadowCoord + Offset*SearchSize, ObjectDepth);
 		Result += (ObjectDepth + Bias) > ShadowDepth ? 1.0 : 0.0;
 	}
  

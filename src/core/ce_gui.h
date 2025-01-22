@@ -31,7 +31,6 @@ void SetGuiFont(font_t* Font, double FontSize)
 	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_ColorTexture;
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.MipLevels = 1;
-	TextureInputData.Layers    = 1;
 
 	TextureInputData.SamplerInfo.MinFilter = filter::linear;
 	TextureInputData.SamplerInfo.MagFilter = filter::linear;

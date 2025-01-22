@@ -472,34 +472,14 @@ SetColorTarget(const std::vector<texture*>& ColorAttachments, vec4 Clear)
 	assert(CurrContext->Type == pass_type::raster);
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
 
-#if 0
-	if(EnableMultiview)
+	ColorClear = Clear;
+	ColorAttachmentsToBind = ColorAttachments;
+	for(u32 i = 0; i < ColorAttachments.size(); i++)
 	{
-		directx12_texture* Attachment = static_cast<directx12_texture*>(ColorAttachments[0]);
+		texture* ColorTarget = ColorAttachments[i];
+		directx12_texture* Attachment = static_cast<directx12_texture*>(ColorTarget);
 		TexturesToCommon.insert(Attachment);
-		ColorTargets.push_back(Attachment->RenderTargetViews[Face]);
-		if(LoadOp == load_op::clear)
-		{
-			CommandList->ClearRenderTargetView(ColorTargets[0], Clear.E, 0, nullptr);
-		}
 	}
-	else
-	{
-#endif
-		for(u32 i = 0; i < ColorAttachments.size(); i++)
-		{
-			texture* ColorTarget = ColorAttachments[i];
-			directx12_texture* Attachment = static_cast<directx12_texture*>(ColorTarget);
-			TexturesToCommon.insert(Attachment);
-			ColorTargets.push_back(Attachment->RenderTargetViews[0]);
-			if(Context->LoadOp == load_op::clear)
-			{
-				CommandList->ClearRenderTargetView(ColorTargets[i], Clear.E, 0, nullptr);
-			}
-		}
-#if 0
-	}
-#endif
 }
 
 void directx12_command_list::
@@ -511,11 +491,8 @@ SetDepthTarget(texture* DepthAttachment, vec2 Clear)
 	directx12_texture* Attachment = static_cast<directx12_texture*>(DepthAttachment);
 	TexturesToCommon.insert(Attachment);
 
-	DepthStencilTarget = Attachment->DepthStencilViews[0];
-	if(Context->LoadOp == load_op::clear)
-	{
-		CommandList->ClearDepthStencilView(DepthStencilTarget, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, Clear.x, Clear.y, 0, nullptr);
-	}
+	DepthClear = Clear;
+	DepthStencilAttachmentToBind = DepthAttachment;
 }
 
 void directx12_command_list::
@@ -689,6 +666,27 @@ BeginRendering(u32 RenderWidth, u32 RenderHeight)
 	GfxWidth  = RenderWidth;
 	GfxHeight = RenderHeight;
 
+	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> ColorTargets;
+	for(u32 i = 0; i < ColorAttachmentsToBind.size(); i++)
+	{
+		directx12_texture* Attachment = static_cast<directx12_texture*>(ColorAttachmentsToBind[i]);
+		ColorTargets.push_back(Attachment->RenderTargetViews[0]);
+		if(Context->LoadOp == load_op::clear)
+		{
+			CommandList->ClearRenderTargetView(ColorTargets[i], ColorClear.E, 0, nullptr);
+		}
+	}
+
+	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilTarget = {};
+	if(DepthStencilAttachmentToBind)
+	{
+		DepthStencilTarget = static_cast<directx12_texture*>(DepthStencilAttachmentToBind)->DepthStencilViews[0];
+		if(Context->LoadOp == load_op::clear)
+		{
+			CommandList->ClearDepthStencilView(DepthStencilTarget, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, DepthClear.x, DepthClear.y, 0, nullptr);
+		}
+	}
+
 	CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
 }
 
@@ -699,8 +697,11 @@ EndRendering()
 	PrevContext = CurrContext;
 	if(CurrContext->Type != pass_type::raster) return;
 
-	ColorTargets.clear();
-	DepthStencilTarget = {};
+	ColorAttachmentsToBind.clear();
+	DepthStencilAttachmentToBind = nullptr;
+
+	ColorClear = vec4(0);
+	DepthClear = vec2(0);
 }
 
 void directx12_command_list::
@@ -762,7 +763,7 @@ FillTexture(texture* TextureToFill, float Depth, u32 Stencil)
 	SetImageBarriers({{TextureToFill, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, 0}});
 	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToFill);
 	for(u32 MipIdx = 0; MipIdx < Texture->Info.MipLevels; MipIdx++)
-		CommandList->ClearDepthStencilView(DepthStencilTarget, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, Depth, Stencil, 0, nullptr);
+		CommandList->ClearDepthStencilView(Texture->DepthStencilViews[MipIdx], D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, Depth, Stencil, 0, nullptr);
 }
 
 void directx12_command_list::

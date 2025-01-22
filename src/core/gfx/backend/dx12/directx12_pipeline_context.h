@@ -91,8 +91,11 @@ struct directx12_command_list : public command_list
 	ID3D12Device6* Device = nullptr;
 	ID3D12GraphicsCommandList* CommandList = nullptr;
 
-	std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> ColorTargets;
-	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilTarget;
+	std::vector<texture*> ColorAttachmentsToBind;
+	texture* DepthStencilAttachmentToBind;
+
+	vec4 ColorClear;
+	vec2 DepthClear;
 };
 
 class directx12_resource_binder;

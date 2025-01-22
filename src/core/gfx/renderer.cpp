@@ -28,7 +28,7 @@ global_graphics_context::
 #ifdef _WIN32
 global_graphics_context(backend_type _BackendType, HINSTANCE Instance, HWND Window, ImGuiContext* imguiContext, global_memory_allocator* NewAllocator)
 #else
-global_graphics_context(backend_type _BackendType, GLFWwindow* Window)
+global_graphics_context(backend_type _BackendType, GLFWwindow* Window, global_memory_allocator* NewAllocator)
 #endif
 {
 	Allocator = NewAllocator;
@@ -52,7 +52,6 @@ global_graphics_context(backend_type _BackendType, GLFWwindow* Window)
 	utils::texture::input_data TextureInputData = {};
 	TextureInputData.Type	   = image_type::Texture2D;
 	TextureInputData.MipLevels = 1;
-	TextureInputData.Layers    = 1;
 	TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
 	TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled;
 	for(u32 i = 0; i < Backend->ImageCount; i++)
@@ -277,144 +276,6 @@ SetContext(shader_pass* Pass, command_list* Context)
     }
 }
 
-#if 0
-// TODO: move to instanced draw
-void global_graphics_context::
-PushRectangle(vec2 Pos, vec2 Scale, vec3 Color)
-{
-	full_screen_pass_color::raster_parameters RasterParameters = {};
-	RasterParameters.ColorTarget = ColorTarget[BackBufferIndex];
-	RasterParameters.IndexBuffer = QuadIndexBuffer;
-
-	full_screen_pass_color::parameters Parameters = {};
-	Parameters.Vertices = QuadVertexBuffer;
-
-	AddRasterPass<full_screen_pass_color>("Colored Rectangle Draw", Parameters, RasterParameters, [Pos, Scale, Color, ColorTarget = ColorTarget[BackBufferIndex]]
-	(command_list* Cmd)
-	{
-		struct transform
-		{
-			vec2 Pos;
-			vec2 Scale;
-			vec2 Offset;
-			vec2 Dims;
-			vec3 Color;
-		};
-		transform Transform = {};
-		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Scale = Scale / vec2(ColorTarget.Width, ColorTarget.Height);
-		Transform.Offset = vec2(0);
-		Transform.Dims = vec2(1);
-		Transform.Color = Color;
-
-		Cmd->SetConstant((void*)&Transform, sizeof(transform));
-		Cmd->DrawIndexed(0, 6, 0, 0, 1);
-	});
-}
-
-// TODO: move to instanced draw
-void global_graphics_context::
-PushRectangle(vec2 Pos, vec2 Scale, resource_descriptor& Texture)
-{
-	full_screen_pass_texture::raster_parameters RasterParameters = {};
-	RasterParameters.ColorTarget = ColorTarget[BackBufferIndex];
-	RasterParameters.IndexBuffer = QuadIndexBuffer;
-
-	full_screen_pass_texture::parameters Parameters = {};
-	Parameters.Vertices = QuadVertexBuffer;
-	Parameters.Texture  = Texture;
-
-	AddRasterPass<full_screen_pass_texture>("Textured Rectangle Draw", Parameters, RasterParameters, [Pos, Scale, Texture = Texture, ColorTarget = ColorTarget[BackBufferIndex]]
-	(command_list* Cmd)
-	{
-		struct transform
-		{
-			vec2 Pos;
-			vec2 Scale;
-			vec2 Offset;
-			vec2 Dims;
-			vec3 Color;
-		};
-		transform Transform = {};
-		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Scale = Scale / vec2(ColorTarget.Width, ColorTarget.Height);
-		Transform.Offset = vec2(0);
-		Transform.Dims = vec2(1);
-		Transform.Color = vec3(1);
-
-		Cmd->SetConstant((void*)&Transform, sizeof(transform));
-		Cmd->DrawIndexed(0, 6, 0, 0, 1);
-	});
-}
-
-void global_graphics_context::
-PushRectangle(vec2 Pos, vec2 Scale, vec2 Offset, vec2 Dims, resource_descriptor& Atlas)
-{
-	full_screen_pass_texture::raster_parameters RasterParameters = {};
-	RasterParameters.ColorTarget = ColorTarget[BackBufferIndex];
-	RasterParameters.IndexBuffer = QuadIndexBuffer;
-
-	full_screen_pass_texture::parameters Parameters = {};
-	Parameters.Vertices = QuadVertexBuffer;
-	Parameters.Texture  = Atlas;
-
-	AddRasterPass<full_screen_pass_texture>("Textured Atlas Rectangle Draw", Parameters, RasterParameters, [Pos, Scale, Offset, Dims, Atlas, ColorTarget = ColorTarget[BackBufferIndex]]
-	(command_list* Cmd)
-	{
-		struct transform
-		{
-			vec2 Pos;
-			vec2 Scale;
-			vec2 Offset;
-			vec2 Dims;
-			vec3 Color;
-		};
-		transform Transform = {};
-		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Scale = Scale / vec2(ColorTarget.Width, ColorTarget.Height);
-		Transform.Offset = Offset / vec2(Atlas.Width, Atlas.Height);
-		Transform.Dims = Dims / vec2(Atlas.Width, Atlas.Height);
-		Transform.Color = vec3(1);
-
-		Cmd->SetConstant((void*)&Transform, sizeof(transform));
-		Cmd->DrawIndexed(0, 6, 0, 0, 1);
-	});
-}
-
-// TODO: move to instanced draw
-void global_graphics_context::
-PushCircle(vec2 Pos, float Radius, vec3 Color)
-{
-	full_screen_pass_circle::raster_parameters RasterParameters = {};
-	RasterParameters.ColorTarget = ColorTarget[BackBufferIndex];
-	RasterParameters.IndexBuffer = QuadIndexBuffer;
-
-	full_screen_pass_circle::parameters Parameters = {};
-	Parameters.Vertices = QuadVertexBuffer;
-
-	AddRasterPass<full_screen_pass_circle>("Circle Draw", Parameters, RasterParameters, [Pos, Radius, Color, ColorTarget = ColorTarget[BackBufferIndex]]
-	(command_list* Cmd)
-	{
-		struct transform
-		{
-			vec2 Pos;
-			vec2 Scale;
-			vec2 Offset;
-			vec2 Dims;
-			vec3 Color;
-		};
-		transform Transform = {};
-		Transform.Pos = (Pos / vec2(ColorTarget.Width, ColorTarget.Height)) * vec2(2.0f) - vec2(1.0f);
-		Transform.Scale = vec2(2.0 * Radius) / vec2(ColorTarget.Width, ColorTarget.Height);
-		Transform.Offset = vec2(0);
-		Transform.Dims = vec2(1);
-		Transform.Color = Color;
-
-		Cmd->SetConstant((void*)&Transform, sizeof(transform));
-		Cmd->DrawIndexed(0, 6, 0, 0, 1);
-	});
-}
-#endif
 
 // TODO: Command parallelization maybe
 // TODO: Maybe compile render graph only once per change

@@ -1,11 +1,15 @@
 #pragma once
 
+// TODO: Resource optimization
 struct deferred_raster_system : public entity_system
 {
 	mesh Geometries;
 	std::vector<mesh::material> Materials;
 	std::vector<mesh_draw_command> StaticMeshInstances;
 	std::vector<u32> StaticMeshVisibility;
+
+	vec3 CubeMapDirections[6];
+	vec3 CubeMapUpVectors[6];
 
 	std::vector<resource_descriptor> DiffuseTextures;
 	std::vector<resource_descriptor> NormalTextures;
@@ -25,6 +29,7 @@ struct deferred_raster_system : public entity_system
 
 	resource_descriptor MeshMaterialsBuffer;
 	resource_descriptor LightSourcesBuffer;
+	resource_descriptor LightSourcesMatrixBuffer;
 
 	resource_descriptor MeshDrawVisibilityDataBuffer;
 	resource_descriptor IndirectDrawIndexedCommands;
@@ -47,11 +52,13 @@ struct deferred_raster_system : public entity_system
 	resource_descriptor BrightTarget;
 	resource_descriptor TempBrTarget;
 
-	std::vector<resource_descriptor> GlobalShadow;
+	resource_descriptor GlobalShadowDepth;
+	std::vector<resource_descriptor> GlobalShadowEVSM;
 	std::vector<resource_descriptor> GBuffer;
 
 	resource_descriptor AmbientOcclusionData;
 	resource_descriptor BlurTemp;
+	resource_descriptor FxaaTemp;
 	resource_descriptor DepthPyramid;
 	resource_descriptor RandomAnglesTexture;
 	resource_descriptor NoiseTexture;
@@ -64,10 +71,23 @@ struct deferred_raster_system : public entity_system
 	{
 		RequireComponent<mesh_component>();
 		RequireComponent<static_instances_component>();
+
+		CubeMapDirections[0] = vec3( 1.0,  0.0,  0.0);
+		CubeMapDirections[1] = vec3(-1.0,  0.0,  0.0);
+		CubeMapDirections[2] = vec3( 0.0, -1.0,  0.0);
+		CubeMapDirections[3] = vec3( 0.0,  1.0,  0.0);
+		CubeMapDirections[4] = vec3( 0.0,  0.0,  1.0);
+		CubeMapDirections[5] = vec3( 0.0,  0.0, -1.0);
+		CubeMapUpVectors [0] = vec3( 0.0, -1.0,  0.0); // +X
+		CubeMapUpVectors [1] = vec3( 0.0, -1.0,  0.0); // -X
+		CubeMapUpVectors [2] = vec3( 0.0,  0.0, -1.0); // +Y
+		CubeMapUpVectors [3] = vec3( 0.0,  0.0,  1.0); // -Y
+		CubeMapUpVectors [4] = vec3( 0.0, -1.0,  0.0); // +Z
+		CubeMapUpVectors [5] = vec3( 0.0, -1.0,  0.0); // -Z
 	}
 
 	// TODO: Move to/create a asset storage
-	void Setup(window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCommonCullingInput)
+	void Setup(u32 RenderWidth, u32 RenderHeight, window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCommonCullingInput)
 	{
 		texture_data Texture = {};
 		mesh::material NewMaterial = {};
@@ -76,7 +96,6 @@ struct deferred_raster_system : public entity_system
 		TextureInputData.Usage     = TF_Sampled | TF_ColorTexture;
 		TextureInputData.Type	   = image_type::Texture2D;
 		TextureInputData.MipLevels = 1;
-		TextureInputData.Layers    = 1;
 
 		vec3 SceneMin = vec3( FLT_MAX);
 		vec3 SceneMax = vec3(-FLT_MAX);
@@ -175,6 +194,7 @@ struct deferred_raster_system : public entity_system
 		// TODO: Move resource management into renderer_backend class
 		MeshMaterialsBuffer = Window.Gfx.GpuMemoryHeap->CreateBuffer("MeshMaterialsBuffer", Materials.data(), sizeof(mesh::material), Materials.size(), RF_StorageBuffer);
 		LightSourcesBuffer = Window.Gfx.GpuMemoryHeap->CreateBuffer("LightSourcesBuffer", sizeof(light_source), LIGHT_SOURCES_MAX_COUNT, RF_StorageBuffer);
+		LightSourcesMatrixBuffer = Window.Gfx.GpuMemoryHeap->CreateBuffer("LightSourcesMatrixBuffer", sizeof(mat4), LIGHT_SOURCES_MAX_COUNT, RF_StorageBuffer);
 
 		VertexBuffer = Window.Gfx.GpuMemoryHeap->CreateBuffer("VertexBuffer", Geometries.Vertices.data(), sizeof(vertex), Geometries.Vertices.size(), RF_StorageBuffer);
 		IndexBuffer = Window.Gfx.GpuMemoryHeap->CreateBuffer("IndexBuffer", Geometries.VertexIndices.data(), sizeof(u32), Geometries.VertexIndices.size(), RF_IndexBuffer);
@@ -197,33 +217,47 @@ struct deferred_raster_system : public entity_system
 
 		TextureInputData.Format    = image_format::D32_SFLOAT;
 		TextureInputData.Usage     = TF_DepthTexture | TF_Sampled;
-		DebugCameraViewDepthTarget = Window.Gfx.GpuMemoryHeap->CreateTexture("DebugCameraViewDepthTarget", Window.Width, Window.Height, 1, TextureInputData);
+		DebugCameraViewDepthTarget = Window.Gfx.GpuMemoryHeap->CreateTexture("DebugCameraViewDepthTarget", RenderWidth, RenderHeight, 1, TextureInputData);
 
 		TextureInputData.Type	   = image_type::Texture2D;
 		TextureInputData.MipLevels = 1;
-		TextureInputData.Layers    = 1;
 		TextureInputData.Format    = image_format::B8G8R8A8_UNORM;
 		TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled;
-		VolumetricLightOut = Window.Gfx.GpuMemoryHeap->CreateTexture("Volumetric light Result", Window.Width, Window.Height, 1, TextureInputData);
-		IndirectLightOut   = Window.Gfx.GpuMemoryHeap->CreateTexture("Indirect light result"  , Window.Width, Window.Height, 1, TextureInputData);
-		LightColor         = Window.Gfx.GpuMemoryHeap->CreateTexture("Light color",  Window.Width, Window.Height, 1, TextureInputData);
+		VolumetricLightOut = Window.Gfx.GpuMemoryHeap->CreateTexture("Volumetric light Result", RenderWidth, RenderHeight, 1, TextureInputData);
+		IndirectLightOut   = Window.Gfx.GpuMemoryHeap->CreateTexture("Indirect light result"  , RenderWidth, RenderHeight, 1, TextureInputData);
+		LightColor         = Window.Gfx.GpuMemoryHeap->CreateTexture("Light color",  RenderWidth, RenderHeight, 1, TextureInputData);
 
 		TextureInputData.Type	   = image_type::Texture3D;
 		TextureInputData.Format    = image_format::R32G32B32A32_SFLOAT;
 		TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled;
 		TextureInputData.MipLevels = GetImageMipLevels(VOXEL_SIZE, VOXEL_SIZE);
 		TextureInputData.SamplerInfo.AddressMode = sampler_address_mode::clamp_to_border;
-		VoxelGridTarget    = Window.Gfx.GpuMemoryHeap->CreateTexture("VoxelGridTarget", VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
-		VoxelGridNormal    = Window.Gfx.GpuMemoryHeap->CreateTexture("VoxelGridNormal", VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+		VoxelGridTarget = Window.Gfx.GpuMemoryHeap->CreateTexture("VoxelGridTarget", VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+		VoxelGridNormal = Window.Gfx.GpuMemoryHeap->CreateTexture("VoxelGridNormal", VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, TextureInputData);
+
+		TextureInputData.MipLevels = 1;
+		TextureInputData.Type	   = image_type::Texture2D;
+		TextureInputData.SamplerInfo = {};
+		GlobalShadowEVSM.resize(DEPTH_CASCADES_COUNT);
+		for(u32 CascadeIdx = 0; CascadeIdx < DEPTH_CASCADES_COUNT; CascadeIdx++)
+		{
+			GlobalShadowEVSM[CascadeIdx] = Window.Gfx.GpuMemoryHeap->CreateTexture("GlobalShadowEVSM" + std::to_string(CascadeIdx), PreviousPowerOfTwo(RenderWidth) * 2, PreviousPowerOfTwo(RenderWidth) * 2, 1, TextureInputData);
+		}
+
+		TextureInputData.Format    = image_format::D32_SFLOAT;
+		TextureInputData.Usage     = TF_DepthTexture | TF_Sampled;
+		TextureInputData.MipLevels = 1;
+		GlobalShadowDepth = Window.Gfx.GpuMemoryHeap->CreateTexture("GlobalShadowDepth", PreviousPowerOfTwo(RenderWidth) * 2, PreviousPowerOfTwo(RenderWidth) * 2, 1, TextureInputData);
 
 		TextureInputData.Type	   = image_type::Texture2D;
 		TextureInputData.Format    = image_format::R11G11B10_SFLOAT;
+		TextureInputData.Usage     = TF_ColorAttachment | TF_Storage | TF_Sampled;
 		TextureInputData.MipLevels = 1;
-		HdrColorTarget = Window.Gfx.GpuMemoryHeap->CreateTexture("HdrColorTarget", Window.Width, Window.Height, 1, TextureInputData);
+		HdrColorTarget = Window.Gfx.GpuMemoryHeap->CreateTexture("HdrColorTarget", RenderWidth, RenderHeight, 1, TextureInputData);
 		TextureInputData.MipLevels = 6;
 		TextureInputData.SamplerInfo.AddressMode = sampler_address_mode::clamp_to_border;
-		BrightTarget   = Window.Gfx.GpuMemoryHeap->CreateTexture("BrightTarget", Window.Width, Window.Height, 1, TextureInputData);
-		TempBrTarget   = Window.Gfx.GpuMemoryHeap->CreateTexture("TempBrTarget", Window.Width, Window.Height, 1, TextureInputData);
+		BrightTarget   = Window.Gfx.GpuMemoryHeap->CreateTexture("BrightTarget", RenderWidth, RenderHeight, 1, TextureInputData);
+		TempBrTarget   = Window.Gfx.GpuMemoryHeap->CreateTexture("TempBrTarget", RenderWidth, RenderHeight, 1, TextureInputData);
 
 		vec2 PoissonDisk[64] = {};
 		PoissonDisk[0]  = vec2(-0.613392, 0.617481);
@@ -317,7 +351,6 @@ struct deferred_raster_system : public entity_system
 		TextureInputData.Usage     = TF_Storage | TF_Sampled | TF_ColorTexture;
 		TextureInputData.Type	   = image_type::Texture3D;
 		TextureInputData.MipLevels = 1;
-		TextureInputData.Layers    = 1;
 		RandomAnglesTexture = Window.Gfx.GpuMemoryHeap->CreateTexture("RandomAnglesTexture", RandomAngles, Res, Res, Res, TextureInputData);
 		TextureInputData.Format    = image_format::R32G32_SFLOAT;
 		TextureInputData.Type	   = image_type::Texture2D;
@@ -336,42 +369,33 @@ struct deferred_raster_system : public entity_system
 		}
 		RandomSamplesBuffer = Window.Gfx.GpuMemoryHeap->CreateBuffer("RandomSamplesBuffer", RandomSamples, sizeof(vec4), 64, RF_StorageBuffer);
 
-		GlobalShadow.resize(DEPTH_CASCADES_COUNT);
-		TextureInputData.Format    = image_format::D32_SFLOAT;
-		TextureInputData.Usage     = TF_DepthTexture | TF_Sampled;
-		TextureInputData.Type	   = image_type::Texture2D;
-		TextureInputData.MipLevels = 1;
-		TextureInputData.Layers    = 1;
-		for(u32 CascadeIdx = 0; CascadeIdx < DEPTH_CASCADES_COUNT; CascadeIdx++)
-		{
-			GlobalShadow[CascadeIdx] = Window.Gfx.GpuMemoryHeap->CreateTexture("GlobalShadow" + std::to_string(CascadeIdx), PreviousPowerOfTwo(Window.Width) * 2, PreviousPowerOfTwo(Window.Width) * 2, 1, TextureInputData);
-		}
-
 		TextureInputData.Format    = image_format::R32_SFLOAT;
 		TextureInputData.Usage     = TF_Sampled | TF_Storage | TF_ColorTexture;
-		TextureInputData.MipLevels = GetImageMipLevels(PreviousPowerOfTwo(Window.Width), PreviousPowerOfTwo(Window.Height));
+		TextureInputData.MipLevels = GetImageMipLevels(PreviousPowerOfTwo(RenderWidth), PreviousPowerOfTwo(RenderHeight));
 		TextureInputData.SamplerInfo.ReductionMode = sampler_reduction_mode::max;
 		TextureInputData.SamplerInfo.MinFilter = filter::nearest;
 		TextureInputData.SamplerInfo.MagFilter = filter::nearest;
 		TextureInputData.SamplerInfo.MipmapMode = mipmap_mode::nearest;
-		DepthPyramid = Window.Gfx.GpuMemoryHeap->CreateTexture("DepthPyramid", PreviousPowerOfTwo(Window.Width), PreviousPowerOfTwo(Window.Height), 1, TextureInputData);
+		DepthPyramid = Window.Gfx.GpuMemoryHeap->CreateTexture("DepthPyramid", PreviousPowerOfTwo(RenderWidth), PreviousPowerOfTwo(RenderHeight), 1, TextureInputData);
 
 		GBuffer.resize(GBUFFER_COUNT);
 		TextureInputData = {};
 		TextureInputData.Type	   = image_type::Texture2D;
 		TextureInputData.MipLevels = 1;
-		TextureInputData.Layers    = 1;
 		TextureInputData.Usage     = TF_ColorAttachment | TF_Sampled | TF_Storage;
 		TextureInputData.Format    = image_format::R16G16B16A16_SNORM;
-		GBuffer[0] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_VertexNormals"  , Window.Width, Window.Height, 1, TextureInputData); // Vertex   Normals
-		GBuffer[1] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_FragmentNormals", Window.Width, Window.Height, 1, TextureInputData); // Fragment Normals
+		GBuffer[0] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_VertexNormals"  , RenderWidth, RenderHeight, 1, TextureInputData); // Vertex   Normals
+		GBuffer[1] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_FragmentNormals", RenderWidth, RenderHeight, 1, TextureInputData); // Fragment Normals
 		TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
-		GBuffer[2] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_Diffuse", Window.Width, Window.Height, 1, TextureInputData); // Diffuse Color
-		GBuffer[3] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_Emmit"  , Window.Width, Window.Height, 1, TextureInputData); // Emmit Color
+		GBuffer[2] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_Diffuse", RenderWidth, RenderHeight, 1, TextureInputData); // Diffuse Color
+		GBuffer[3] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_Emmit"  , RenderWidth, RenderHeight, 1, TextureInputData); // Emmit Color
 		TextureInputData.Format    = image_format::R32G32_SFLOAT;
-		GBuffer[4] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_Specular", Window.Width, Window.Height, 1, TextureInputData); // Specular + Light Emmission Ammount
-		AmbientOcclusionData = Window.Gfx.GpuMemoryHeap->CreateTexture("AmbientOcclusionData", Window.Width, Window.Height, 1, TextureInputData);
-		BlurTemp			 = Window.Gfx.GpuMemoryHeap->CreateTexture("BlurTemp", Window.Width, Window.Height, 1, TextureInputData);
+		GBuffer[4] = Window.Gfx.GpuMemoryHeap->CreateTexture("GBuffer_Specular", RenderWidth, RenderHeight, 1, TextureInputData); // Specular + Light Emmission Ammount
+		TextureInputData.Format    = image_format::R32_SFLOAT;
+		AmbientOcclusionData = Window.Gfx.GpuMemoryHeap->CreateTexture("AmbientOcclusionData", RenderWidth, RenderHeight, 1, TextureInputData);
+		TextureInputData.Format    = image_format::R32G32B32A32_SFLOAT;
+		FxaaTemp			 = Window.Gfx.GpuMemoryHeap->CreateTexture("FxaaTemp", RenderWidth, RenderHeight, 1, TextureInputData);
+		BlurTemp			 = Window.Gfx.GpuMemoryHeap->CreateTexture("BlurTemp", PreviousPowerOfTwo(RenderWidth) * 2, PreviousPowerOfTwo(RenderWidth) * 2, 1, TextureInputData);
 	}
 
 	// TODO: Move out all render commands. There will be only a geometry render command generation I guess
@@ -382,34 +406,46 @@ struct deferred_raster_system : public entity_system
 			u32 SpotLightSourceCount = 0;
 
 			utils::texture::input_data TextureInputData = {};
+			// TODO: Implement this to be more dynamic
+			// TODO: Better Implementation for the lights
 			if((LightShadows.size() + PointLightShadows.size()) != GlobalLightSources.size())
 			{
 				LightShadows.clear();
 				PointLightShadows.clear();
+				std::vector<mat4> PointLightMatrices;
 
 				TextureInputData.Format = image_format::D32_SFLOAT;
 				TextureInputData.Usage  = TF_DepthTexture | TF_Sampled;
-				TextureInputData.Type = image_type::Texture2D;
+				TextureInputData.Type   = image_type::Texture2D;
 				for(const light_source& LightSource : GlobalLightSources)
 				{
 					if(LightSource.Type == light_type_point)
 					{
+						for(int FaceIdx = 0; FaceIdx < 6; FaceIdx++)
+						{
+							vec3 CubeMapFaceDir = CubeMapDirections[FaceIdx];
+							vec3 CubeMapUpVect  = CubeMapUpVectors[FaceIdx];
+							mat4 ShadowMapProj  = PerspRH(90.0f, RenderWidth, RenderHeight, WorldUpdate.NearZ, WorldUpdate.FarZ);
+							mat4 ShadowMapView  = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + CubeMapFaceDir, CubeMapUpVect);
+							mat4 Shadow = ShadowMapView * ShadowMapProj;
+							PointLightMatrices.push_back(Shadow);
+						}
+
 						TextureInputData.Usage |= TF_CubeMap;
 						TextureInputData.MipLevels = 1;
-						TextureInputData.Layers    = 6;
 						if(WorldUpdate.LightSourceShadowsEnabled)
-							PointLightShadows.push_back(Gfx.GpuMemoryHeap->CreateTexture("PointLightShadow" + std::to_string(PointLightSourceCount), Gfx.Backend->Width, Gfx.Backend->Width, 1, TextureInputData));
+							PointLightShadows.push_back(Gfx.GpuMemoryHeap->CreateTexture("PointLightShadow" + std::to_string(PointLightSourceCount), RenderWidth, RenderWidth, 6, TextureInputData));
 						PointLightSourceCount++;
 					}
 					else if(LightSource.Type == light_type_spot)
 					{
 						TextureInputData.MipLevels = 1;
-						TextureInputData.Layers    = 1;
 						if(WorldUpdate.LightSourceShadowsEnabled)
-							LightShadows.push_back(Gfx.GpuMemoryHeap->CreateTexture("LightShadow" + std::to_string(SpotLightSourceCount), Gfx.Backend->Width, Gfx.Backend->Height, 1, TextureInputData));
+							LightShadows.push_back(Gfx.GpuMemoryHeap->CreateTexture("LightShadow" + std::to_string(SpotLightSourceCount), RenderWidth, RenderHeight, 1, TextureInputData));
 						SpotLightSourceCount++;
 					}
 				}
+				Gfx.GpuMemoryHeap->UpdateBuffer(LightSourcesMatrixBuffer, PointLightMatrices.data(), sizeof(mat4), PointLightMatrices.size());
 			}
 		}
 
@@ -456,12 +492,12 @@ struct deferred_raster_system : public entity_system
 		}
 
 		{
-			mesh_shadow::parameters Parameters;
+			mesh_depth_variance_exp::parameters Parameters;
 			Parameters.VertexBuffer = VertexBuffer;
 			Parameters.CommandBuffer = MeshDrawShadowCommandBuffer;
 			Parameters.GeometryOffsets = GeometryOffsets;
 
-			mesh_shadow::raster_parameters RasterParameters;
+			mesh_depth_variance_exp::raster_parameters RasterParameters;
 			RasterParameters.IndexBuffer = IndexBuffer;
 			RasterParameters.IndirectBuffer = ShadowIndirectDrawIndexedCommands;
 
@@ -469,16 +505,114 @@ struct deferred_raster_system : public entity_system
 			{
 				mat4 Shadow = WorldUpdate.LightView[CascadeIdx] * WorldUpdate.LightProj[CascadeIdx];
 
-				RasterParameters.DepthTarget = GlobalShadow[CascadeIdx];
+				RasterParameters.ColorTarget = GlobalShadowEVSM[CascadeIdx];
+				RasterParameters.DepthTarget = GlobalShadowDepth;
 
-				Gfx.AddRasterPass<mesh_shadow>("Cascade shadow map generation: #" + std::to_string(CascadeIdx), GlobalShadow[CascadeIdx].Width, GlobalShadow[CascadeIdx].Height, Parameters, RasterParameters,
-				[MeshCount = Geometries.MeshCount, Width = GlobalShadow[CascadeIdx].Width, Height = GlobalShadow[CascadeIdx].Height, Shadow](command_list* Cmd)
+				Gfx.AddRasterPass<mesh_depth_variance_exp>("Cascade shadow map generation: #" + std::to_string(CascadeIdx), GlobalShadowEVSM[CascadeIdx].Width, GlobalShadowEVSM[CascadeIdx].Height, Parameters, RasterParameters,
+				[MeshCount = Geometries.MeshCount, Width = GlobalShadowEVSM[CascadeIdx].Width, Height = GlobalShadowEVSM[CascadeIdx].Height, Shadow](command_list* Cmd)
 				{
 					Cmd->SetViewport(0, 0, Width, Height);
 					Cmd->SetConstant((void*)&Shadow, sizeof(mat4));
 					Cmd->DrawIndirect(MeshCount, sizeof(indirect_draw_indexed_command));
 				});
 			}
+		}
+
+		{
+			u32 PointLightSourceIdx  = 0;
+			u32 SpotLightSourceIdx   = 0;
+			if(WorldUpdate.LightSourceShadowsEnabled)
+			{
+				for(const light_source& LightSource : GlobalLightSources)
+				{
+					if(LightSource.Type == light_type_point)
+					{
+						resource_descriptor& ShadowMapTexture = PointLightShadows[PointLightSourceIdx];
+
+						point_shadow_input PointShadowInput = {};
+						PointShadowInput.LightPos = GlobalLightSources[PointLightSourceIdx + SpotLightSourceIdx].Pos;
+						PointShadowInput.FarZ = WorldUpdate.FarZ;
+						PointShadowInput.LightIdx = PointLightSourceIdx;
+
+						mesh_depth_cubemap::parameters Parameters;
+						Parameters.VertexBuffer = VertexBuffer;
+						Parameters.CommandBuffer = MeshDrawShadowCommandBuffer;
+						Parameters.GeometryOffsets = GeometryOffsets;
+						Parameters.LightSourcesMatrixBuffer = LightSourcesMatrixBuffer;
+
+						mesh_depth_cubemap::raster_parameters RasterParameters;
+						RasterParameters.IndexBuffer = IndexBuffer;
+						RasterParameters.IndirectBuffer = ShadowIndirectDrawIndexedCommands;
+
+						RasterParameters.DepthTarget = ShadowMapTexture;
+
+						Gfx.AddRasterPass<mesh_depth_cubemap>("Shadow Map Point Light #" + std::to_string(SpotLightSourceIdx) + " Generation", ShadowMapTexture.Width, ShadowMapTexture.Height, Parameters, RasterParameters,
+						[MeshCount = Geometries.MeshCount, Width = ShadowMapTexture.Width, Height = ShadowMapTexture.Height, PointShadowInput](command_list* Cmd)
+						{
+							Cmd->SetViewport(0, 0, Width, Height);
+							Cmd->SetConstant((void*)&PointShadowInput, sizeof(point_shadow_input));
+							Cmd->DrawIndirect(MeshCount, sizeof(indirect_draw_indexed_command));
+						});
+
+						PointLightSourceIdx++;
+					}
+					else if(LightSource.Type == light_type_spot)
+					{
+						resource_descriptor& ShadowMapTexture = LightShadows[SpotLightSourceIdx];
+
+						mat4 ShadowMapProj = PerspRH(LightSource.Pos.w, ShadowMapTexture.Width, ShadowMapTexture.Height, WorldUpdate.NearZ, WorldUpdate.FarZ);
+						mat4 ShadowMapView = LookAtRH(vec3(LightSource.Pos), vec3(LightSource.Pos) + vec3(LightSource.Dir), vec3(0, 1, 0));
+						mat4 Shadow = ShadowMapView * ShadowMapProj;
+
+						mesh_depth::parameters Parameters;
+						Parameters.VertexBuffer = VertexBuffer;
+						Parameters.CommandBuffer = MeshDrawShadowCommandBuffer;
+						Parameters.GeometryOffsets = GeometryOffsets;
+
+						mesh_depth::raster_parameters RasterParameters;
+						RasterParameters.IndexBuffer = IndexBuffer;
+						RasterParameters.IndirectBuffer = ShadowIndirectDrawIndexedCommands;
+
+						RasterParameters.DepthTarget = ShadowMapTexture;
+
+						Gfx.AddRasterPass<mesh_depth>("Shadow Map Spot Light #" + std::to_string(SpotLightSourceIdx) + " Generation", ShadowMapTexture.Width, ShadowMapTexture.Height, Parameters, RasterParameters,
+						[MeshCount = Geometries.MeshCount, Width = ShadowMapTexture.Width, Height = ShadowMapTexture.Height, Shadow](command_list* Cmd)
+						{
+							Cmd->SetViewport(0, 0, Width, Height);
+							Cmd->SetConstant((void*)&Shadow, sizeof(mat4));
+							Cmd->DrawIndirect(MeshCount, sizeof(indirect_draw_indexed_command));
+						});
+
+						SpotLightSourceIdx++;
+					}
+				}
+			}
+		}
+
+		for(u32 CascadeIdx = 0; CascadeIdx < DEPTH_CASCADES_COUNT; ++CascadeIdx)
+		{
+			blur::parameters Parameters;
+			Parameters.Input  = GlobalShadowEVSM[CascadeIdx];
+			Parameters.Output = BlurTemp;
+
+			vec3 BlurInput(GlobalShadowEVSM[CascadeIdx].Width, GlobalShadowEVSM[CascadeIdx].Height, 1.0);
+			Gfx.AddComputePass<blur>("Blur Vertical", Parameters,
+			[BlurInput](command_list* Cmd)
+			{
+				Cmd->SetConstant((void*)&BlurInput, sizeof(vec3));
+				Cmd->Dispatch(BlurInput.x, BlurInput.y);
+			});
+
+			Parameters.Input  = BlurTemp;
+			Parameters.Output = GlobalShadowEVSM[CascadeIdx];
+
+			BlurInput.z = 0.0;
+			Gfx.AddComputePass<blur>("Blur Horizontal", Parameters,
+			[BlurInput](command_list* Cmd)
+			{
+				Cmd->SetConstant((void*)&BlurInput, sizeof(vec3));
+				Cmd->Dispatch(BlurInput.x, BlurInput.y);
+			});
 		}
 
 #if 0
@@ -495,7 +629,7 @@ struct deferred_raster_system : public entity_system
 
 			mat4 Shadow = WorldUpdate.DebugView * WorldUpdate.Proj;
 
-			Gfx.AddRasterPass<depth_prepass>("Depth prepass", Parameters, RasterParameters,
+			Gfx.AddRasterPass<depth_prepass>("Depth prepass", RenderWidth, RenderHeight, Parameters, RasterParameters,
 			[Shadow, DebugCameraViewDepthTarget](command_list* Cmd)
 			{
 				Cmd->SetConstant((void*)&Shadow, sizeof(mat4));
@@ -532,37 +666,40 @@ struct deferred_raster_system : public entity_system
 		}
 
 		// TODO: Another type of global illumination for weaker systems
+		if(GlobalLightSources.size())
 		{
-			voxelization::parameters Parameters;
-			Parameters.WorldUpdateBuffer = WorldUpdateBuffer;
-			Parameters.VertexBuffer = VertexBuffer;
-			Parameters.MeshDrawCommandBuffer = MeshDrawCommandBuffer;
-			Parameters.MeshMaterialsBuffer = MeshMaterialsBuffer;
-			Parameters.GeometryOffsets = GeometryOffsets;
-			Parameters.LightSources = LightSourcesBuffer;
-			Parameters.VoxelGrid = VoxelGridTarget;
-			Parameters.VoxelGridNormal = VoxelGridNormal;
-
-			Parameters.DiffuseTextures = DiffuseTextures;
-			Parameters.NormalTextures = NormalTextures;
-			Parameters.SpecularTextures = SpecularTextures;
-			Parameters.HeightTextures = HeightTextures;
-
-			voxelization::raster_parameters RasterParameters = {};
-			RasterParameters.IndexBuffer = IndexBuffer;
-			RasterParameters.IndirectBuffer = IndirectDrawIndexedCommands;
-
-			Gfx.AddRasterPass<voxelization>("Voxelization", VoxelGridTarget.Width, VoxelGridTarget.Height, Parameters, RasterParameters,
-			[MeshCount = Geometries.MeshCount, RenderWidth = VoxelGridTarget.Width, RenderHeight = VoxelGridTarget.Height](command_list* Cmd)
 			{
-				Cmd->SetViewport(0, 0, RenderWidth, RenderHeight);
-				Cmd->DrawIndirect(MeshCount, sizeof(indirect_draw_indexed_command));
-			}, 
-			[_VoxelGridTarget = Gfx.GpuMemoryHeap->GetTexture(VoxelGridTarget), _VoxelGridNormal = Gfx.GpuMemoryHeap->GetTexture(VoxelGridNormal)](command_list* Cmd)
-			{
-				Cmd->FillTexture(_VoxelGridTarget, vec4(0));
-				Cmd->FillTexture(_VoxelGridNormal, vec4(0));
-			});
+				voxelization::parameters Parameters;
+				Parameters.WorldUpdateBuffer = WorldUpdateBuffer;
+				Parameters.VertexBuffer = VertexBuffer;
+				Parameters.MeshDrawCommandBuffer = MeshDrawCommandBuffer;
+				Parameters.MeshMaterialsBuffer = MeshMaterialsBuffer;
+				Parameters.GeometryOffsets = GeometryOffsets;
+				Parameters.LightSources = LightSourcesBuffer;
+				Parameters.VoxelGrid = VoxelGridTarget;
+				Parameters.VoxelGridNormal = VoxelGridNormal;
+
+				Parameters.DiffuseTextures = DiffuseTextures;
+				Parameters.NormalTextures = NormalTextures;
+				Parameters.SpecularTextures = SpecularTextures;
+				Parameters.HeightTextures = HeightTextures;
+
+				voxelization::raster_parameters RasterParameters = {};
+				RasterParameters.IndexBuffer = IndexBuffer;
+				RasterParameters.IndirectBuffer = IndirectDrawIndexedCommands;
+
+				Gfx.AddRasterPass<voxelization>("Voxelization", VoxelGridTarget.Width, VoxelGridTarget.Height, Parameters, RasterParameters,
+				[MeshCount = Geometries.MeshCount, VoxelWidth = VoxelGridTarget.Width, VoxelHeight = VoxelGridTarget.Height](command_list* Cmd)
+				{
+					Cmd->SetViewport(0, 0, VoxelWidth, VoxelHeight);
+					Cmd->DrawIndirect(MeshCount, sizeof(indirect_draw_indexed_command));
+				}, 
+				[_VoxelGridTarget = Gfx.GpuMemoryHeap->GetTexture(VoxelGridTarget), _VoxelGridNormal = Gfx.GpuMemoryHeap->GetTexture(VoxelGridNormal)](command_list* Cmd)
+				{
+					Cmd->FillTexture(_VoxelGridTarget, vec4(0));
+					Cmd->FillTexture(_VoxelGridNormal, vec4(0));
+				});
+			}
 
 			for(u32 MipIdx = 1; MipIdx < VoxelGridTarget.Info.MipLevels; ++MipIdx)
 			{
@@ -592,6 +729,22 @@ struct deferred_raster_system : public entity_system
 					Cmd->Dispatch(VecDims.x, VecDims.y, VecDims.z);
 				});
 			}
+
+			{
+				voxel_indirect_light_calc::parameters Parameters;
+				Parameters.WorldUpdateBuffer = WorldUpdateBuffer;
+				Parameters.DepthTarget = Gfx.DepthTarget;
+				Parameters.GBuffer = GBuffer;
+				Parameters.VoxelGrid = VoxelGridTarget;
+				Parameters.VoxelGridNormal = VoxelGridNormal;
+				Parameters.Out = IndirectLightOut;
+
+				Gfx.AddComputePass<voxel_indirect_light_calc>("Draw voxel indirect light", Parameters,
+				[RenderWidth, RenderHeight](command_list* Cmd)
+				{
+					Cmd->Dispatch(RenderWidth, RenderHeight);
+				});
+			}
 		}
 
 		{
@@ -604,9 +757,9 @@ struct deferred_raster_system : public entity_system
 			Parameters.Output = AmbientOcclusionData;
 
 			Gfx.AddComputePass<ssao>("Screen Space Ambient Occlusion", Parameters,
-			[Width = Gfx.Backend->Width, Height = Gfx.Backend->Height](command_list* Cmd)
+			[RenderWidth, RenderHeight](command_list* Cmd)
 			{
-				Cmd->Dispatch(Width, Height);
+				Cmd->Dispatch(RenderWidth, RenderHeight);
 			});
 		}
 
@@ -615,7 +768,7 @@ struct deferred_raster_system : public entity_system
 			Parameters.Input  = AmbientOcclusionData;
 			Parameters.Output = BlurTemp;
 
-			vec3 BlurInput(Gfx.Backend->Width, Gfx.Backend->Height, 1.0);
+			vec3 BlurInput(RenderWidth, RenderHeight, 1.0);
 			Gfx.AddComputePass<blur>("Blur Vertical", Parameters,
 			[BlurInput](command_list* Cmd)
 			{
@@ -640,31 +793,15 @@ struct deferred_raster_system : public entity_system
 			Parameters.WorldUpdateBuffer = WorldUpdateBuffer;
 			Parameters.DepthTarget = Gfx.DepthTarget;
 			Parameters.GBuffer = GBuffer;
-			Parameters.GlobalShadow = GlobalShadow;
+			Parameters.GlobalShadow = GlobalShadowEVSM;
 			Parameters.Output = VolumetricLightOut;
 
 			float GScat = 0.7;
 			Gfx.AddComputePass<volumetric_light_calc>("Draw volumetric light", Parameters,
-			[Width = Gfx.Backend->Width, Height = Gfx.Backend->Height, GScat](command_list* Cmd)
+			[RenderWidth, RenderHeight, GScat](command_list* Cmd)
 			{
 				Cmd->SetConstant((void*)&GScat, sizeof(float));
-				Cmd->Dispatch(Width, Height);
-			});
-		}
-
-		{
-			voxel_indirect_light_calc::parameters Parameters;
-			Parameters.WorldUpdateBuffer = WorldUpdateBuffer;
-			Parameters.DepthTarget = Gfx.DepthTarget;
-			Parameters.GBuffer = GBuffer;
-			Parameters.VoxelGrid = VoxelGridTarget;
-			Parameters.VoxelGridNormal = VoxelGridNormal;
-			Parameters.Out = IndirectLightOut;
-
-			Gfx.AddComputePass<voxel_indirect_light_calc>("Draw voxel indirect light", Parameters,
-			[Width = Gfx.Backend->Width, Height = Gfx.Backend->Height](command_list* Cmd)
-			{
-				Cmd->Dispatch(Width, Height);
+				Cmd->Dispatch(RenderWidth, RenderHeight);
 			});
 		}
 
@@ -681,7 +818,7 @@ struct deferred_raster_system : public entity_system
 			Parameters.RandomAnglesTexture = RandomAnglesTexture;
 			Parameters.GBuffer = GBuffer;
 			Parameters.AmbientOcclusionData = AmbientOcclusionData;
-			Parameters.GlobalShadow = GlobalShadow;
+			Parameters.GlobalShadow = GlobalShadowEVSM;
 
 			Parameters.HdrOutput = HdrColorTarget;
 			Parameters.BrightOutput = BrightTarget;
@@ -690,9 +827,9 @@ struct deferred_raster_system : public entity_system
 			Parameters.PointLightShadows = PointLightShadows;
 
 			Gfx.AddComputePass<color_pass>("Deferred Color Pass", Parameters,
-			[Width = Gfx.Backend->Width, Height = Gfx.Backend->Height](command_list* Cmd)
+			[RenderWidth, RenderHeight](command_list* Cmd)
 			{
-				Cmd->Dispatch(Width, Height);
+				Cmd->Dispatch(RenderWidth, RenderHeight);
 			});
 		}
 
@@ -736,14 +873,26 @@ struct deferred_raster_system : public entity_system
 				bloom_combine::parameters Parameters;
 				Parameters.A      = HdrColorTarget;
 				Parameters.B      = TempBrTarget;
-				Parameters.Output = Gfx.ColorTarget[Gfx.BackBufferIndex];
+				Parameters.Output = FxaaTemp;
 
 				Gfx.AddComputePass<bloom_combine>("Bloom Combine", Parameters,
-				[Width = Gfx.Backend->Width, Height = Gfx.Backend->Height](command_list* Cmd)
+				[RenderWidth, RenderHeight](command_list* Cmd)
 				{
-					Cmd->Dispatch(Width, Height);
+					Cmd->Dispatch(RenderWidth, RenderHeight);
 				});
 			}
+		}
+
+		{
+			fxaa::parameters Parameters;
+			Parameters.Input  = FxaaTemp;
+			Parameters.Output = Gfx.ColorTarget[Gfx.BackBufferIndex];
+
+			Gfx.AddComputePass<fxaa>("FXAA Pass", Parameters,
+			[RenderWidth, RenderHeight](command_list* Cmd)
+			{
+				Cmd->Dispatch(RenderWidth, RenderHeight);
+			});
 		}
 
 		{
@@ -760,7 +909,7 @@ struct deferred_raster_system : public entity_system
 					Parameters.Input = DepthPyramid.UseSubresource(MipIdx - 1);
 				Parameters.Output = DepthPyramid.UseSubresource(MipIdx);
 
-				Gfx.AddComputePass<texel_reduce_2d>("Voxel grid mip generation pass #" + std::to_string(MipIdx), Parameters,
+				Gfx.AddComputePass<texel_reduce_2d>("Depth Pyramid Generation: #" + std::to_string(MipIdx), Parameters,
 				[VecDims](command_list* Cmd)
 				{
 					Cmd->SetConstant((void*)&VecDims, sizeof(vec2));

@@ -94,6 +94,7 @@ struct vulkan_command_list : public command_list
 	VkFramebufferCreateInfo FramebufferCreateInfo = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
 
 	VkDevice Device;
+	u32 LayerCount = 1;
 
 	VkPipelineStageFlags CurrentStage;
 	VkCommandBuffer CommandList;

@@ -24,9 +24,6 @@ struct debug_raster : public shader_graphics_view_context
 
 		SetupData.UseColor = true;
 		SetupData.UseDepth = true;
-		SetupData.UseBlend = false;
-		//SetupData.BlendSrc = blend_factor::src_alpha;
-		//SetupData.BlendDst = blend_factor::one_minus_src_alpha;
 		SetupData.CullMode = cull_mode::back;
 		SetupData.Topology = topology::triangle_list;
 
@@ -77,9 +74,11 @@ struct gbuffer_raster : public shader_graphics_view_context
 
 		SetupData.UseColor = true;
 		SetupData.UseDepth = true;
-		SetupData.UseBlend = false;
-		//SetupData.BlendSrc = blend_factor::src_alpha;
-		//SetupData.BlendDst = blend_factor::one_minus_src_alpha;
+#if DEBUG_COLOR_BLEND
+		SetupData.UseBlend = true;
+		SetupData.BlendSrc = blend_factor::one;
+		SetupData.BlendDst = blend_factor::one;
+#endif
 		SetupData.CullMode = cull_mode::back;
 		SetupData.Topology = topology::triangle_list;
 
@@ -130,9 +129,6 @@ struct voxelization : public shader_graphics_view_context
 		utils::render_context::input_data SetupData = {};
 
 		SetupData.UseConservativeRaster = true;
-		SetupData.UseBlend = false;
-		//SetupData.BlendSrc = blend_factor::src_alpha;
-		//SetupData.BlendDst = blend_factor::one_minus_src_alpha;
 		SetupData.Topology = topology::triangle_list;
 
 		return SetupData;
@@ -227,5 +223,19 @@ struct textures_combine : public shader_compute_view_context
 	textures_combine()
 	{
 		Shader = "../shaders/texture_combine.comp.glsl";
+	}
+};
+
+struct fxaa : public shader_compute_view_context
+{
+	shader_input() parameters
+	{
+		gpu_texture Input;
+		gpu_texture Output;
+	};
+
+	fxaa()
+	{
+		Shader = "../shaders/fxaa.comp.glsl";
 	}
 };

@@ -78,6 +78,13 @@ struct indirect_command_generation_input
 	u32 MeshCount;
 };
 
+struct point_shadow_input
+{
+	vec4  LightPos;
+	float FarZ;
+	u32   LightIdx;
+};
+
 struct mesh_draw_command
 {
 	vec4 Translate;
@@ -131,6 +138,7 @@ struct global_world_data
 class renderer_3d : public game_module
 {
 	vec3 GlobalLightPos;
+	bool IsCameraLocked = false;
 
 	global_world_data WorldUpdate = {};
 	mesh_comp_culling_common_input MeshCompCullingCommonData = {};

@@ -92,12 +92,6 @@ void main()
 	uint CommandIdx = MeshDrawCommandData[DrawIndex].MeshIndex;
 	if(DrawIndex == 0)
 	{
-#if 0
-		for(uint MI = 0; MI < MeshCount; ++MI)
-		{
-			IndirectDrawIndexedCommands[MI].InstanceCount = 0;
-		}
-#endif
 		IndirectDrawIndexedCommandsCounter = MeshCount;
 	}
 
@@ -105,10 +99,7 @@ void main()
 	IndirectDrawIndexedCommands[CommandIdx].IndexCount = MeshOffsets[CommandIdx].IndexCount;
 	IndirectDrawIndexedCommands[CommandIdx].FirstIndex = MeshOffsets[CommandIdx].IndexOffset;
 
-	if(!MeshDrawVisibilityData[DrawIndex])
-	{
-		return;
-	}
+	if(!MeshDrawVisibilityData[DrawIndex]) return;
 
 	mat4 Proj = MeshCullingCommonInput.Proj;
 	mat4 View = MeshCullingCommonInput.View;

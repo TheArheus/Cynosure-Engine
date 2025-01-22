@@ -45,7 +45,7 @@ struct generate_all : public shader_compute_view_context
 		gpu_buffer GeometryOffsets;
 		gpu_buffer MeshDrawCommandDataBuffer;
 		gpu_buffer MeshDrawVisibilityDataBuffer;
-		gpu_buffer IndirectDrawIndexedCommands; // TODO: With counter
+		gpu_buffer IndirectDrawIndexedCommands;
 		gpu_buffer MeshDrawCommandBuffer;
 	};
 

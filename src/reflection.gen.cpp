@@ -182,96 +182,34 @@ struct reflect<generate_all::parameters>
     }
 };
 
-member_definition MembersOf__full_screen_pass_color_raster_parameters[] = 
+member_definition MembersOf__full_screen_raster_parameters[] = 
 {
-    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(full_screen_pass_color::raster_parameters, IndexBuffer), 1},
-    {0, meta_type::gpu_color_target, "ColorTarget", sizeof(gpu_color_target), offsetof(full_screen_pass_color::raster_parameters, ColorTarget), 1},
+    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(full_screen::raster_parameters, IndexBuffer), 1},
+    {0, meta_type::gpu_color_target, "ColorTarget", sizeof(gpu_color_target), offsetof(full_screen::raster_parameters, ColorTarget), 1},
 };
 
 template<>
-struct reflect<full_screen_pass_color::raster_parameters>
+struct reflect<full_screen::raster_parameters>
 {
     static meta_descriptor* Get()
     {
-        static meta_descriptor Meta{ MembersOf__full_screen_pass_color_raster_parameters, sizeof(MembersOf__full_screen_pass_color_raster_parameters)/sizeof(MembersOf__full_screen_pass_color_raster_parameters[0]) };
+        static meta_descriptor Meta{ MembersOf__full_screen_raster_parameters, sizeof(MembersOf__full_screen_raster_parameters)/sizeof(MembersOf__full_screen_raster_parameters[0]) };
         return &Meta;
     }
 };
 
-member_definition MembersOf__full_screen_pass_color_parameters[] = 
+member_definition MembersOf__full_screen_parameters[] = 
 {
-    {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(full_screen_pass_color::parameters, Vertices), 1},
+    {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(full_screen::parameters, Vertices), 1},
+    {0, meta_type::gpu_texture, "Texture", sizeof(gpu_texture), offsetof(full_screen::parameters, Texture), 1},
 };
 
 template<>
-struct reflect<full_screen_pass_color::parameters>
+struct reflect<full_screen::parameters>
 {
     static meta_descriptor* Get()
     {
-        static meta_descriptor Meta{ MembersOf__full_screen_pass_color_parameters, sizeof(MembersOf__full_screen_pass_color_parameters)/sizeof(MembersOf__full_screen_pass_color_parameters[0]) };
-        return &Meta;
-    }
-};
-
-member_definition MembersOf__full_screen_pass_circle_raster_parameters[] = 
-{
-    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(full_screen_pass_circle::raster_parameters, IndexBuffer), 1},
-    {0, meta_type::gpu_color_target, "ColorTarget", sizeof(gpu_color_target), offsetof(full_screen_pass_circle::raster_parameters, ColorTarget), 1},
-};
-
-template<>
-struct reflect<full_screen_pass_circle::raster_parameters>
-{
-    static meta_descriptor* Get()
-    {
-        static meta_descriptor Meta{ MembersOf__full_screen_pass_circle_raster_parameters, sizeof(MembersOf__full_screen_pass_circle_raster_parameters)/sizeof(MembersOf__full_screen_pass_circle_raster_parameters[0]) };
-        return &Meta;
-    }
-};
-
-member_definition MembersOf__full_screen_pass_circle_parameters[] = 
-{
-    {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(full_screen_pass_circle::parameters, Vertices), 1},
-};
-
-template<>
-struct reflect<full_screen_pass_circle::parameters>
-{
-    static meta_descriptor* Get()
-    {
-        static meta_descriptor Meta{ MembersOf__full_screen_pass_circle_parameters, sizeof(MembersOf__full_screen_pass_circle_parameters)/sizeof(MembersOf__full_screen_pass_circle_parameters[0]) };
-        return &Meta;
-    }
-};
-
-member_definition MembersOf__full_screen_pass_texture_raster_parameters[] = 
-{
-    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(full_screen_pass_texture::raster_parameters, IndexBuffer), 1},
-    {0, meta_type::gpu_color_target, "ColorTarget", sizeof(gpu_color_target), offsetof(full_screen_pass_texture::raster_parameters, ColorTarget), 1},
-};
-
-template<>
-struct reflect<full_screen_pass_texture::raster_parameters>
-{
-    static meta_descriptor* Get()
-    {
-        static meta_descriptor Meta{ MembersOf__full_screen_pass_texture_raster_parameters, sizeof(MembersOf__full_screen_pass_texture_raster_parameters)/sizeof(MembersOf__full_screen_pass_texture_raster_parameters[0]) };
-        return &Meta;
-    }
-};
-
-member_definition MembersOf__full_screen_pass_texture_parameters[] = 
-{
-    {0, meta_type::gpu_buffer, "Vertices", sizeof(gpu_buffer), offsetof(full_screen_pass_texture::parameters, Vertices), 1},
-    {0, meta_type::gpu_texture, "Texture", sizeof(gpu_texture), offsetof(full_screen_pass_texture::parameters, Texture), 1},
-};
-
-template<>
-struct reflect<full_screen_pass_texture::parameters>
-{
-    static meta_descriptor* Get()
-    {
-        static meta_descriptor Meta{ MembersOf__full_screen_pass_texture_parameters, sizeof(MembersOf__full_screen_pass_texture_parameters)/sizeof(MembersOf__full_screen_pass_texture_parameters[0]) };
+        static meta_descriptor Meta{ MembersOf__full_screen_parameters, sizeof(MembersOf__full_screen_parameters)/sizeof(MembersOf__full_screen_parameters[0]) };
         return &Meta;
     }
 };
@@ -512,53 +450,122 @@ struct reflect<textures_combine::parameters>
     }
 };
 
-member_definition MembersOf__mesh_shadow_raster_parameters[] = 
+member_definition MembersOf__fxaa_parameters[] = 
 {
-    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(mesh_shadow::raster_parameters, IndexBuffer), 1},
-    {0, meta_type::gpu_indirect_buffer, "IndirectBuffer", sizeof(gpu_indirect_buffer), offsetof(mesh_shadow::raster_parameters, IndirectBuffer), 1},
-    {0, meta_type::gpu_depth_target, "DepthTarget", sizeof(gpu_depth_target), offsetof(mesh_shadow::raster_parameters, DepthTarget), 1},
+    {0, meta_type::gpu_texture, "Input", sizeof(gpu_texture), offsetof(fxaa::parameters, Input), 1},
+    {0, meta_type::gpu_texture, "Output", sizeof(gpu_texture), offsetof(fxaa::parameters, Output), 1},
 };
 
 template<>
-struct reflect<mesh_shadow::raster_parameters>
+struct reflect<fxaa::parameters>
 {
     static meta_descriptor* Get()
     {
-        static meta_descriptor Meta{ MembersOf__mesh_shadow_raster_parameters, sizeof(MembersOf__mesh_shadow_raster_parameters)/sizeof(MembersOf__mesh_shadow_raster_parameters[0]) };
+        static meta_descriptor Meta{ MembersOf__fxaa_parameters, sizeof(MembersOf__fxaa_parameters)/sizeof(MembersOf__fxaa_parameters[0]) };
         return &Meta;
     }
 };
 
-member_definition MembersOf__mesh_shadow_parameters[] = 
+member_definition MembersOf__mesh_depth_raster_parameters[] = 
 {
-    {0, meta_type::gpu_buffer, "VertexBuffer", sizeof(gpu_buffer), offsetof(mesh_shadow::parameters, VertexBuffer), 1},
-    {0, meta_type::gpu_buffer, "CommandBuffer", sizeof(gpu_buffer), offsetof(mesh_shadow::parameters, CommandBuffer), 1},
-    {0, meta_type::gpu_buffer, "GeometryOffsets", sizeof(gpu_buffer), offsetof(mesh_shadow::parameters, GeometryOffsets), 1},
+    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(mesh_depth::raster_parameters, IndexBuffer), 1},
+    {0, meta_type::gpu_indirect_buffer, "IndirectBuffer", sizeof(gpu_indirect_buffer), offsetof(mesh_depth::raster_parameters, IndirectBuffer), 1},
+    {0, meta_type::gpu_depth_target, "DepthTarget", sizeof(gpu_depth_target), offsetof(mesh_depth::raster_parameters, DepthTarget), 1},
 };
 
 template<>
-struct reflect<mesh_shadow::parameters>
+struct reflect<mesh_depth::raster_parameters>
 {
     static meta_descriptor* Get()
     {
-        static meta_descriptor Meta{ MembersOf__mesh_shadow_parameters, sizeof(MembersOf__mesh_shadow_parameters)/sizeof(MembersOf__mesh_shadow_parameters[0]) };
+        static meta_descriptor Meta{ MembersOf__mesh_depth_raster_parameters, sizeof(MembersOf__mesh_depth_raster_parameters)/sizeof(MembersOf__mesh_depth_raster_parameters[0]) };
         return &Meta;
     }
 };
 
-member_definition MembersOf__depth_prepass_raster_parameters[] = 
+member_definition MembersOf__mesh_depth_parameters[] = 
 {
-    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(depth_prepass::raster_parameters, IndexBuffer), 1},
-    {0, meta_type::gpu_indirect_buffer, "IndirectBuffer", sizeof(gpu_indirect_buffer), offsetof(depth_prepass::raster_parameters, IndirectBuffer), 1},
-    {0, meta_type::gpu_depth_target, "DepthTarget", sizeof(gpu_depth_target), offsetof(depth_prepass::raster_parameters, DepthTarget), 1},
+    {0, meta_type::gpu_buffer, "VertexBuffer", sizeof(gpu_buffer), offsetof(mesh_depth::parameters, VertexBuffer), 1},
+    {0, meta_type::gpu_buffer, "CommandBuffer", sizeof(gpu_buffer), offsetof(mesh_depth::parameters, CommandBuffer), 1},
+    {0, meta_type::gpu_buffer, "GeometryOffsets", sizeof(gpu_buffer), offsetof(mesh_depth::parameters, GeometryOffsets), 1},
 };
 
 template<>
-struct reflect<depth_prepass::raster_parameters>
+struct reflect<mesh_depth::parameters>
 {
     static meta_descriptor* Get()
     {
-        static meta_descriptor Meta{ MembersOf__depth_prepass_raster_parameters, sizeof(MembersOf__depth_prepass_raster_parameters)/sizeof(MembersOf__depth_prepass_raster_parameters[0]) };
+        static meta_descriptor Meta{ MembersOf__mesh_depth_parameters, sizeof(MembersOf__mesh_depth_parameters)/sizeof(MembersOf__mesh_depth_parameters[0]) };
+        return &Meta;
+    }
+};
+
+member_definition MembersOf__mesh_depth_variance_exp_raster_parameters[] = 
+{
+    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(mesh_depth_variance_exp::raster_parameters, IndexBuffer), 1},
+    {0, meta_type::gpu_indirect_buffer, "IndirectBuffer", sizeof(gpu_indirect_buffer), offsetof(mesh_depth_variance_exp::raster_parameters, IndirectBuffer), 1},
+    {0, meta_type::gpu_color_target, "ColorTarget", sizeof(gpu_color_target), offsetof(mesh_depth_variance_exp::raster_parameters, ColorTarget), 1},
+    {0, meta_type::gpu_depth_target, "DepthTarget", sizeof(gpu_depth_target), offsetof(mesh_depth_variance_exp::raster_parameters, DepthTarget), 1},
+};
+
+template<>
+struct reflect<mesh_depth_variance_exp::raster_parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__mesh_depth_variance_exp_raster_parameters, sizeof(MembersOf__mesh_depth_variance_exp_raster_parameters)/sizeof(MembersOf__mesh_depth_variance_exp_raster_parameters[0]) };
+        return &Meta;
+    }
+};
+
+member_definition MembersOf__mesh_depth_variance_exp_parameters[] = 
+{
+    {0, meta_type::gpu_buffer, "VertexBuffer", sizeof(gpu_buffer), offsetof(mesh_depth_variance_exp::parameters, VertexBuffer), 1},
+    {0, meta_type::gpu_buffer, "CommandBuffer", sizeof(gpu_buffer), offsetof(mesh_depth_variance_exp::parameters, CommandBuffer), 1},
+    {0, meta_type::gpu_buffer, "GeometryOffsets", sizeof(gpu_buffer), offsetof(mesh_depth_variance_exp::parameters, GeometryOffsets), 1},
+};
+
+template<>
+struct reflect<mesh_depth_variance_exp::parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__mesh_depth_variance_exp_parameters, sizeof(MembersOf__mesh_depth_variance_exp_parameters)/sizeof(MembersOf__mesh_depth_variance_exp_parameters[0]) };
+        return &Meta;
+    }
+};
+
+member_definition MembersOf__mesh_depth_cubemap_raster_parameters[] = 
+{
+    {0, meta_type::gpu_index_buffer, "IndexBuffer", sizeof(gpu_index_buffer), offsetof(mesh_depth_cubemap::raster_parameters, IndexBuffer), 1},
+    {0, meta_type::gpu_indirect_buffer, "IndirectBuffer", sizeof(gpu_indirect_buffer), offsetof(mesh_depth_cubemap::raster_parameters, IndirectBuffer), 1},
+    {0, meta_type::gpu_depth_target, "DepthTarget", sizeof(gpu_depth_target), offsetof(mesh_depth_cubemap::raster_parameters, DepthTarget), 1},
+};
+
+template<>
+struct reflect<mesh_depth_cubemap::raster_parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__mesh_depth_cubemap_raster_parameters, sizeof(MembersOf__mesh_depth_cubemap_raster_parameters)/sizeof(MembersOf__mesh_depth_cubemap_raster_parameters[0]) };
+        return &Meta;
+    }
+};
+
+member_definition MembersOf__mesh_depth_cubemap_parameters[] = 
+{
+    {0, meta_type::gpu_buffer, "VertexBuffer", sizeof(gpu_buffer), offsetof(mesh_depth_cubemap::parameters, VertexBuffer), 1},
+    {0, meta_type::gpu_buffer, "CommandBuffer", sizeof(gpu_buffer), offsetof(mesh_depth_cubemap::parameters, CommandBuffer), 1},
+    {0, meta_type::gpu_buffer, "GeometryOffsets", sizeof(gpu_buffer), offsetof(mesh_depth_cubemap::parameters, GeometryOffsets), 1},
+    {0, meta_type::gpu_buffer, "LightSourcesMatrixBuffer", sizeof(gpu_buffer), offsetof(mesh_depth_cubemap::parameters, LightSourcesMatrixBuffer), 1},
+};
+
+template<>
+struct reflect<mesh_depth_cubemap::parameters>
+{
+    static meta_descriptor* Get()
+    {
+        static meta_descriptor Meta{ MembersOf__mesh_depth_cubemap_parameters, sizeof(MembersOf__mesh_depth_cubemap_parameters)/sizeof(MembersOf__mesh_depth_cubemap_parameters[0]) };
         return &Meta;
     }
 };

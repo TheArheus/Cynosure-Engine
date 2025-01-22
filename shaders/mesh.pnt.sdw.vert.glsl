@@ -59,13 +59,15 @@ vec4 QuatMul(vec4 lhs, vec4 rhs)
 layout(binding = 0) readonly buffer b0 { vert_in In[]; };
 layout(binding = 1) readonly buffer b1 { mesh_draw_command MeshDrawCommands[]; };
 layout(binding = 2) readonly buffer b2 { offset Offsets[]; };
+layout(binding = 3) readonly buffer b3 { mat4 LightMatrices[]; };
+
 layout(location = 0) out vec4 OutPos;
 
 layout(push_constant) uniform pushConstant 
 { 
-	mat4  ShadowMatrix; 
 	vec4  LightPos; 
 	float FarZ;
+	uint  LightIdx;
 };
 
 void main()
@@ -75,5 +77,4 @@ void main()
 	uint InstanceIndex = gl_InstanceIndex + Offsets[0].InstanceOffset;
 
 	OutPos = In[VertexIndex].Pos * MeshDrawCommands[InstanceIndex].Scale + MeshDrawCommands[InstanceIndex].Translate;
-	gl_Position = ShadowMatrix * OutPos;
 }

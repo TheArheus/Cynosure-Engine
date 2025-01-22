@@ -8,9 +8,6 @@ struct world_update_system : entity_system
 	vec3 LockedViewDir;
 	vec3 FixedSceneCenter;
 
-	bool IsCameraLocked = false;
-	bool IsDebugColors  = false;
-
 	world_update_system()
 	{
 		RequireComponent<camera_component>();
@@ -25,7 +22,7 @@ struct world_update_system : entity_system
 		Events.Subscribe(this, &world_update_system::OnButtonDown);
 	}
 
-	void Update(window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCompCullingCommonData, vec3 GlobalLightPos)
+	void Update(window& Window, global_world_data& WorldUpdate, mesh_comp_culling_common_input& MeshCompCullingCommonData, vec3 GlobalLightPos, bool IsCameraLocked)
 	{
 		camera_component& CurrentCameraData = Entities[0].GetComponent<camera_component>();
 		vec3 GlobalLightDir = -Normalize(GlobalLightPos);
@@ -67,7 +64,6 @@ struct world_update_system : entity_system
 		WorldUpdate.ScreenHeight	= Window.Gfx.Backend->Height;
 		WorldUpdate.NearZ			= NearZ;
 		WorldUpdate.FarZ			= FarZ;
-		WorldUpdate.DebugColors		= IsDebugColors;
 
 		WorldUpdate.SceneScale  = vec4(vec3(1.0 / (VOXEL_SIZE / 8.0)), 0.0);
 #if 0
@@ -175,15 +171,6 @@ struct world_update_system : entity_system
 
 	void OnButtonDown(key_hold_event& Event)
 	{
-		if(Event.Code == EC_I)
-		{
-			IsDebugColors = !IsDebugColors;
-		}
-		if(Event.Code == EC_L)
-		{
-			IsCameraLocked = !IsCameraLocked;
-		}
-
 		float CameraSpeed = 0.01f;
 		if(Event.Code == EC_R)
 		{

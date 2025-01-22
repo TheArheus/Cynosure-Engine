@@ -85,10 +85,13 @@ class global_graphics_context
 public:
 	RENDERER_API global_graphics_context() = default;
 
+	u64 CurrHash = 0;
+	u64 NextHash = 0;
+
 #ifdef _WIN32
 	RENDERER_API global_graphics_context(backend_type _BackendType, HINSTANCE Instance, HWND Window, ImGuiContext* imguiContext, global_memory_allocator* NewAllocator);
 #else
-	RENDERER_API global_graphics_context(backend_type _BackendType, GLFWwindow* Window);
+	RENDERER_API global_graphics_context(backend_type _BackendType, GLFWwindow* Window, global_memory_allocator* NewAllocator);
 #endif
 
 	RENDERER_API ~global_graphics_context() { DestroyObject(); };
@@ -105,13 +108,6 @@ public:
 	RENDERER_API void AddRasterPass(std::string Name, u32 Width, u32 Height, param_type Parameters, raster_param_type RasterParameters, execute_func Exec, execute_func SetupExec = [](command_list* Cmd){});
 	template<typename context_type, typename param_type>
 	RENDERER_API void AddComputePass(std::string Name, param_type Parameters, execute_func Exec);
-
-#if 0
-	RENDERER_API void PushCircle(vec2 Pos, float Radius, vec3 Color);
-	RENDERER_API void PushRectangle(vec2 Pos, vec2 Scale, vec3 Color);
-	RENDERER_API void PushRectangle(vec2 Pos, vec2 Scale, resource_descriptor& Texture);
-	RENDERER_API void PushRectangle(vec2 Pos, vec2 Scale, vec2 Offset, vec2 Dims, resource_descriptor& Atlas);
-#endif
 
 	RENDERER_API void Compile();
 	RENDERER_API void Execute();

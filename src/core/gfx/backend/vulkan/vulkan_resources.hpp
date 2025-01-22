@@ -278,9 +278,27 @@ struct vulkan_texture : public texture
 		CreateInfo.format = GetVKFormat(Info.Format);
 		CreateInfo.extent.width  = (u32)NewWidth;
 		CreateInfo.extent.height = (u32)NewHeight;
-		CreateInfo.extent.depth  = (u32)DepthOrArraySize;
+		if(InputData.Usage & image_flags::TF_CubeMap)
+		{
+			CreateInfo.extent.depth = 1;
+			CreateInfo.arrayLayers  = DepthOrArraySize;
+		}
+		else if(InputData.Type == image_type::Texture1D)
+		{
+			CreateInfo.extent.depth = 1;
+			CreateInfo.arrayLayers  = DepthOrArraySize;
+		}
+		else if(InputData.Type == image_type::Texture2D)
+		{
+			CreateInfo.extent.depth = 1;
+			CreateInfo.arrayLayers  = DepthOrArraySize;
+		}
+		else if(InputData.Type == image_type::Texture3D)
+		{
+			CreateInfo.extent.depth = DepthOrArraySize;
+			CreateInfo.arrayLayers  = 1;
+		}
 		CreateInfo.mipLevels = InputData.MipLevels;
-		CreateInfo.arrayLayers = Info.Layers;
 		CreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;//Gfx->MsaaQuality;
 		CreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 		CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -345,22 +363,18 @@ struct vulkan_texture : public texture
 		ViewCreateInfo.format = CreateInfo.format;
 		ViewCreateInfo.image = Handle;
 		ViewCreateInfo.subresourceRange.aspectMask = Aspect;
-		ViewCreateInfo.subresourceRange.layerCount = Info.Layers;
+		ViewCreateInfo.subresourceRange.layerCount = InputData.Type != image_type::Texture3D ? DepthOrArraySize : 1;
 		ViewCreateInfo.subresourceRange.levelCount = 1;
 
 		if(InputData.Usage & image_flags::TF_CubeMap)
-		{
 			ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-		}
-		else
-		{
-			if(InputData.Type == image_type::Texture1D)
-				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
-			if(InputData.Type == image_type::Texture2D)
-				ViewCreateInfo.viewType = InputData.Layers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
-			if(InputData.Type == image_type::Texture3D)
-				ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
-		}
+		else if(InputData.Type == image_type::Texture1D)
+			ViewCreateInfo.viewType = DepthOrArraySize > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
+		else if(InputData.Type == image_type::Texture2D)
+			ViewCreateInfo.viewType = DepthOrArraySize > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+		else if(InputData.Type == image_type::Texture3D)
+			ViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+
 		for(u32 MipIdx = 0;
 			MipIdx < InputData.MipLevels;
 			++MipIdx)

@@ -227,7 +227,7 @@ void window::InitVulkanGraphics()
 {
 	if(!Handle) return;
 	ImGui::SetCurrentContext(imguiContext.get());
-	Gfx = global_graphics_context(backend_type::vulkan, Handle);
+	Gfx = global_graphics_context(backend_type::vulkan, Handle, Allocator);
 }
 
 void window::InitDirectx12Graphics()
@@ -235,7 +235,7 @@ void window::InitDirectx12Graphics()
 	assert("D3D12 Backend is not supported on this system");
 	if(!Handle) return;
 	ImGui::SetCurrentContext(imguiContext.get());
-	Gfx = global_graphics_context(backend_type::directx12, Handle);
+	Gfx = global_graphics_context(backend_type::directx12, Handle, Allocator);
 }
 
 void* window::
