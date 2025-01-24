@@ -97,23 +97,32 @@ void main()
 		}
 	}
 
+	float Density       = 0.8;
+	float GroundLevel   = 0.0;
+	float Transmittance = 1.0;
+
 	vec3  Volumetric = vec3(0);
 	uint  LightSamplesCount = 64;
+	float StepSize = (1.0 / LightSamplesCount);
 	vec3  RayP = WorldUpdate.CameraPos.xyz;
-	vec3  RayD = LightViewDir * (1.0 / LightSamplesCount);
+	vec3  RayD = LightViewDir;
 	for(uint StepIdx = 0; StepIdx < LightSamplesCount; ++StepIdx)
 	{
-		RayP += RayD;
+		RayP += RayD * StepSize;
 
 		vec4 ProjectedRayCoord = WorldUpdate.LightProj[Layer] * WorldUpdate.LightView[Layer] * vec4(RayP, 1.0);
 		ProjectedRayCoord.xyz /= ProjectedRayCoord.w;
 		ProjectedRayCoord.xy   = ProjectedRayCoord.xy * vec2(0.5, -0.5) + 0.5;
 
 		float SampledDepth = texture(ShadowMap[Layer], ProjectedRayCoord.xy).r;
-		if((ProjectedRayCoord.z + 0.01) < SampledDepth)
-		{
-			Volumetric += MieScattering(dot(LightViewDir, -GlobalLightDirWS)) * vec3(0.8235, 0.7215, 0.0745);
-		}
+		float ShadowFactor = ((ProjectedRayCoord.z - 0.005) < SampledDepth) ? 1.0 : 0.0;
+
+		vec3  Phase = MieScattering(dot(LightViewDir, -GlobalLightDirWS)) * vec3(0.8235, 0.7215, 0.0745);
+
+		Volumetric += Phase * ShadowFactor * Density * Transmittance;
+		Transmittance *= exp(-Density * StepSize);
+
+		if(Transmittance < 0.001) break;
 	}
 
 	Volumetric /= LightSamplesCount;

@@ -1,5 +1,6 @@
 #pragma once
 
+// TODO: Only manage the cameras
 struct world_update_system : entity_system
 {
 	vec3 ViewPos;
@@ -80,7 +81,6 @@ struct world_update_system : entity_system
 		WorldUpdate.SceneCenter = vec4(FixedSceneCenter, 0.0);
 #endif
 
-		// TODO: UI
 		MeshCompCullingCommonData.NearZ = NearZ;
 
 		MeshCompCullingCommonData.Proj = CameraProj;

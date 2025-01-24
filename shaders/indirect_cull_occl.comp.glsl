@@ -129,8 +129,8 @@ void main()
 		NewMin = min(ClipPos.xyz, NewMin);
 		NewMax = max(ClipPos.xyz, NewMax);
 	}
-	NewMin = clamp(NewMin * vec3(0.5, 0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
-	NewMax = clamp(NewMax * vec3(0.5, 0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
+	NewMin = clamp(NewMin * vec3(0.5, -0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
+	NewMax = clamp(NewMax * vec3(0.5, -0.5, 1) + vec3(0.5, 0.5, 0), 0, 1);
 
 	vec2 HiZSize = textureSize(DepthPyramid, 0);
 
@@ -140,14 +140,19 @@ void main()
 		vec2  BoxSize = (NewMax.xy - NewMin.xy) * HiZSize;
 		float Lod = ceil(log2(max(BoxSize.x, BoxSize.y)));
 
-		float a = textureLod(DepthPyramid, BoxMin.xy, Lod).x;
-		float b = textureLod(DepthPyramid, vec2(BoxMin.x, BoxMax.y), Lod).x;
-		float c = textureLod(DepthPyramid, vec2(BoxMax.x, BoxMin.y), Lod).x;
-		float d = textureLod(DepthPyramid, BoxMax.xy, Lod).x;
+		vec4 BoxMinSS = Proj * View * vec4(BoxMin, 1);
+		     BoxMinSS.xyz /= BoxMinSS.w;
 
-		IsVisible = IsVisible && (NewMin.z < (max(max(max(a, b), c), d) + 0.025));
+		vec4 BoxMaxSS = Proj * View * vec4(BoxMax, 1);
+		     BoxMaxSS.xyz /= BoxMaxSS.w;
+
+		float a = textureLod(DepthPyramid, BoxMinSS.xy * vec2(0.5, -0.5) + 0.5, Lod).x;
+		float b = textureLod(DepthPyramid, vec2(BoxMinSS.x, BoxMaxSS.y) * vec2(0.5, -0.5) + 0.5, Lod).x;
+		float c = textureLod(DepthPyramid, vec2(BoxMaxSS.x, BoxMinSS.y) * vec2(0.5, -0.5) + 0.5, Lod).x;
+		float d = textureLod(DepthPyramid, BoxMaxSS.xy * vec2(0.5, -0.5) + 0.5, Lod).x;
+
+		IsVisible = IsVisible && (NewMin.z - 0.005 <= (min(min(min(a, b), c), d)));
 	}
 
 	MeshDrawVisibilityData[DrawIndex] = IsVisible;
 }
-

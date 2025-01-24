@@ -148,16 +148,6 @@ public:
 
 	void DestroyObject() override
 	{
-		for (auto& Stage : ShaderStages)
-		{
-			if (Stage.module != VK_NULL_HANDLE)
-			{
-				vkDestroyShaderModule(Device, Stage.module, nullptr);
-				Stage.module = VK_NULL_HANDLE;
-			}
-		}
-		ShaderStages.clear();
-
 		for (auto& [Key, Framebuffer] : FrameBuffers)
 		{
 			if (Framebuffer != VK_NULL_HANDLE)
@@ -272,12 +262,6 @@ public:
 			}
 		}
 		Layouts.clear();
-
-		if (ComputeStage.module != VK_NULL_HANDLE)
-		{
-			vkDestroyShaderModule(Device, ComputeStage.module, nullptr);
-			ComputeStage.module = VK_NULL_HANDLE;
-		}
 
 		if (Pipeline != VK_NULL_HANDLE)
 		{

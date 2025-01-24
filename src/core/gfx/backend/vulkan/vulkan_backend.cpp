@@ -433,6 +433,15 @@ vulkan_backend(GLFWwindow* Handle)
 void vulkan_backend::
 DestroyObject()
 {
+	for(auto& Shader : CompiledShaders)
+	{
+		if(Shader.second.Handle)
+		{
+			vkDestroyShaderModule(Device, Shader.second.Handle, nullptr);
+			Shader.second.Handle = VK_NULL_HANDLE;
+		}
+	}
+
 #if _WIN32
 	ImGui::SetCurrentContext(imguiContext);
 #endif

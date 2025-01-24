@@ -41,7 +41,7 @@ ModuleStart()
 
 	vec4 Scaling = vec4(vec3(1.0f / 2.0), 1.0);
 
-#if 0
+#if 1
 	entity LightComponent0 = Registry.CreateEntity();
 	entity LightComponent1 = Registry.CreateEntity();
 	LightComponent0.AddComponent<light_component>()->PointLight(vec3(-4,  4,  2), 10, vec3(1, 0, 1), 0.2);
@@ -103,7 +103,7 @@ ModuleUpdate()
 	Registry.UpdateSystems(dt);
 	Registry.GetSystem<world_update_system>()->Update(Window, WorldUpdate, MeshCompCullingCommonData, GlobalLightPos, IsCameraLocked);
 	Registry.GetSystem<light_sources_system>()->Update(WorldUpdate, GlobalLightSources);
-	Registry.GetSystem<deferred_raster_system>()->Render(Gfx.Backend->Width, Gfx.Backend->Height, Window.Gfx, WorldUpdate, MeshCompCullingCommonData, GlobalLightSources/*, DynamicDebugInstances, DynamicDebugVisibility*/);
+	Registry.GetSystem<deferred_raster_system>()->Render(Gfx.Backend->Width, Gfx.Backend->Height, Window.Gfx, WorldUpdate, MeshCompCullingCommonData, GlobalLightSources, GScat);
 	//Registry.GetSystem<render_debug_system>()->Render(Window.Gfx, WorldUpdate, MeshCompCullingCommonData, DynamicDebugInstances, DynamicDebugVisibility);
 
 	ImGui::SetNextWindowPos(ImVec2(0, 0));
@@ -116,6 +116,7 @@ ModuleUpdate()
 	ImGui::Checkbox("Enable frustrum culling", (bool*)&MeshCompCullingCommonData.FrustrumCullingEnabled);
 	ImGui::Checkbox("Enable occlusion culling", (bool*)&MeshCompCullingCommonData.OcclusionCullingEnabled);
 	ImGui::SliderFloat("Global Light Size", &WorldUpdate.GlobalLightSize, 0.0f, 1.0f);
+	ImGui::SliderFloat("GScat", &GScat, 0.0f, 1.0f);
 
 	ImGui::End();
 }

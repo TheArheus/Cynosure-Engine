@@ -87,8 +87,8 @@ void main()
 		if(abs(dot(ViewDir, Guide)) == 1.0)
 			 Guide = vec3(0, 0, 1);
 
-		const float MinLayers   = 64 ;
-		const float MaxLayers   = 256;
+		const float MinLayers   = 32 ;
+		const float MaxLayers   = 128;
 		float LayersCount       = mix(MaxLayers, MinLayers, max(dot(Guide, ViewDir), 0.0));
 		float LayersDepth       = 1.0 / LayersCount;
 		float CurrentLayerDepth = 0.0;

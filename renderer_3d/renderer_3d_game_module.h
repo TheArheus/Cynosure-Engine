@@ -109,6 +109,7 @@ struct mesh_comp_culling_common_input
 	u32   DebugMeshCount;
 };
 
+// TODO: Simplify and remove as much as possible
 struct global_world_data 
 {
 	mat4  View;
@@ -137,8 +138,9 @@ struct global_world_data
 
 class renderer_3d : public game_module
 {
-	vec3 GlobalLightPos;
-	bool IsCameraLocked = false;
+	vec3  GlobalLightPos;
+	bool  IsCameraLocked = false;
+	float GScat = 0.7;
 
 	global_world_data WorldUpdate = {};
 	mesh_comp_culling_common_input MeshCompCullingCommonData = {};

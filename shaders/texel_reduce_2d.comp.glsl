@@ -14,6 +14,12 @@ void main()
         return;
     }
 
-	float ReduceValue = texture(InTexture, (TextCoord + vec2(0.5)) / TextureDims).x;
+	ivec2 BaseTextCoord = ivec2(2.0 * TextCoord);
+	float v0 = texelFetch(InTexture, BaseTextCoord + ivec2(0, 0), 0).r;
+	float v1 = texelFetch(InTexture, BaseTextCoord + ivec2(1, 0), 0).r;
+	float v2 = texelFetch(InTexture, BaseTextCoord + ivec2(0, 1), 0).r;
+	float v3 = texelFetch(InTexture, BaseTextCoord + ivec2(1, 1), 0).r;
+
+	float ReduceValue = min(min(v0, v1), min(v2, v3));
 	imageStore(OutTexture, ivec2(TextCoord), vec4(ReduceValue));
 }

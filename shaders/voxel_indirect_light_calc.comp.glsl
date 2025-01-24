@@ -1,6 +1,6 @@
 #version 450
 #define CONE_SAMPLES 16
-#define BOUNCE_COUNT 1
+#define BOUNCE_COUNT 2
 
 #extension GL_EXT_scalar_block_layout: require
 
@@ -259,5 +259,5 @@ void main()
 		IndirectLight += (DiffuseBRDF + SpecularBRDF) * IncomingRadiance.rgb * DiffuseConeDirections[i] * IncomingRadiance.a * NdotL * DiffuseConeWeights[i];
 	}
 
-	imageStore(ColorOutput, ivec2(TextCoord), vec4(IndirectLight, 1.0));
+	imageStore(ColorOutput, ivec2(TextCoord), vec4(IndirectLight * 0.25, 1.0));
 } 
