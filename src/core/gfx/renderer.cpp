@@ -167,10 +167,10 @@ CreateResourceBinder()
 	switch(Backend->Type)
 	{
 		case backend_type::vulkan:
-			return new vulkan_resource_binder(Backend);
+			return new vulkan_resource_binder();
 #if _WIN32
 		case backend_type::directx12:
-			return new directx12_resource_binder(Backend);
+			return new directx12_resource_binder();
 #endif
 		default:
 			return nullptr;
@@ -276,11 +276,58 @@ SetContext(shader_pass* Pass, command_list* Context)
     }
 }
 
+static bool 
+HasWriteDependency(const array<u64>& WriterOutputs, 
+		           const array<u64>& OtherReads, 
+				   const array<u64>& OtherWrites)
+{
+    for(u64 OutID : WriterOutputs)
+    {
+        // If OutID is in 'OtherReads' => read-after-write hazard => dependency
+        // If OutID is in 'OtherWrites' => write-after-write hazard => dependency
+        for(u64 InID : OtherReads)
+        {
+            if(InID == OutID) return true;
+        }
+        for(u64 WID : OtherWrites)
+        {
+            if(WID == OutID) return true;
+        }
+    }
+    return false;
+}
 
+void global_graphics_context::
+ExportGraphViz()
+{
+    std::ofstream out("../render_graph_viz.dot");
+    out << "digraph RenderGraph {\n";
+    out << "    rankdir=LR;\n";
+
+    for (size_t i = 0; i < Passes.size(); i++)
+    {
+        shader_pass* Pass = Passes[i];
+        out << "    node" << i
+            << " [label=\"" << std::string(Pass->Name.data(), Pass->Name.size()) << "\", shape=box];\n";
+    }
+
+    for (size_t i = 0; i < Passes.size(); i++)
+    {
+        for (auto Neighbor : Adjacency[i])
+        {
+            out << "    node" << i << " -> node" << Neighbor << ";\n";
+        }
+    }
+
+    out << "}\n";
+    out.close();
+}
+
+// TODO: Compilation optimization
+// TODO: Better memory arena usage
 // TODO: Command parallelization maybe
-// TODO: Maybe compile render graph only once per change
-// TODO: Make so the resources wouldn't binded to descriptors multiple times(only when they are actually changed in the descriptor)
-//       Plus bind static descriptors only once
+// TODO: Binding static descriptors only once when needed
+// TODO: Better resource utilization using resource lifetimes
 void global_graphics_context::
 Compile()
 {
@@ -300,14 +347,47 @@ Compile()
 		void* ShaderParameters = Pass->ShaderParameters;
 		member_definition* Member = nullptr;
 
-		// TODO: remove this vectors
-		std::vector<buffer_barrier> AttachmentBufferBarriers;
-		std::vector<texture_barrier> AttachmentImageBarriers;
+		array<binding_packet> Packets = array<binding_packet>(Pass->ShaderReflection->Size);
 
-		std::vector<binding_packet> Packets;
+		// TODO: remove this vectors
 		std::vector<bound_resource> ParamsToBind;
 		std::vector<u64> InputIDs;
 		std::vector<u64> OutputIDs;
+
+        if (Pass->RasterReflection)
+        {
+            void* RasterParameters = Pass->RasterParameters;
+
+            for (u32 RasterParamIdx = 0; RasterParamIdx < Pass->RasterReflection->Size; ++RasterParamIdx)
+            {
+                Member = Pass->RasterReflection->Data + RasterParamIdx;
+
+                if (Member->Type == meta_type::gpu_index_buffer)
+                {
+                    gpu_index_buffer* Data = (gpu_index_buffer*)((uptr)RasterParameters + Member->Offset);
+					InputIDs.push_back(Data->ID);
+                }
+				else if (Member->Type == meta_type::gpu_indirect_buffer)
+				{
+                    gpu_indirect_buffer* Data = (gpu_indirect_buffer*)((uptr)RasterParameters + Member->Offset);
+					InputIDs.push_back(Data->ID);
+				}
+                else if (Member->Type == meta_type::gpu_color_target)
+                {
+                    gpu_color_target* Data = (gpu_color_target*)((uptr)RasterParameters + Member->Offset);
+                    for (size_t i = 0; i < Data->IDs.size(); i++)
+                    {
+                        u64 ID = (*Data)[i];
+						OutputIDs.push_back(ID);
+                    }
+                }
+                else if (Member->Type == meta_type::gpu_depth_target)
+                {
+                    gpu_depth_target* Data = (gpu_depth_target*)((uptr)RasterParameters + Member->Offset);
+					OutputIDs.push_back(Data->ID);
+                }
+            }
+        }
 
 		// Inputs and outputs
 		for(u32 ParamIdx = 0; ParamIdx < UseContext->ParameterLayout[0].size(); ParamIdx++, MemberIdx++, StaticOffs++)
@@ -319,26 +399,9 @@ Compile()
 				gpu_buffer* Data = (gpu_buffer*)((uptr)ShaderParameters + Member->Offset);
 				assert(Data->ID != ~0ull);
 
-				auto& Lifetime = Lifetimes[Data->ID];
-				Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
-				Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
-
 				binding_packet NewPacket;
 				NewPacket.Resource = GpuMemoryHeap->GetBuffer(Data->ID);
-				Packets.push_back(NewPacket);
-
-				resource_state NewState;
-				NewState.IsWritable = Parameter.IsWritable;
-				NewState.ShaderStageAccess = Parameter.ShaderToUse;
-				NewState.ShaderAspect = Parameter.AspectMask;
-				NewState.Valid = true;
-				auto& LastState = LastKnownResourceStates[Data->ID];
-
-				if(!LastState.Valid || LastState != NewState)
-				{
-					AttachmentBufferBarriers.push_back({(buffer*)NewPacket.Resource, Parameter.AspectMask, Parameter.ShaderToUse});
-				}
-				LastState = NewState;
+				Packets[MemberIdx] = NewPacket;
 
 				ParamsToBind.push_back({Data->ID});
 				if(!Parameter.IsWritable)
@@ -356,31 +419,12 @@ Compile()
 			{
 				gpu_texture* Data = (gpu_texture*)((uptr)ShaderParameters + Member->Offset);
 
-				auto& Lifetime = Lifetimes[Data->ID];
-				Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
-				Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
-
 				binding_packet NewPacket;
 				NewPacket.Resources = array<resource*>(Data->ID != ~0ull);
 				NewPacket.Resources[0] = Data->ID == ~0ull ? nullptr : GpuMemoryHeap->GetTexture(Data->ID);
 				NewPacket.SubresourceIndex = Data->SubresourceIdx == SUBRESOURCES_ALL ? 0 : Data->SubresourceIdx;
 				NewPacket.Mips = Data->SubresourceIdx;
-				Packets.push_back(NewPacket);
-
-				resource_state NewState;
-				NewState.IsWritable = Parameter.IsWritable;
-				NewState.State = Parameter.BarrierState;
-				NewState.ShaderStageAccess = Parameter.ShaderToUse;
-				NewState.ShaderAspect = Parameter.AspectMask;
-				NewState.Valid = true;
-				auto& LastState = LastKnownResourceStates[Data->ID];
-
-				if(Data->ID != ~0ull && (!LastState.Valid || LastState != NewState))
-				{
-					texture* CurrentTexture = (texture*)NewPacket.Resources[0];
-					AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, NewPacket.Mips, Parameter.ShaderToUse});
-				}
-				LastState = NewState;
+				Packets[MemberIdx] = NewPacket;
 
 				ParamsToBind.push_back({Data->ID, NewPacket.Mips});
 				if(!Parameter.IsWritable)
@@ -404,26 +448,8 @@ Compile()
 				for(size_t i = 0; i < Data->IDs.size(); i++)
 				{
 					u64 ID = (*Data)[i];
-					auto& Lifetime = Lifetimes[ID];
-					Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
-					Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
 
 					NewPacket.Resources[i] = GpuMemoryHeap->GetTexture(ID);
-
-					resource_state NewState;
-					NewState.IsWritable = Parameter.IsWritable;
-					NewState.State = Parameter.BarrierState;
-					NewState.ShaderStageAccess = Parameter.ShaderToUse;
-					NewState.ShaderAspect = Parameter.AspectMask;
-					NewState.Valid = true;
-					auto& LastState = LastKnownResourceStates[ID];
-
-					if(!LastState.Valid || LastState != NewState)
-					{
-						texture* CurrentTexture = (texture*)NewPacket.Resources[i];
-						AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, NewPacket.Mips, Parameter.ShaderToUse});
-					}
-					LastState = NewState;
 
 					ParamsToBind.push_back({ID, NewPacket.Mips});
 					if(!Parameter.IsWritable)
@@ -435,7 +461,7 @@ Compile()
 						OutputIDs.push_back(ID);
 					}
 				}
-				Packets.push_back(NewPacket);
+				Packets[MemberIdx] = NewPacket;
 			}
 			else
 			{
@@ -461,16 +487,9 @@ Compile()
 
 					for(size_t i = 0; i < Data->IDs.size(); i++)
 					{
-						auto& Lifetime = Lifetimes[(*Data)[i]];
-						Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
-						Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
-
 						NewPacket.Resources[i] = GpuMemoryHeap->GetTexture((*Data)[i]);
-
-						texture* CurrentTexture = (texture*)NewPacket.Resources[i];
-						AttachmentImageBarriers.push_back({CurrentTexture, Parameter.AspectMask, Parameter.BarrierState, NewPacket.Mips, Parameter.ShaderToUse});
 					}
-					Packets.push_back(NewPacket);
+					Packets[MemberIdx] = NewPacket;
 				}
 			}
 		}
@@ -482,195 +501,358 @@ Compile()
 
 		Pass->Inputs  = array<u64>(InputIDs.data() , InputIDs.size());
 		Pass->Outputs = array<u64>(OutputIDs.data(), OutputIDs.size());
-		Pass->BufferBarriers = array<buffer_barrier>(AttachmentBufferBarriers.data(), AttachmentBufferBarriers.size());
-		Pass->TextureBarriers = array<texture_barrier>(AttachmentImageBarriers.data(), AttachmentImageBarriers.size());
 
-		Pass->ParamsChanged ? Pass->Bindings = array<binding_packet>(Packets.data(), Packets.size()) : NULL;
+		Pass->ParamsChanged ? Pass->Bindings = Packets : NULL;
 		if(HaveStatic)
 		{
 			Binder->AppendStaticStorage(UseContext, Pass->Bindings, StaticOffs);
 		}
 	}
 
+	InDegree.assign(Passes.size(), 0);
+	Adjacency.assign(Passes.size(), {});
+	for(u32 i = 0; i < Passes.size(); i++)
+	{
+		shader_pass* PassI = Passes[i];
+
+		for(u32 j = i; j < Passes.size(); j++)
+		{
+			if(i == j) continue;
+			shader_pass* PassJ = Passes[j];
+
+			if(HasWriteDependency(PassI->Outputs, PassJ->Inputs, PassJ->Outputs))
+				Adjacency[i].push_back(j);
+		}
+	}
+
+	for(u32 i = 0; i < Passes.size(); i++)
+	{
+		for(int Neighbor : Adjacency[i])
+			InDegree[Neighbor]++;
+	}
+
+	std::vector<u32> InDegreeCopy = InDegree;
+	std::vector<u32> ReadyPasses;
+	for(u32 PassIndex = 0; PassIndex < Passes.size(); PassIndex++)
+	{
+		if(InDegreeCopy[PassIndex] == 0)
+			ReadyPasses.push_back(PassIndex);
+	}
+
+	while(ReadyPasses.size())
+	{
+		std::vector<u32> NewReady;
+		for(u32 PassIndex : ReadyPasses)
+		{
+			shader_pass* Pass = Passes[PassIndex];
+			general_context* UseContext = GetOrCreateContext(Pass);
+
+			void* ShaderParameters = Pass->ShaderParameters;
+
+			// TODO: remove this vectors
+			std::vector<buffer_barrier> AttachmentBufferBarriers;
+			std::vector<texture_barrier> AttachmentImageBarriers;
+
+			u32 MemberIdx = 0;
+			member_definition* Member = nullptr;
+			for(u32 ParamIdx = 0; ParamIdx < UseContext->ParameterLayout[0].size(); ParamIdx++, MemberIdx++)
+			{
+				descriptor_param Parameter = UseContext->ParameterLayout[0][ParamIdx];
+				Member = Pass->ShaderReflection->Data + MemberIdx;
+				if(Member->Type == meta_type::gpu_buffer)
+				{
+					gpu_buffer* Data = (gpu_buffer*)((uptr)ShaderParameters + Member->Offset);
+					assert(Data->ID != ~0ull);
+
+					auto& Lifetime = Lifetimes[Data->ID];
+					Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
+					Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
+
+					resource_state NewState;
+					NewState.IsWritable = Parameter.IsWritable;
+					NewState.ShaderStageAccess = Parameter.ShaderToUse;
+					NewState.ShaderAspect = Parameter.AspectMask;
+					NewState.Valid = true;
+					auto& LastState = LastKnownResourceStates[Data->ID];
+
+					if(!LastState.Valid || LastState != NewState)
+					{
+						AttachmentBufferBarriers.push_back({(buffer*)Pass->Bindings[MemberIdx].Resource, Parameter.AspectMask, Parameter.ShaderToUse});
+					}
+					LastState = NewState;
+					ParamIdx += Data->WithCounter;
+				}
+				else if(Member->Type == meta_type::gpu_texture)
+				{
+					gpu_texture* Data = (gpu_texture*)((uptr)ShaderParameters + Member->Offset);
+
+					auto& Lifetime = Lifetimes[Data->ID];
+					Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
+					Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
+
+					resource_state NewState;
+					NewState.IsWritable = Parameter.IsWritable;
+					NewState.State = Parameter.BarrierState;
+					NewState.ShaderStageAccess = Parameter.ShaderToUse;
+					NewState.ShaderAspect = Parameter.AspectMask;
+					NewState.Valid = true;
+					auto& LastState = LastKnownResourceStates[Data->ID];
+
+					if(Data->ID != ~0ull && (!LastState.Valid || LastState != NewState))
+					{
+						AttachmentImageBarriers.push_back({(texture*)Pass->Bindings[MemberIdx].Resources[0], Parameter.AspectMask, Parameter.BarrierState, Pass->Bindings[MemberIdx].Mips, Parameter.ShaderToUse});
+					}
+					LastState = NewState;
+				}
+				else if(Member->Type == meta_type::gpu_texture_array)
+				{
+					gpu_texture_array* Data = (gpu_texture_array*)((uptr)ShaderParameters + Member->Offset);
+
+					for(size_t i = 0; i < Data->IDs.size(); i++)
+					{
+						u64 ID = (*Data)[i];
+						auto& Lifetime = Lifetimes[ID];
+						Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);
+						Lifetime.LastUsagePassIndex  = Max(Lifetime.LastUsagePassIndex , PassIndex);
+
+						resource_state NewState;
+						NewState.IsWritable = Parameter.IsWritable;
+						NewState.State = Parameter.BarrierState;
+						NewState.ShaderStageAccess = Parameter.ShaderToUse;
+						NewState.ShaderAspect = Parameter.AspectMask;
+						NewState.Valid = true;
+						auto& LastState = LastKnownResourceStates[ID];
+
+						if(!LastState.Valid || LastState != NewState)
+						{
+							AttachmentImageBarriers.push_back({(texture*)Pass->Bindings[MemberIdx].Resources[i], Parameter.AspectMask, Parameter.BarrierState, Pass->Bindings[MemberIdx].Mips, Parameter.ShaderToUse});
+						}
+						LastState = NewState;
+					}
+				}
+				else
+				{
+					// TODO: Implement buffers for basic types
+				}
+			}
+
+			Pass->BufferBarriers  = array<buffer_barrier>(AttachmentBufferBarriers.data(), AttachmentBufferBarriers.size());
+			Pass->TextureBarriers = array<texture_barrier>(AttachmentImageBarriers.data(), AttachmentImageBarriers.size());
+
+			for(u32 Neighbor : Adjacency[PassIndex])
+			{
+				InDegreeCopy[Neighbor]--;
+				if(InDegreeCopy[Neighbor] == 0)
+				{
+					NewReady.push_back(Neighbor);
+				}
+			}
+		}
+
+		ReadyPasses = std::move(NewReady);
+	}
+
 	Binder->BindStaticStorage(Backend);
 	Binder->DestroyObject();
 }
 
+
+// TODO: Better memory arena usage
 // TODO: Consider of pushing pass work in different thread if some of them are not dependent and can use different queue type
 void global_graphics_context::
-Execute()
+ExecuteAsync()
 {
-	command_list* ExecutionContext = ExecutionContexts[BackBufferIndex];
-	ExecutionContext->AcquireNextImage();
-	ExecutionContext->Begin();
+	std::vector<u32> InDegreeCopy = InDegree;
+	std::vector<u32> ReadyPasses;
+	for (u32 PassIndex = 0; PassIndex < Passes.size(); PassIndex++)
+	{
+		if (InDegreeCopy[PassIndex] == 0)
+			ReadyPasses.push_back(PassIndex);
+	}
 
-	texture* CurrentColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ColorTarget[BackBufferIndex]);
-	ExecutionContext->FillTexture(CurrentColorTarget, vec4(vec3(0), 1.0f));
+	command_list* MainExecutionContext = ExecutionContexts[BackBufferIndex];
+	MainExecutionContext->AcquireNextImage();
+	MainExecutionContext->Begin();
 
-	// NOTE: Little binding cache for some of the resources:
+	texture* CurrentColorTarget = GpuMemoryHeap->GetTexture(MainExecutionContext, ColorTarget[BackBufferIndex]);
+	MainExecutionContext->FillTexture(CurrentColorTarget, vec4(vec3(0), 1.0f));
+
 	buffer*  BoundVertexBuffer = nullptr;
 	buffer*  BoundIndexBuffer = nullptr;
 	std::vector<texture*> BoundColorTargets;
 	texture* BoundDepthTarget = nullptr;
 
 	bool RenderingActive = false;
-	for(u32 PassIndex = 0; PassIndex < Passes.size(); PassIndex++)
+	while (ReadyPasses.size())
 	{
-		shader_pass* Pass = Passes[PassIndex];
-		bool ShouldRebind = Pass->ParamsChanged || Pass->IsNewContext;
+		std::vector<u32> NewReady;
+		for (u32 PassIndex : ReadyPasses)
+		{
+			shader_pass* Pass = Passes[PassIndex];
+			bool ShouldRebind = Pass->ParamsChanged || Pass->IsNewContext;
 
-		bool ColorTargetChanged = false;
-		bool DepthTargetChanged = false;
-		buffer* DesiredIndexBuffer = nullptr;
-		std::vector<texture*> DesiredColorTargets; 
-		texture* DesiredDepthTarget = nullptr;
-        if (Pass->RasterReflection)
-        {
-            void* RasterParameters = Pass->RasterParameters;
+			bool ColorTargetChanged = false;
+			bool DepthTargetChanged = false;
+			buffer* DesiredIndexBuffer = nullptr;
+			std::vector<texture*> DesiredColorTargets; 
+			texture* DesiredDepthTarget = nullptr;
 
-            for (u32 RasterParamIdx = 0; RasterParamIdx < Pass->RasterReflection->Size; ++RasterParamIdx)
-            {
-                member_definition* Member = Pass->RasterReflection->Data + RasterParamIdx;
+			std::vector<buffer_barrier> AttachmentBufferBarriers;
+			std::vector<texture_barrier> AttachmentImageBarriers;
+			if (Pass->RasterReflection)
+			{
+				void* RasterParameters = Pass->RasterParameters;
 
-                if (Member->Type == meta_type::gpu_index_buffer)
-                {
-                    gpu_index_buffer* Data = (gpu_index_buffer*)((uptr)RasterParameters + Member->Offset);
-                    DesiredIndexBuffer = GpuMemoryHeap->GetBuffer(ExecutionContext, Data->ID);
-
-                    if (BoundIndexBuffer != DesiredIndexBuffer)
-                    {
-                        ExecutionContext->AttachmentBufferBarriers.push_back({DesiredIndexBuffer, AF_IndexRead, PSF_VertexInput});
-                    }
-                }
-				else if (Member->Type == meta_type::gpu_indirect_buffer)
+				for (u32 RasterParamIdx = 0; RasterParamIdx < Pass->RasterReflection->Size; ++RasterParamIdx)
 				{
-                    gpu_indirect_buffer* Data = (gpu_indirect_buffer*)((uptr)RasterParameters + Member->Offset);
-                    ExecutionContext->IndirectCommands = GpuMemoryHeap->GetBuffer(ExecutionContext, Data->ID);
-					ExecutionContext->AttachmentBufferBarriers.push_back({ExecutionContext->IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
-				}
-                else if (Member->Type == meta_type::gpu_color_target)
-                {
-                    gpu_color_target* Data = (gpu_color_target*)((uptr)RasterParameters + Member->Offset);
-                    DesiredColorTargets.clear();
-                    DesiredColorTargets.reserve(Data->IDs.size());
+					member_definition* Member = Pass->RasterReflection->Data + RasterParamIdx;
 
-                    for (size_t i = 0; i < Data->IDs.size(); i++)
-                    {
-                        u64 ID = (*Data)[i];
-                        texture* NewColorTarget = GpuMemoryHeap->GetTexture(ExecutionContext, ID);
-                        DesiredColorTargets.push_back(NewColorTarget);
-                    }
-					if(((BoundColorTargets.size() != DesiredColorTargets.size()) ||
-					   !std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin())))
+					if (Member->Type == meta_type::gpu_index_buffer)
 					{
-						ColorTargetChanged = true;
-						for (texture* NewColorTarget : DesiredColorTargets)
+						gpu_index_buffer* Data = (gpu_index_buffer*)((uptr)RasterParameters + Member->Offset);
+						DesiredIndexBuffer = GpuMemoryHeap->GetBuffer(MainExecutionContext, Data->ID);
+
+						if (BoundIndexBuffer != DesiredIndexBuffer)
 						{
-							ExecutionContext->AttachmentImageBarriers.push_back({
-								NewColorTarget, 
-								AF_ColorAttachmentWrite, 
-								barrier_state::color_attachment, 
+							AttachmentBufferBarriers.push_back({DesiredIndexBuffer, AF_IndexRead, PSF_VertexInput});
+						}
+					}
+					else if (Member->Type == meta_type::gpu_indirect_buffer)
+					{
+						gpu_indirect_buffer* Data = (gpu_indirect_buffer*)((uptr)RasterParameters + Member->Offset);
+						MainExecutionContext->IndirectCommands = GpuMemoryHeap->GetBuffer(MainExecutionContext, Data->ID);
+						AttachmentBufferBarriers.push_back({MainExecutionContext->IndirectCommands, AF_IndirectCommandRead, PSF_DrawIndirect});
+					}
+					else if (Member->Type == meta_type::gpu_color_target)
+					{
+						gpu_color_target* Data = (gpu_color_target*)((uptr)RasterParameters + Member->Offset);
+						DesiredColorTargets.clear();
+						DesiredColorTargets.reserve(Data->IDs.size());
+
+						for (size_t i = 0; i < Data->IDs.size(); i++)
+						{
+							u64 ID = (*Data)[i];
+							texture* NewColorTarget = GpuMemoryHeap->GetTexture(MainExecutionContext, ID);
+							DesiredColorTargets.push_back(NewColorTarget);
+						}
+						if(((BoundColorTargets.size() != DesiredColorTargets.size()) ||
+						   !std::equal(BoundColorTargets.begin(), BoundColorTargets.end(), DesiredColorTargets.begin())))
+						{
+							ColorTargetChanged = true;
+							for (texture* NewColorTarget : DesiredColorTargets)
+							{
+								AttachmentImageBarriers.push_back({
+									NewColorTarget, 
+									AF_ColorAttachmentWrite, 
+									barrier_state::color_attachment, 
+									SUBRESOURCES_ALL, 
+									PSF_ColorAttachment
+								});
+							}
+						}
+					}
+					else if (Member->Type == meta_type::gpu_depth_target)
+					{
+						gpu_depth_target* Data = (gpu_depth_target*)((uptr)RasterParameters + Member->Offset);
+						DesiredDepthTarget = GpuMemoryHeap->GetTexture(MainExecutionContext, Data->ID);
+						if (BoundDepthTarget != DesiredDepthTarget)
+						{
+							DepthTargetChanged = true;
+							AttachmentImageBarriers.push_back({
+								DesiredDepthTarget, 
+								AF_DepthStencilAttachmentWrite, 
+								barrier_state::depth_stencil_attachment, 
 								SUBRESOURCES_ALL, 
-								PSF_ColorAttachment
+								PSF_EarlyFragment
 							});
 						}
 					}
-                }
-                else if (Member->Type == meta_type::gpu_depth_target)
-                {
-                    gpu_depth_target* Data = (gpu_depth_target*)((uptr)RasterParameters + Member->Offset);
-                    DesiredDepthTarget = GpuMemoryHeap->GetTexture(ExecutionContext, Data->ID);
-					if (BoundDepthTarget != DesiredDepthTarget)
+				}
+			}
+
+			if (RenderingActive && (ColorTargetChanged || DepthTargetChanged || ShouldRebind))
+			{
+				MainExecutionContext->EndRendering();
+				RenderingActive = false;
+			}
+
+			SetContext(Pass, MainExecutionContext);
+
+			SetupDispatches[Pass](MainExecutionContext);
+
+			AttachmentBufferBarriers.insert(AttachmentBufferBarriers.end(), Pass->BufferBarriers.begin(), Pass->BufferBarriers.end());
+			AttachmentImageBarriers.insert(AttachmentImageBarriers.end(), Pass->TextureBarriers.begin(), Pass->TextureBarriers.end());
+
+			MainExecutionContext->SetBufferBarriers(AttachmentBufferBarriers);
+			MainExecutionContext->SetImageBarriers(AttachmentImageBarriers);
+
+			if (DesiredIndexBuffer && BoundIndexBuffer != DesiredIndexBuffer)
+			{
+				MainExecutionContext->SetIndexBuffer(DesiredIndexBuffer);
+				BoundIndexBuffer = DesiredIndexBuffer;
+			}
+
+			if (Pass->Type == pass_type::raster && !RenderingActive)
+			{
+				if (DesiredColorTargets.size())
+				{
+					if (ColorTargetChanged)
 					{
-						DepthTargetChanged = true;
-						ExecutionContext->AttachmentImageBarriers.push_back({
-							DesiredDepthTarget, 
-							AF_DepthStencilAttachmentWrite, 
-							barrier_state::depth_stencil_attachment, 
-							SUBRESOURCES_ALL, 
-							PSF_EarlyFragment
-						});
+						MainExecutionContext->SetColorTarget(DesiredColorTargets);
+						BoundColorTargets = DesiredColorTargets;
+					} 
+					else
+					{
+						MainExecutionContext->SetColorTarget(BoundColorTargets);
 					}
-                }
-            }
-        }
+				}
 
-		bool NeedsNewRenderPass = ColorTargetChanged || DepthTargetChanged;
+				if (DesiredDepthTarget)
+				{
+					if (DepthTargetChanged)
+					{
+						MainExecutionContext->SetDepthTarget(DesiredDepthTarget);
+						BoundDepthTarget = DesiredDepthTarget;
+					}
+					else
+					{
+						MainExecutionContext->SetDepthTarget(BoundDepthTarget);
+					}
+				}
 
-        if (RenderingActive && (NeedsNewRenderPass || ShouldRebind))
-        {
-			ExecutionContext->EndRendering();
-			RenderingActive = false;
-        }
+				MainExecutionContext->BeginRendering(Pass->Width, Pass->Height);
+				RenderingActive = true;
+			}
 
-		SetContext(Pass, ExecutionContext);
+			MainExecutionContext->BindShaderParameters(Pass->Bindings);
 
-		SetupDispatches[Pass](ExecutionContext);
+			Dispatches[Pass](MainExecutionContext);
 
-		ExecutionContext->AttachmentBufferBarriers.insert(ExecutionContext->AttachmentBufferBarriers.end(), Pass->BufferBarriers.begin(), Pass->BufferBarriers.end());
-		ExecutionContext->AttachmentImageBarriers.insert(ExecutionContext->AttachmentImageBarriers.end(), Pass->TextureBarriers.begin(), Pass->TextureBarriers.end());
-
-		ExecutionContext->SetBufferBarriers(ExecutionContext->AttachmentBufferBarriers);
-		ExecutionContext->SetImageBarriers(ExecutionContext->AttachmentImageBarriers);
-
-		if (DesiredIndexBuffer && BoundIndexBuffer != DesiredIndexBuffer)
-		{
-			ExecutionContext->SetIndexBuffer(DesiredIndexBuffer);
-			BoundIndexBuffer = DesiredIndexBuffer;
+			for (u32 Neighbor : Adjacency[PassIndex])
+			{
+				InDegreeCopy[Neighbor]--;
+				if (InDegreeCopy[Neighbor] == 0)
+				{
+					NewReady.push_back(Neighbor);
+				}
+			}
 		}
 
-        if (Pass->Type == pass_type::raster && !RenderingActive)
-        {
-			if (DesiredColorTargets.size())
-			{
-				if (ColorTargetChanged)
-				{
-					ExecutionContext->SetColorTarget(DesiredColorTargets);
-					BoundColorTargets = DesiredColorTargets;
-				} 
-				else
-				{
-					ExecutionContext->SetColorTarget(BoundColorTargets);
-				}
-			}
-
-			if (DesiredDepthTarget)
-			{
-				if (DepthTargetChanged)
-				{
-					ExecutionContext->SetDepthTarget(DesiredDepthTarget);
-					BoundDepthTarget = DesiredDepthTarget;
-				}
-				else
-				{
-					ExecutionContext->SetDepthTarget(BoundDepthTarget);
-				}
-			}
-
-            ExecutionContext->BeginRendering(Pass->Width, Pass->Height);
-            RenderingActive = true;
-        }
-
-		ExecutionContext->BindShaderParameters(Pass->Bindings);
-
-		Dispatches[Pass](ExecutionContext);
-
-		ExecutionContext->AttachmentBufferBarriers.clear();
-		ExecutionContext->AttachmentImageBarriers.clear();
+		ReadyPasses = std::move(NewReady);
 	}
 
-	if(RenderingActive)
+	if (RenderingActive)
 	{
-		ExecutionContext->EndRendering();
+		MainExecutionContext->EndRendering();
 		RenderingActive = false;
 	}
 
-	ExecutionContext->DebugGuiBegin(CurrentColorTarget);
+	MainExecutionContext->DebugGuiBegin(CurrentColorTarget);
 	ImGui::Render();
-	ExecutionContext->DebugGuiEnd();
+	MainExecutionContext->DebugGuiEnd();
 
-	ExecutionContext->EmplaceColorTarget(CurrentColorTarget);
-	ExecutionContext->Present();
+	MainExecutionContext->EmplaceColorTarget(CurrentColorTarget);
+	MainExecutionContext->Present();
 }
 
 void global_graphics_context::

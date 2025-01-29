@@ -278,17 +278,7 @@ struct vulkan_texture : public texture
 		CreateInfo.format = GetVKFormat(Info.Format);
 		CreateInfo.extent.width  = (u32)NewWidth;
 		CreateInfo.extent.height = (u32)NewHeight;
-		if(InputData.Usage & image_flags::TF_CubeMap)
-		{
-			CreateInfo.extent.depth = 1;
-			CreateInfo.arrayLayers  = DepthOrArraySize;
-		}
-		else if(InputData.Type == image_type::Texture1D)
-		{
-			CreateInfo.extent.depth = 1;
-			CreateInfo.arrayLayers  = DepthOrArraySize;
-		}
-		else if(InputData.Type == image_type::Texture2D)
+		if((InputData.Usage & image_flags::TF_CubeMap) || InputData.Type == image_type::Texture1D || InputData.Type == image_type::Texture2D)
 		{
 			CreateInfo.extent.depth = 1;
 			CreateInfo.arrayLayers  = DepthOrArraySize;

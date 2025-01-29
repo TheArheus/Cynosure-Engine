@@ -1,7 +1,6 @@
 
 #define USE_BOTTOM_OF_PIPE_BARRIERS 0
 
-
 // TODO: A better code
 void vulkan_resource_binder::
 AppendStaticStorage(general_context* ContextToUse, const array<binding_packet>& Data, u32 Offset)
@@ -38,7 +37,7 @@ BindStaticStorage(renderer_backend* GeneralBackend)
 }
 
 void vulkan_resource_binder::
-SetStorageBufferView(resource* Buffer, u32 Set)
+SetBufferView(resource* Buffer, u32 Set)
 {
 	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
 
@@ -61,7 +60,6 @@ SetStorageBufferView(resource* Buffer, u32 Set)
 	else
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
-	DescriptorInfos.push_back(BufferInfo);
 
 	if(Attachment->WithCounter)
 	{
@@ -82,63 +80,19 @@ SetStorageBufferView(resource* Buffer, u32 Set)
 		else
 			StaticDescriptorBindings.push_back(CounterDescriptorSet);
 		SetIndices[Set] += 1;
-		DescriptorInfos.push_back(CounterBufferInfo);
-	}
-}
-
-void vulkan_resource_binder::
-SetUniformBufferView(resource* Buffer, u32 Set)
-{
-	vulkan_buffer* Attachment = static_cast<vulkan_buffer*>(Buffer);
-
-	descriptor_info* BufferInfo = PushStruct(descriptor_info);
-	BufferInfo->buffer = Attachment->Handle;
-	BufferInfo->offset = 0;
-	BufferInfo->range  = Attachment->WithCounter ? Attachment->CounterOffset : Attachment->Size;
-
-	VkWriteDescriptorSet CounterDescriptorSet = {};
-	VkWriteDescriptorSet DescriptorSet = {};
-	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	if(!PushDescriptors[Set])
-		DescriptorSet.dstSet = Sets[Set];
-	DescriptorSet.dstBinding = SetIndices[Set];
-	DescriptorSet.descriptorCount = 1;
-	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	DescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(BufferInfo);
-	if(PushDescriptors[Set])
-		PushDescriptorBindings.push_back(DescriptorSet);
-	else
-		StaticDescriptorBindings.push_back(DescriptorSet);
-	SetIndices[Set] += 1;
-	DescriptorInfos.push_back(BufferInfo);
-
-	if(Attachment->WithCounter)
-	{
-		descriptor_info* CounterBufferInfo = PushStruct(descriptor_info);
-		CounterBufferInfo->buffer = Attachment->Handle;
-		CounterBufferInfo->offset = Attachment->CounterOffset;
-		CounterBufferInfo->range  = sizeof(u32);
-
-		CounterDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		if(!PushDescriptors[Set])
-			CounterDescriptorSet.dstSet = Sets[Set];
-		CounterDescriptorSet.dstBinding = SetIndices[Set];
-		CounterDescriptorSet.descriptorCount = 1;
-		CounterDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		CounterDescriptorSet.pBufferInfo = reinterpret_cast<VkDescriptorBufferInfo*>(CounterBufferInfo);
-		if(PushDescriptors[Set])
-			PushDescriptorBindings.push_back(CounterDescriptorSet);
-		else
-			StaticDescriptorBindings.push_back(CounterDescriptorSet);
-		SetIndices[Set] += 1;
-		DescriptorInfos.push_back(CounterBufferInfo);
 	}
 }
 
 void vulkan_resource_binder::
 SetSampledImage(u32 DescriptorCount, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
+	if(!Textures.size())
+	{
+		SetIndices[Set] += 1;
+		return;
+	}
+
+	descriptor_info* ImageInfo = PushArray(descriptor_info, Textures.size());
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -147,28 +101,12 @@ SetSampledImage(u32 DescriptorCount, const array<resource*>& Textures, image_typ
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
-	vulkan_texture* NullData = nullptr;
-	if(Type == image_type::Texture1D)
-		NullData = static_cast<vulkan_texture*>(NullTexture1D);
-	else if(Type == image_type::Texture2D)
-		NullData = static_cast<vulkan_texture*>(NullTexture2D);
-	else if(Type == image_type::Texture3D)
-		NullData = static_cast<vulkan_texture*>(NullTexture3D);
-	else if(Type == image_type::TextureCube)
-		NullData = static_cast<vulkan_texture*>(NullTextureCube);
-	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
-	{
-		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
-		ImageInfo[TextureIdx].imageView = NullData->Views[ViewIdx];
-		ImageInfo[TextureIdx].sampler = NullData->SamplerHandle;
-	}
-
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	if(!PushDescriptors[Set])
 		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
-	DescriptorSet.descriptorCount = DescriptorCount;
+	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo);
 	if(PushDescriptors[Set])
@@ -176,13 +114,18 @@ SetSampledImage(u32 DescriptorCount, const array<resource*>& Textures, image_typ
 	else
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
-	DescriptorInfos.push_back(ImageInfo);
 }
 
 void vulkan_resource_binder::
 SetStorageImage(u32 DescriptorCount, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
+	if(!Textures.size())
+	{
+		SetIndices[Set] += 1;
+		return;
+	}
+
+	descriptor_info* ImageInfo = PushArray(descriptor_info, Textures.size());
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -191,28 +134,12 @@ SetStorageImage(u32 DescriptorCount, const array<resource*>& Textures, image_typ
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
-	vulkan_texture* NullData = nullptr;
-	if(Type == image_type::Texture1D)
-		NullData = static_cast<vulkan_texture*>(NullTexture1D);
-	else if(Type == image_type::Texture2D)
-		NullData = static_cast<vulkan_texture*>(NullTexture2D);
-	else if(Type == image_type::Texture3D)
-		NullData = static_cast<vulkan_texture*>(NullTexture3D);
-	else if(Type == image_type::TextureCube)
-		NullData = static_cast<vulkan_texture*>(NullTextureCube);
-	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
-	{
-		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
-		ImageInfo[TextureIdx].imageView = NullData->Views[ViewIdx];
-		ImageInfo[TextureIdx].sampler = NullData->SamplerHandle;
-	}
-
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	if(!PushDescriptors[Set])
 		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
-	DescriptorSet.descriptorCount = DescriptorCount;
+	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo);
 	if(PushDescriptors[Set])
@@ -220,13 +147,18 @@ SetStorageImage(u32 DescriptorCount, const array<resource*>& Textures, image_typ
 	else
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
-	DescriptorInfos.push_back(ImageInfo);
 }
 
 void vulkan_resource_binder::
 SetImageSampler(u32 DescriptorCount, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx, u32 Set)
 {
-	descriptor_info* ImageInfo = PushArray(descriptor_info, DescriptorCount);
+	if(!Textures.size())
+	{
+		SetIndices[Set] += 1;
+		return;
+	}
+
+	descriptor_info* ImageInfo = PushArray(descriptor_info, Textures.size());
 	for(u32 TextureIdx = 0; TextureIdx < Textures.size(); TextureIdx++)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Textures[TextureIdx]);
@@ -235,28 +167,12 @@ SetImageSampler(u32 DescriptorCount, const array<resource*>& Textures, image_typ
 		ImageInfo[TextureIdx].sampler = Texture->SamplerHandle;
 	}
 
-	vulkan_texture* NullData = nullptr;
-	if(Type == image_type::Texture1D)
-		NullData = static_cast<vulkan_texture*>(NullTexture1D);
-	else if(Type == image_type::Texture2D)
-		NullData = static_cast<vulkan_texture*>(NullTexture2D);
-	else if(Type == image_type::Texture3D)
-		NullData = static_cast<vulkan_texture*>(NullTexture3D);
-	else if(Type == image_type::TextureCube)
-		NullData = static_cast<vulkan_texture*>(NullTextureCube);
-	for(u32 TextureIdx = Textures.size(); TextureIdx < DescriptorCount; TextureIdx++)
-	{
-		ImageInfo[TextureIdx].imageLayout = GetVKLayout(State);
-		ImageInfo[TextureIdx].imageView = NullData->Views[ViewIdx];
-		ImageInfo[TextureIdx].sampler = NullData->SamplerHandle;
-	}
-
 	VkWriteDescriptorSet DescriptorSet = {};
 	DescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	if(!PushDescriptors[Set])
 		DescriptorSet.dstSet = Sets[Set];
 	DescriptorSet.dstBinding = SetIndices[Set];
-	DescriptorSet.descriptorCount = DescriptorCount;
+	DescriptorSet.descriptorCount = Textures.size();
 	DescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	DescriptorSet.pImageInfo = reinterpret_cast<VkDescriptorImageInfo*>(ImageInfo);
 	if(PushDescriptors[Set])
@@ -264,7 +180,6 @@ SetImageSampler(u32 DescriptorCount, const array<resource*>& Textures, image_typ
 	else
 		StaticDescriptorBindings.push_back(DescriptorSet);
 	SetIndices[Set] += 1;
-	DescriptorInfos.push_back(ImageInfo);
 }
 
 
@@ -320,7 +235,7 @@ AcquireNextImage()
 {
 	vkWaitForFences(Device, 1, &RenderFence, VK_TRUE, UINT64_MAX);
 	vkResetFences(Device, 1, &RenderFence);
-	vkAcquireNextImageKHR(Device, Gfx->Swapchain, ~0ull, AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
+	BackBufferIndex = Gfx->GetCurrentBackBufferIndex(this);
 }
 
 void vulkan_command_list::
@@ -328,17 +243,6 @@ Begin()
 {
 	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	CommandQueue->Reset(&CommandList);
-
-	SetImageBarriers({
-						{Gfx->NullTexture1D, AF_ShaderRead, barrier_state::shader_read, SUBRESOURCES_ALL, PSF_Compute}, 
-						{Gfx->NullTexture2D, AF_ShaderRead, barrier_state::shader_read, SUBRESOURCES_ALL, PSF_Compute}, 
-						{Gfx->NullTexture3D, AF_ShaderRead, barrier_state::shader_read, SUBRESOURCES_ALL, PSF_Compute},
-						{Gfx->NullTextureCube, AF_ShaderRead, barrier_state::shader_read, SUBRESOURCES_ALL, PSF_Compute}});
-
-	TexturesToCommon.insert(Gfx->NullTexture1D);
-	TexturesToCommon.insert(Gfx->NullTexture2D);
-	TexturesToCommon.insert(Gfx->NullTexture3D);
-	TexturesToCommon.insert(Gfx->NullTextureCube);
 }
 
 void vulkan_command_list::
@@ -356,6 +260,8 @@ PlaceEndOfFrameBarriers()
 		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], GetVKAccessMask(AF_TransferWrite, PSF_Transfer), 0, GetVKLayout(barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
 	};
 
+	std::vector<buffer_barrier> AttachmentBufferBarriers;
+	std::vector<texture_barrier> AttachmentImageBarriers;
 	for(u32 Idx = 0; Idx < BuffersToCommon.size(); ++Idx)
 	{
 #if USE_BOTTOM_OF_PIPE_BARRIERS
@@ -389,8 +295,6 @@ PlaceEndOfFrameBarriers()
 
 	BuffersToCommon.clear();
 	TexturesToCommon.clear();
-	AttachmentImageBarriers.clear();
-	AttachmentBufferBarriers.clear();
 	RenderingAttachmentInfos.clear();
 }
 
@@ -715,7 +619,7 @@ SetStencilTarget(texture* Target, vec2 Clear)
 {
 	assert(CurrContext->Type == pass_type::raster);
 
-	AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, PSF_EarlyFragment});
+	//AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, PSF_EarlyFragment});
 	TexturesToCommon.insert(Target);
 
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
@@ -741,7 +645,7 @@ void vulkan_command_list::
 BindShaderParameters(const array<binding_packet>& Data)
 {
 	if(!Data.size()) return;
-	vulkan_resource_binder Binder(Gfx, CurrContext);
+	vulkan_resource_binder Binder(CurrContext);
 
 	VkPipelineLayout Layout = {};
 	VkPipelineBindPoint BindPoint = {};
@@ -768,7 +672,7 @@ BindShaderParameters(const array<binding_packet>& Data)
 		if(Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform)
 		{
 			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
-			Binder.SetStorageBufferView(BufferToBind);
+			Binder.SetBufferView(BufferToBind);
 			BuffersToCommon.insert(BufferToBind);
 			ParamIdx += BufferToBind->WithCounter;
 		}
@@ -809,18 +713,6 @@ BindShaderParameters(const array<binding_packet>& Data)
 				{
 					texture* CurrentTexture = (texture*)CurrentResource;
 					TexturesToCommon.insert(CurrentTexture);
-				}
-				// TODO: How do I move this out? Remove this even!
-				if(s32(Parameter.Count - Data[Offset].Resources.size()) > 0)
-				{
-					if(Parameter.ImageType == image_type::Texture1D)
-						AttachmentImageBarriers.push_back({Binder.NullTexture1D, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
-					else if(Parameter.ImageType == image_type::Texture2D)
-						AttachmentImageBarriers.push_back({Binder.NullTexture2D, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
-					else if(Parameter.ImageType == image_type::Texture3D)
-						AttachmentImageBarriers.push_back({Binder.NullTexture3D, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
-					else if(Parameter.ImageType == image_type::TextureCube)
-						AttachmentImageBarriers.push_back({Binder.NullTextureCube, Parameter.AspectMask, Parameter.BarrierState, SUBRESOURCES_ALL, Parameter.ShaderToUse});
 				}
 			}
 			else if(Parameter.Type == resource_type::texture_storage)
@@ -910,13 +802,7 @@ Draw(u32 FirstVertex, u32 VertexCount, u32 FirstInstance, u32 InstanceCount)
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	assert(CurrContext->Type == pass_type::raster);
 
-	SetBufferBarriers(AttachmentBufferBarriers);
-	SetImageBarriers(AttachmentImageBarriers);
-
 	vkCmdDraw(*PipelineContext->CommandList, VertexCount, InstanceCount, FirstVertex, FirstInstance);
-
-	AttachmentBufferBarriers.clear();
-	AttachmentImageBarriers.clear();
 }
 #endif
 
@@ -948,14 +834,8 @@ Dispatch(u32 X, u32 Y, u32 Z)
 {
 	assert(CurrContext->Type == pass_type::compute);
 
-	SetBufferBarriers(AttachmentBufferBarriers);
-	SetImageBarriers(AttachmentImageBarriers);
-
 	vulkan_compute_context* Context = static_cast<vulkan_compute_context*>(CurrContext);
 	vkCmdDispatch(CommandList, (X + Context->BlockSizeX - 1) / Context->BlockSizeX, (Y + Context->BlockSizeY - 1) / Context->BlockSizeY, (Z + Context->BlockSizeZ - 1) / Context->BlockSizeZ);
-
-	AttachmentImageBarriers.clear();
-	AttachmentBufferBarriers.clear();
 }
 
 bool vulkan_command_list::
@@ -1351,6 +1231,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	}
 
 	std::vector<u32> DescriptorsSizes(ShaderRootLayout.size());
+	std::vector<std::vector<VkDescriptorBindingFlags>> BindingFlags(ShaderRootLayout.size());
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
@@ -1361,28 +1242,43 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+			{
+				BindingFlags[LayoutIdx].push_back(LayoutIdx > 0 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
 				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, false, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+			}
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+			{
+				BindingFlags[LayoutIdx].push_back(LayoutIdx > 0 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
 				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, true, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+			}
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+			{
+				BindingFlags[LayoutIdx].push_back(0);
 				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+			}
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+			{
+				BindingFlags[LayoutIdx].push_back(0);
 				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_uniform, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+			}
 		}
 	}
 
-	// TODO: Check if binding partially bound
-	// TODO: Binding flags
 	Layouts.resize(ShaderRootLayout.size());
 	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
 	PushDescriptors.resize(ShaderRootLayout.size());
 	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)
 	{
-		PushDescriptors[SpaceIdx] = (DescriptorsSizes[SpaceIdx] < 32);
+		VkDescriptorSetLayoutBindingFlagsCreateInfo BindingFlagsInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
+		BindingFlagsInfo.bindingCount  = Parameters[SpaceIdx].size();
+		BindingFlagsInfo.pBindingFlags = BindingFlags[SpaceIdx].data();
+
+		PushDescriptors[SpaceIdx] = (DescriptorsSizes[SpaceIdx] < Gfx->PushDescProps.maxPushDescriptors);
 		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
-		DescriptorSetLayoutCreateInfo.flags = PushDescriptors[SpaceIdx] * VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+		DescriptorSetLayoutCreateInfo.flags = (PushDescriptors[SpaceIdx] * VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR);
 		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
 		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
+		DescriptorSetLayoutCreateInfo.pNext = SpaceIdx > 0 ? &BindingFlagsInfo : nullptr;
 
 		VkDescriptorSetLayout DescriptorSetLayout;
 		VK_CHECK(vkCreateDescriptorSetLayout(Device, &DescriptorSetLayoutCreateInfo, 0, &DescriptorSetLayout));
@@ -1390,7 +1286,8 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	}
 
 	std::vector<VkDescriptorPoolSize> PoolSizes;
-	for (const auto& DescriptorType : DescriptorTypeCounts) {
+	for (const auto& DescriptorType : DescriptorTypeCounts)
+	{
 		VkDescriptorPoolSize PoolSize = {};
 		PoolSize.type = DescriptorType.first;
 		PoolSize.descriptorCount = DescriptorType.second;
@@ -1624,6 +1521,7 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 	ComputeStage.pName  = "main";
 
 	std::vector<u32> DescriptorsSizes(ShaderRootLayout.size());
+	std::vector<std::vector<VkDescriptorBindingFlags>> BindingFlags(ShaderRootLayout.size());
 	for(u32 LayoutIdx = 0; LayoutIdx < ShaderRootLayout.size(); LayoutIdx++)
 	{
 		for(u32 BindingIdx = 0; BindingIdx < ShaderRootLayout[LayoutIdx].size(); ++BindingIdx)
@@ -1634,27 +1532,43 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 
 			if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || 
 			   Parameter.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+			{
+				BindingFlags[LayoutIdx].push_back(LayoutIdx > 0 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
 				ParameterLayout[LayoutIdx].push_back({resource_type::texture_sampler, Parameter.descriptorCount, false, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+			}
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+			{
+				BindingFlags[LayoutIdx].push_back(LayoutIdx > 0 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
 				ParameterLayout[LayoutIdx].push_back({resource_type::texture_storage, Parameter.descriptorCount, true, TextureTypes[LayoutIdx][BindingIdx], GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+			}
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+			{
+				BindingFlags[LayoutIdx].push_back(0);
 				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
+			}
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+			{
+				BindingFlags[LayoutIdx].push_back(0);
 				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_uniform, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+			}
 		}
 	}
 
-	// TODO: Check if binding partially bound
 	Layouts.resize(ShaderRootLayout.size());
 	Sets.resize(ShaderRootLayout.size(), VK_NULL_HANDLE);
 	PushDescriptors.resize(ShaderRootLayout.size());
 	for(u32 SpaceIdx = 0; SpaceIdx < ShaderRootLayout.size(); ++SpaceIdx)
 	{
-		PushDescriptors[SpaceIdx] = (DescriptorsSizes[SpaceIdx] < 32);
+		VkDescriptorSetLayoutBindingFlagsCreateInfo BindingFlagsInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
+		BindingFlagsInfo.bindingCount  = Parameters[SpaceIdx].size();
+		BindingFlagsInfo.pBindingFlags = BindingFlags[SpaceIdx].data();
+
+		PushDescriptors[SpaceIdx] = (DescriptorsSizes[SpaceIdx] < Gfx->PushDescProps.maxPushDescriptors);
 		VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO}; 
 		DescriptorSetLayoutCreateInfo.flags = PushDescriptors[SpaceIdx] * VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
 		DescriptorSetLayoutCreateInfo.bindingCount = Parameters[SpaceIdx].size();
 		DescriptorSetLayoutCreateInfo.pBindings = Parameters[SpaceIdx].data();
+		DescriptorSetLayoutCreateInfo.pNext = SpaceIdx > 0 ? &BindingFlagsInfo : nullptr;
 
 		VkDescriptorSetLayout DescriptorSetLayout;
 		VK_CHECK(vkCreateDescriptorSetLayout(Device, &DescriptorSetLayoutCreateInfo, 0, &DescriptorSetLayout));
@@ -1663,7 +1577,8 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 
 
 	std::vector<VkDescriptorPoolSize> PoolSizes;
-	for (const auto& DescriptorType : DescriptorTypeCounts) {
+	for (const auto& DescriptorType : DescriptorTypeCounts)
+	{
 		VkDescriptorPoolSize PoolSize = {};
 		PoolSize.type = DescriptorType.first;
 		PoolSize.descriptorCount = DescriptorType.second;

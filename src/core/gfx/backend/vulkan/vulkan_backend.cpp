@@ -220,38 +220,38 @@ vulkan_backend(GLFWwindow* Handle)
 		}
 	}
 
-	float QueuePriorities[] = {1.0f};
-	VkDeviceQueueCreateInfo DeviceQueueCreateInfo = {};
-	DeviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	DeviceQueueCreateInfo.queueFamilyIndex = FamilyIndex;
-	DeviceQueueCreateInfo.queueCount = 1;
-	DeviceQueueCreateInfo.pQueuePriorities = QueuePriorities;
-
-	std::vector<float> QueuesPriorities(32, 1.0);
+	std::vector<std::vector<float>> QueuesPriorities(QueueFamilyPropertiesCount, std::vector<float>());
+	for(u32 Idx = 0; Idx < QueueFamilyPropertiesCount; ++Idx)
+	{
+		u32 CurrentQueueCount = QueueFamilyProperties[Idx].queueCount;
+#if 1
+		for(u32 QueueIdx = 0; QueueIdx < CurrentQueueCount; QueueIdx++)
+		{
+			QueuesPriorities[Idx].push_back(float(CurrentQueueCount - QueueIdx) / float(CurrentQueueCount));
+		}
+#else
+		QueuesPriorities[Idx] = std::vector<float>(CurrentQueueCount, 1.0);
+#endif
+	}
 	std::vector<VkDeviceQueueCreateInfo> DeviceQueuesCreateInfo(QueueFamilyPropertiesCount);
 	for(u32 Idx = 0; Idx < QueueFamilyPropertiesCount; ++Idx)
 	{
 		DeviceQueuesCreateInfo[Idx].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		DeviceQueuesCreateInfo[Idx].queueFamilyIndex = Idx;
 		DeviceQueuesCreateInfo[Idx].queueCount = QueueFamilyProperties[Idx].queueCount;
-		DeviceQueuesCreateInfo[Idx].pQueuePriorities = QueuesPriorities.data();
+		DeviceQueuesCreateInfo[Idx].pQueuePriorities = QueuesPriorities[Idx].data();
 	}
 
 	VkDeviceCreateInfo DeviceCreateInfo = {};
 	DeviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-#if 0
-	DeviceCreateInfo.queueCreateInfoCount = 1;
-	DeviceCreateInfo.pQueueCreateInfos = &DeviceQueueCreateInfo;
-#else
 	DeviceCreateInfo.queueCreateInfoCount = DeviceQueuesCreateInfo.size();
 	DeviceCreateInfo.pQueueCreateInfos = DeviceQueuesCreateInfo.data();
-#endif
 	DeviceCreateInfo.enabledLayerCount = (u32)DeviceLayers.size();
 	DeviceCreateInfo.ppEnabledLayerNames = DeviceLayers.data();
 	DeviceCreateInfo.enabledExtensionCount = (u32)DeviceExtensions.size();
 	DeviceCreateInfo.ppEnabledExtensionNames = DeviceExtensions.data();
 	DeviceCreateInfo.pNext = &Features2;
-	Features2.pNext  = &Features11;
+	Features2 .pNext = &Features11;
 	Features11.pNext = &Features12;
 	Features12.pNext = &Features13;
 	Features13.pNext = &AtomicFeatures;
@@ -260,6 +260,7 @@ vulkan_backend(GLFWwindow* Handle)
 	VK_CHECK(vkCreateDevice(PhysicalDevice, &DeviceCreateInfo, nullptr, &Device), true);
 
 	Properties2.pNext = &ConservativeRasterProps;
+	ConservativeRasterProps.pNext = &PushDescProps;
 	vkGetPhysicalDeviceProperties2(PhysicalDevice, &Properties2);
 
 #if _WIN32
@@ -330,21 +331,6 @@ vulkan_backend(GLFWwindow* Handle)
 	UpdateBuffer = new vulkan_buffer(this, "Update buffer", nullptr, MiB(64), 1, RF_CpuWrite);
 	UploadBuffer = new vulkan_buffer(this, "Upload buffer", nullptr, MiB(64), 1, RF_CpuRead);
 #endif
-
-	utils::texture::input_data TextureInputData = {};
-	TextureInputData.Type	   = image_type::Texture1D;
-	TextureInputData.MipLevels = 1;
-	TextureInputData.Format    = image_format::R8G8B8A8_UNORM;
-	TextureInputData.Usage     = image_flags::TF_Sampled | image_flags::TF_ColorTexture;
-	TextureInputData.InitialState = barrier_state::shader_read;
-	NullTexture1D = new vulkan_texture(this, "NullT_1D", nullptr, 1, 1, 1, TextureInputData);
-	TextureInputData.Type	   = image_type::Texture2D;
-	NullTexture2D = new vulkan_texture(this, "NullT_2D", nullptr, 1, 1, 1, TextureInputData);
-	TextureInputData.Type	   = image_type::Texture3D;
-	NullTexture3D = new vulkan_texture(this, "NullT_3D", nullptr, 1, 1, 1, TextureInputData);
-	TextureInputData.Type	   = image_type::Texture2D;
-	TextureInputData.Usage    |= image_flags::TF_CubeMap;
-	NullTextureCube = new vulkan_texture(this, "NullT_CUBE", nullptr, 1, 1, 6, TextureInputData);
 
 	VkDescriptorPoolSize ImGuiPoolSizes[] = 
 	{
@@ -467,11 +453,6 @@ DestroyObject()
 	UploadBuffer = nullptr;
 #endif
 
-	delete NullTexture1D;
-	delete NullTexture2D;
-	delete NullTexture3D;
-	delete NullTextureCube;
-
 	vmaDestroyAllocator(AllocatorHandle);
 
 	delete CommandQueue;
@@ -489,6 +470,14 @@ DestroyObject()
 	vkDestroySurfaceKHR(Instance, Surface, nullptr);
 	vkDestroyDebugReportCallbackEXT(Instance, DebugCallback, nullptr);
 	vkDestroyInstance(Instance, nullptr);
+}
+
+u32 vulkan_backend::
+GetCurrentBackBufferIndex(command_list* Cmd)
+{
+	vulkan_command_list* VkCmd = static_cast<vulkan_command_list*>(Cmd);
+	vkAcquireNextImageKHR(Device, Swapchain, ~0ull, VkCmd->AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
+	return BackBufferIndex;
 }
 
 void vulkan_backend::

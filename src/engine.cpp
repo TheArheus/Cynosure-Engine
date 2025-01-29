@@ -1,3 +1,5 @@
+
+// TODO: Better asset management
  
 void engine::
 Init(const std::vector<std::string>& args)
@@ -76,7 +78,13 @@ Run()
 		if(!Window.IsGfxPaused)
 		{
 			Window.Gfx.Compile();
-			Window.Gfx.Execute();
+			Window.Gfx.ExecuteAsync();
+		}
+
+		if(GraphVisualize)
+		{
+			Window.Gfx.ExportGraphViz();
+			GraphVisualize = false;
 		}
 
 		GlobalGuiContext->Vertices.clear();
@@ -111,10 +119,19 @@ Run()
 }
 
 void engine::
+OnButtonDown(key_down_event& Event)
+{
+	if(Event.Code == EC_I)
+		GraphVisualize = true;
+}
+
+void engine::
 LoadModule()
 {
 	window::EventsDispatcher.Reset();
 	Registry.ClearAll();
+
+	window::EventsDispatcher.Subscribe(this, &engine::OnButtonDown);
 
     std::filesystem::path OriginalPath("../build/game_module.sce");
     if (!std::filesystem::exists(OriginalPath) || !std::filesystem::is_regular_file(OriginalPath))

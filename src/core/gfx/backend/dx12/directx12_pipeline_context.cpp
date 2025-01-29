@@ -1,7 +1,7 @@
 
 
 void directx12_resource_binder::
-SetStorageBufferView(resource* Buffer, u32 Set)
+SetBufferView(resource* Buffer, u32 Set)
 {
 	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
 
@@ -10,13 +10,11 @@ SetStorageBufferView(resource* Buffer, u32 Set)
 	if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_SRV)
 	{
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->ShaderResourceView, ResourceHeap->Type);
-
 		BindingDescriptions.push_back({dx12_descriptor_type::shader_resource, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 	}
 	else if(ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
 	{
 		Device->CopyDescriptorsSimple(1, DescriptorHandle, ToBind->UnorderedAccessView, ResourceHeap->Type);
-
 		BindingDescriptions.push_back({dx12_descriptor_type::unordered_access, {}, ToBind->Handle->GetGPUVirtualAddress(), RootResourceBindingIdx + RootSamplersBindingIdx, 1});
 	}
 	RootResourceBindingIdx += 1;
@@ -40,13 +38,6 @@ SetStorageBufferView(resource* Buffer, u32 Set)
 		ResourceBindingIdx += 1;
 		SetIndices[Set] += 1;
 	}
-}
-
-void directx12_resource_binder::
-SetUniformBufferView(resource* Buffer, u32 Set)
-{
-	directx12_buffer* ToBind = static_cast<directx12_buffer*>(Buffer);
-	SetIndices[Set] += 1;
 }
 
 void directx12_resource_binder::
@@ -140,7 +131,7 @@ void directx12_command_list::
 AcquireNextImage()
 {
 	// NOTE: For directx12 this happens in the end of the frame
-	BackBufferIndex = Gfx->BackBufferIndex;
+	BackBufferIndex = Gfx->GetCurrentBackBufferIndex(this);
 }
 
 void directx12_command_list::
@@ -239,7 +230,6 @@ Present()
 	Gfx->Fence->Flush(Gfx->CommandQueue);
 
 	Gfx->SwapChain->Present(0, Gfx->TearingSupport * DXGI_PRESENT_ALLOW_TEARING);
-	Gfx->BackBufferIndex = Gfx->SwapChain->GetCurrentBackBufferIndex();
 	CurrContext = nullptr;
 }
 
@@ -249,7 +239,7 @@ Update(buffer* BufferToUpdate, void* Data)
 	if(!Data) return;
 
 	directx12_buffer* Staging = static_cast<directx12_buffer*>(BufferToUpdate->UpdateBuffer);
-	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToUpdate);
+	directx12_buffer* Buffer  = static_cast<directx12_buffer*>(BufferToUpdate);
 
 	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}, {Staging, AF_TransferRead, PSF_Transfer}});
 
@@ -267,7 +257,7 @@ UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 	if(!Data) return;
 
 	directx12_buffer* Staging = static_cast<directx12_buffer*>(BufferToUpdate->UpdateBuffer);
-	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToUpdate);
+	directx12_buffer* Buffer  = static_cast<directx12_buffer*>(BufferToUpdate);
 
 	if(UpdateByteSize == 0) return;
 	assert(UpdateByteSize <= Buffer->Size);
@@ -288,7 +278,7 @@ ReadBack(buffer* BufferToRead, void* Data)
 	if(!Data) return;
 
 	directx12_buffer* Staging = static_cast<directx12_buffer*>(BufferToRead->UploadBuffer);
-	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
+	directx12_buffer* Buffer  = static_cast<directx12_buffer*>(BufferToRead);
 
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferWrite, PSF_Transfer}});
 
@@ -306,7 +296,7 @@ ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 	if(!Data) return;
 
 	directx12_buffer* Staging = static_cast<directx12_buffer*>(BufferToRead->UploadBuffer);
-	directx12_buffer* Buffer = static_cast<directx12_buffer*>(BufferToRead);
+	directx12_buffer* Buffer  = static_cast<directx12_buffer*>(BufferToRead);
 
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferWrite, PSF_Transfer}});
 
@@ -371,7 +361,7 @@ ReadBack(texture* TextureToRead, void* Data)
 {
 	if(!Data) return;
 
-	directx12_buffer* Staging = static_cast<directx12_buffer*>(TextureToRead->UploadBuffer);
+	directx12_buffer*  Staging = static_cast<directx12_buffer*>(TextureToRead->UploadBuffer);
 	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToRead);
 
 	SetBufferBarriers({{Staging, AF_TransferWrite, PSF_Transfer}});
@@ -520,7 +510,7 @@ void directx12_command_list::
 BindShaderParameters(const array<binding_packet>& Data)
 {
 	if(!Data.size()) return;
-    directx12_resource_binder Binder(Gfx, CurrContext);
+    directx12_resource_binder Binder(CurrContext);
 
 	u32 Offset = 0;
     auto DX12BindImageSampler = [&](const binding_packet& Packet, const descriptor_param& Parameter, u32 LayoutIdx) 
@@ -547,12 +537,10 @@ BindShaderParameters(const array<binding_packet>& Data)
 
     auto DX12BindBuffer = [&](buffer* BufferToBind, const descriptor_param& Parameter) 
 	{
-        Binder.SetStorageBufferView(BufferToBind);
+        Binder.SetBufferView(BufferToBind);
         BuffersToCommon.insert(BufferToBind);
 		BuffersToCommon.insert(BufferToBind->UpdateBuffer);
 		BuffersToCommon.insert(BufferToBind->UploadBuffer);
-		//if(BufferToBind->WithCounter) 
-        AttachmentBufferBarriers.push_back({BufferToBind, Parameter.AspectMask, Parameter.ShaderToUse});
     };
 
     auto DX12SetRootDescriptors = [&](auto* ContextToBind, auto SetDescriptorTable, auto SetShaderResourceView, auto SetUnorderedAccessView) 
@@ -731,14 +719,8 @@ Dispatch(u32 X, u32 Y, u32 Z)
 {
 	assert(CurrContext->Type == pass_type::compute);
 
-	SetBufferBarriers(AttachmentBufferBarriers);
-	SetImageBarriers(AttachmentImageBarriers);
-
 	directx12_compute_context* Context = static_cast<directx12_compute_context*>(CurrContext);
 	CommandList->Dispatch((X + Context->BlockSizeX - 1) / Context->BlockSizeX, (Y + Context->BlockSizeY - 1) / Context->BlockSizeY, (Z + Context->BlockSizeZ - 1) / Context->BlockSizeZ);
-
-	AttachmentImageBarriers.clear();
-	AttachmentBufferBarriers.clear();
 }
 
 void directx12_command_list::

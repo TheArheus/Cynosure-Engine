@@ -1,6 +1,8 @@
 
 #include <D3D12MemAlloc.cpp>
 
+// TODO: Better resource copy
+
 directx12_backend::
 directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 {
@@ -68,7 +70,9 @@ directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 	if(RendererOptions.TiledResourcesTier >= 2) MinMaxFilterAvailable = true;
 
 	Fence = new directx12_fence(Device.Get());
-	CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT);
+	CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT); // D3D12_COMMAND_LIST_TYPE_BUNDLE);
+	//CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_COMPUTE);
+	//CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_COPY);
 
 	{
 		ComPtr<IDXGISwapChain1> _SwapChain;
@@ -203,6 +207,13 @@ DestroyObject()
 #endif
 
     Device.Reset();
+}
+
+u32 directx12_backend::
+GetCurrentBackBufferIndex(command_list* Cmd)
+{
+	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
+	return BackBufferIndex;
 }
 
 void directx12_backend::

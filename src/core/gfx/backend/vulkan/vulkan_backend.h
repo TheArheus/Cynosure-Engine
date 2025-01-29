@@ -24,6 +24,8 @@ struct vulkan_backend : public renderer_backend
 	void DestroyObject() override;
 	void ImGuiNewFrame() override { ImGui_ImplVulkan_NewFrame(); }
 
+	u32 GetCurrentBackBufferIndex(command_list* Cmd) override;
+
 	[[nodiscard]] VkShaderModule LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, bool>>& IsWritable, std::map<u32, std::map<u32, image_type>>& TextureTypes, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines = {}, u32* LocalSizeX = nullptr, u32* LocalSizeY = nullptr, u32* LocalSizeZ = nullptr);
 	void RecreateSwapchain(u32 NewWidth, u32 NewHeight) override;
 
@@ -52,6 +54,7 @@ struct vulkan_backend : public renderer_backend
 
 	VkPhysicalDeviceProperties2 Properties2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
 	VkPhysicalDeviceConservativeRasterizationPropertiesEXT ConservativeRasterProps = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT };
+	VkPhysicalDevicePushDescriptorPropertiesKHR PushDescProps = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR };
 
 	VkSampleCountFlagBits MsaaQuality = VK_SAMPLE_COUNT_1_BIT;
 
@@ -67,10 +70,6 @@ struct vulkan_backend : public renderer_backend
 	VkRenderPass ImGuiRenderPass;
 
 	vulkan_command_queue* CommandQueue;
-	texture* NullTexture1D;
-	texture* NullTexture2D;
-	texture* NullTexture3D;
-	texture* NullTextureCube;
 
 	ImGuiContext* imguiContext = nullptr;
 };

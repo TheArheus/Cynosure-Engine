@@ -302,23 +302,10 @@ private:
 
 struct vulkan_resource_binder : public resource_binder
 {
-	vulkan_resource_binder(renderer_backend* GeneralBackend)
-	{
-		vulkan_backend* Backend = static_cast<vulkan_backend*>(GeneralBackend);
-		NullTexture1D = Backend->NullTexture1D;
-		NullTexture2D = Backend->NullTexture2D;
-		NullTexture3D = Backend->NullTexture3D;
-		NullTextureCube = Backend->NullTextureCube;
-	}
+	vulkan_resource_binder() = default;
 
-	vulkan_resource_binder(renderer_backend* GeneralBackend, general_context* ContextToUse)
+	vulkan_resource_binder(general_context* ContextToUse)
 	{
-		vulkan_backend* Backend = static_cast<vulkan_backend*>(GeneralBackend);
-		NullTexture1D = Backend->NullTexture1D;
-		NullTexture2D = Backend->NullTexture2D;
-		NullTexture3D = Backend->NullTexture3D;
-		NullTextureCube = Backend->NullTextureCube;
-
 		SetContext(ContextToUse);
 	}
 
@@ -366,18 +353,11 @@ struct vulkan_resource_binder : public resource_binder
 	void BindStaticStorage(renderer_backend* GeneralBackend) override;
 
 	// NOTE: If with counter, then it is using 2 bindings instead of 1
-	void SetStorageBufferView(resource* Buffer, u32 Set = 0) override;
-	void SetUniformBufferView(resource* Buffer, u32 Set = 0) override;
+	void SetBufferView(resource* Buffer, u32 Set = 0) override;
 
-	// TODO: Remove image layouts and move them inside texture structure
 	void SetSampledImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 	void SetStorageImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 	void SetImageSampler(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
-
-	texture* NullTexture1D = nullptr;
-	texture* NullTexture2D = nullptr;
-	texture* NullTexture3D = nullptr;
-	texture* NullTextureCube = nullptr;
 
 	std::map<u32, u32> SetIndices;
 	std::vector<VkWriteDescriptorSet> PushDescriptorBindings;

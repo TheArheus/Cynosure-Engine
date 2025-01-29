@@ -44,12 +44,16 @@ class engine
 	registry Registry;
 	asset_store AssetStore;
 
+	bool GraphVisualize;
+
 	resource_descriptor GuiVertexBuffer;
 	resource_descriptor GuiIndexBuffer;
 
 	std::unique_ptr<game_module> Module;
 
 	scene_info ModuleInfo = {};
+
+	void OnButtonDown(key_down_event& Event);
 
 	void LoadModule();
 	void UpdateModule();

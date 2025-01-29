@@ -235,9 +235,9 @@ private:
 class directx12_resource_binder : public resource_binder
 {
 public:
-	directx12_resource_binder(renderer_backend* GeneralBackend) {};
+	directx12_resource_binder() = default;
 
-	directx12_resource_binder(renderer_backend* GeneralBackend, general_context* ContextToUse)
+	directx12_resource_binder(general_context* ContextToUse)
 	{
 		SetContext(ContextToUse);
 	}
@@ -282,8 +282,7 @@ public:
 	void AppendStaticStorage(general_context* Context, const array<binding_packet>& Data, u32 Offset) override {};
 	void BindStaticStorage(renderer_backend* GeneralBackend) override {};
 
-	void SetStorageBufferView(resource* Buffer, u32 Set = 0) override;
-	void SetUniformBufferView(resource* Buffer, u32 Set = 0) override;
+	void SetBufferView(resource* Buffer, u32 Set = 0) override;
 
 	void SetSampledImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;
 	void SetStorageImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) override;

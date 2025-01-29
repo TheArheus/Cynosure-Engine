@@ -110,8 +110,10 @@ public:
 	RENDERER_API void AddComputePass(std::string Name, param_type Parameters, execute_func Exec);
 
 	RENDERER_API void Compile();
-	RENDERER_API void Execute();
+	RENDERER_API void ExecuteAsync();
 	RENDERER_API void SwapBuffers();
+
+	RENDERER_API void ExportGraphViz();
 
 	renderer_backend* Backend;
 
@@ -128,6 +130,9 @@ public:
 	general_context* CurrentContext = nullptr;
 	gpu_memory_heap* GpuMemoryHeap = nullptr;
 	std::vector<command_list*> ExecutionContexts;
+
+	std::vector<u32> InDegree;
+	std::vector<std::vector<u32>> Adjacency;
 
 	//////////////////////////////////////////////////////
 	u32 BackBufferIndex = 0;

@@ -602,17 +602,19 @@ struct gpu_texture_array
 };
 #pragma pack(pop)
 
-struct buffer;
+struct command_list;
 struct renderer_backend
 {
 	virtual ~renderer_backend() = default;
 	virtual void DestroyObject() = 0;
 	virtual void ImGuiNewFrame() = 0;
 	virtual void RecreateSwapchain(u32 NewWidth, u32 NewHeight) = 0;
+	virtual u32 GetCurrentBackBufferIndex(command_list* Cmd) = 0;
 
 	u32 Width;
 	u32 Height;
 	u32 ImageCount = 2;
+	u32 BackBufferIndex = 0;
 	backend_type Type;
 };
 
@@ -633,7 +635,6 @@ public:
 	std::map<u32, std::vector<descriptor_param>> ParameterLayout;
 };
 
-struct texture;
 struct resource;
 struct binding_packet
 {
@@ -644,6 +645,7 @@ struct binding_packet
 	bool IsNotBound = false;
 };
 
+struct buffer;
 struct buffer_barrier
 {
 	buffer* Buffer;
@@ -651,6 +653,7 @@ struct buffer_barrier
 	u32 Shader;
 };
 
+struct texture;
 struct texture_barrier
 {
 	texture* Texture;
@@ -740,9 +743,6 @@ struct command_list
 
 	std::unordered_set<buffer*>  BuffersToCommon;
 	std::unordered_set<texture*> TexturesToCommon;
-
-	std::vector<buffer_barrier> AttachmentBufferBarriers;
-	std::vector<texture_barrier> AttachmentImageBarriers;
 };
 
 struct resource_binder
@@ -760,8 +760,7 @@ struct resource_binder
 	virtual void AppendStaticStorage(general_context* Context, const array<binding_packet>& Data, u32 Offset) = 0;
 	virtual void BindStaticStorage(renderer_backend* GeneralBackend) = 0;
 
-	virtual void SetStorageBufferView(resource* Buffer, u32 Set = 0) = 0;
-	virtual void SetUniformBufferView(resource* Buffer, u32 Set = 0) = 0;
+	virtual void SetBufferView(resource* Buffer, u32 Set = 0) = 0;
 
 	// TODO: Remove image layouts and move them inside texture structure
 	virtual void SetSampledImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
