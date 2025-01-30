@@ -1,7 +1,6 @@
 
 #define USE_BOTTOM_OF_PIPE_BARRIERS 0
 
-// TODO: A better code
 void vulkan_resource_binder::
 AppendStaticStorage(general_context* ContextToUse, const array<binding_packet>& Data, u32 Offset)
 {
@@ -365,27 +364,16 @@ Update(buffer* BufferToUpdate, void* Data)
 {
 	if(!Data) return;
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToUpdate);
-	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
-
-    VkBufferMemoryBarrier TempBarrierBefore = {};
-    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.buffer = Buffer->Temp;
-    TempBarrierBefore.offset = 0;
-    TempBarrierBefore.size = Buffer->Size;
-
-    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
+	vulkan_buffer* Staging = static_cast<vulkan_buffer*>(BufferToUpdate->UpdateBuffer);
+	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}, {Staging, AF_TransferRead, PSF_Transfer}});
 
 	void* CpuPtr;
-	vkMapMemory(Device, Buffer->TempMemory, 0, Buffer->Size, 0, &CpuPtr);
+	vmaMapMemory(Gfx->AllocatorHandle, Staging->Allocation, &CpuPtr);
 	memcpy(CpuPtr, Data, Buffer->Size);
-	vkUnmapMemory(Device, Buffer->TempMemory);
+	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
 
 	VkBufferCopy Region = {0, 0, VkDeviceSize(Buffer->Size)};
-	vkCmdCopyBuffer(CommandList, Buffer->Temp, Buffer->Handle, 1, &Region);
+	vkCmdCopyBuffer(CommandList, Staging->Handle, Buffer->Handle, 1, &Region);
 }
 
 void vulkan_command_list::
@@ -393,31 +381,20 @@ UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 {
 	if(!Data) return;
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToUpdate);
+	vulkan_buffer* Staging = static_cast<vulkan_buffer*>(BufferToUpdate->UpdateBuffer);
 
 	if(UpdateByteSize == 0) return;
 	assert(UpdateByteSize <= Buffer->Size);
 
-	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}});
-
-    VkBufferMemoryBarrier TempBarrierBefore = {};
-    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.buffer = Buffer->Temp;
-    TempBarrierBefore.offset = 0;
-    TempBarrierBefore.size = Buffer->Size;
-
-    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
+	SetBufferBarriers({{BufferToUpdate, AF_TransferWrite, PSF_Transfer}, {Staging, AF_TransferRead, PSF_Transfer}});
 
 	void* CpuPtr;
-	vkMapMemory(Device, Buffer->TempMemory, 0, UpdateByteSize, 0, &CpuPtr);
+	vmaMapMemory(Gfx->AllocatorHandle, Staging->Allocation, &CpuPtr);
 	memcpy(CpuPtr, Data, UpdateByteSize);
-	vkUnmapMemory(Device, Buffer->TempMemory);
+	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
 
 	VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-	vkCmdCopyBuffer(CommandList, Buffer->Temp, Buffer->Handle, 1, &Region);
+	vkCmdCopyBuffer(CommandList, Staging->Handle, Buffer->Handle, 1, &Region);
 }
 
 void vulkan_command_list::
@@ -425,28 +402,17 @@ ReadBack(buffer* BufferToRead, void* Data)
 {
 	if(!Data) return;
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToRead);
+	vulkan_buffer* Staging = static_cast<vulkan_buffer*>(BufferToRead->UploadBuffer);
 
-	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
-
-    VkBufferMemoryBarrier TempBarrierBefore = {};
-    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.buffer = Buffer->Temp;
-    TempBarrierBefore.offset = 0;
-    TempBarrierBefore.size = Buffer->Size;
-
-    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
+	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferRead, PSF_Transfer}});
 
 	VkBufferCopy Region = {0, 0, VkDeviceSize(Buffer->Size)};
-	vkCmdCopyBuffer(CommandList, Buffer->Handle, Buffer->Temp, 1, &Region);
+	vkCmdCopyBuffer(CommandList, Buffer->Handle, Staging->Handle, 1, &Region);
 
 	void* CpuPtr;
-	vkMapMemory(Device, Buffer->TempMemory, 0, Buffer->Size, 0, &CpuPtr);
+	vmaMapMemory(Gfx->AllocatorHandle, Staging->Allocation, &CpuPtr);
 	memcpy(Data, CpuPtr, Buffer->Size);
-	vkUnmapMemory(Device, Buffer->TempMemory);
+	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
 }
 
 void vulkan_command_list::
@@ -454,31 +420,20 @@ ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 {
 	if(!Data) return;
 	vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(BufferToRead);
+	vulkan_buffer* Staging = static_cast<vulkan_buffer*>(BufferToRead->UploadBuffer);
 
 	if (UpdateByteSize == 0) return;
 	assert(UpdateByteSize <= Buffer->Size);
 
-	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}});
-
-    VkBufferMemoryBarrier TempBarrierBefore = {};
-    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.buffer = Buffer->Temp;
-    TempBarrierBefore.offset = 0;
-    TempBarrierBefore.size = Buffer->Size;
-
-    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
+	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferRead, PSF_Transfer}});
 
 	VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-	vkCmdCopyBuffer(CommandList, Buffer->Handle, Buffer->Temp, 1, &Region);
+	vkCmdCopyBuffer(CommandList, Buffer->Handle, Staging->Handle, 1, &Region);
 
 	void* CpuPtr;
-	vkMapMemory(Device, Buffer->TempMemory, 0, Buffer->Size, 0, &CpuPtr);
+	vmaMapMemory(Gfx->AllocatorHandle, Staging->Allocation, &CpuPtr);
 	memcpy(Data, CpuPtr, UpdateByteSize);
-	vkUnmapMemory(Device, Buffer->TempMemory);
+	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
 }
 
 void vulkan_command_list::
@@ -486,24 +441,14 @@ Update(texture* TextureToUpdate, void* Data)
 {
 	if(!Data) return;
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureToUpdate);
+	vulkan_buffer* Staging = static_cast<vulkan_buffer*>(TextureToUpdate->UpdateBuffer);
 	SetImageBarriers({{TextureToUpdate, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
-
-    VkBufferMemoryBarrier TempBarrierBefore = {};
-    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.buffer = Texture->Temp;
-    TempBarrierBefore.offset = 0;
-    TempBarrierBefore.size = Texture->Size;
-
-    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
+	SetBufferBarriers({{Staging, AF_TransferRead, PSF_Transfer}});
 
 	void* CpuPtr;
-	vkMapMemory(Device, Texture->TempMemory, 0, Texture->Size, 0, &CpuPtr);
+	vmaMapMemory(Gfx->AllocatorHandle, Staging->Allocation, &CpuPtr);
 	memcpy(CpuPtr, Data, Texture->Width * Texture->Height * Texture->Depth * GetPixelSize(Texture->Info.Format));
-	vkUnmapMemory(Device, Texture->TempMemory);
+	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
 
 	VkBufferImageCopy Region = {};
 	Region.bufferOffset = 0;
@@ -515,7 +460,7 @@ Update(texture* TextureToUpdate, void* Data)
 	Region.imageSubresource.layerCount = Texture->Info.Type != image_type::Texture3D ? Texture->Depth : 1;
 	Region.imageOffset = {0, 0, 0};
 	Region.imageExtent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
-	vkCmdCopyBufferToImage(CommandList, Texture->Temp, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
+	vkCmdCopyBufferToImage(CommandList, Staging->Handle, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
 }
 
 void vulkan_command_list::
@@ -523,19 +468,9 @@ ReadBack(texture* TextureToRead, void* Data)
 {
 	if(!Data) return;
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(TextureToRead);
+	vulkan_buffer* Staging = static_cast<vulkan_buffer*>(TextureToRead->UploadBuffer);
 	SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
-
-    VkBufferMemoryBarrier TempBarrierBefore = {};
-    TempBarrierBefore.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    TempBarrierBefore.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-    TempBarrierBefore.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    TempBarrierBefore.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    TempBarrierBefore.buffer = Texture->Temp;
-    TempBarrierBefore.offset = 0;
-    TempBarrierBefore.size = Texture->Size;
-
-    vkCmdPipelineBarrier(CommandList, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &TempBarrierBefore, 0, nullptr);
+	SetBufferBarriers({{Staging, AF_TransferWrite, PSF_Transfer}});
 
 	VkBufferImageCopy Region = {};
 	Region.bufferOffset = 0;
@@ -548,12 +483,12 @@ ReadBack(texture* TextureToRead, void* Data)
 	Region.imageOffset = {0, 0, 0};
 	Region.imageExtent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
 
-	vkCmdCopyImageToBuffer(CommandList, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Texture->Temp, 1, &Region);
+	vkCmdCopyImageToBuffer(CommandList, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Staging->Handle, 1, &Region);
 
 	void* CpuPtr;
-	vkMapMemory(Device, Texture->TempMemory, 0, Texture->Size, 0, &CpuPtr);
+	vmaMapMemory(Gfx->AllocatorHandle, Staging->Allocation, &CpuPtr);
 	memcpy(Data, CpuPtr, Texture->Width * Texture->Height * Texture->Depth * GetPixelSize(Texture->Info.Format));
-	vkUnmapMemory(Device, Texture->TempMemory);
+	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
 }
 
 void vulkan_command_list::
@@ -567,7 +502,6 @@ SetColorTarget(const std::vector<texture*>& ColorTargets, vec4 Clear)
 	for(u32 AttachmentIdx = 0; AttachmentIdx < ColorTargets.size(); ++AttachmentIdx)
 	{
 		vulkan_texture* Attachment = static_cast<vulkan_texture*>(ColorTargets[AttachmentIdx]);
-		TexturesToCommon.insert(ColorTargets[AttachmentIdx]);
 
 		LayerCount = Attachment->Info.Type != image_type::Texture3D ? Attachment->Depth : 1;
 		ColorInfo[AttachmentIdx].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
@@ -592,7 +526,6 @@ void vulkan_command_list::
 SetDepthTarget(texture* Target, vec2 Clear)
 {
 	assert(CurrContext->Type == pass_type::raster);
-	TexturesToCommon.insert(Target);
 
 	LayerCount = Target->Info.Type != image_type::Texture3D ? Target->Depth : 1;
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
@@ -620,7 +553,6 @@ SetStencilTarget(texture* Target, vec2 Clear)
 	assert(CurrContext->Type == pass_type::raster);
 
 	//AttachmentImageBarriers.push_back({Target, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, PSF_EarlyFragment});
-	TexturesToCommon.insert(Target);
 
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	vulkan_texture* Attachment = static_cast<vulkan_texture*>(Target);
@@ -673,52 +605,15 @@ BindShaderParameters(const array<binding_packet>& Data)
 		{
 			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
 			Binder.SetBufferView(BufferToBind);
-			BuffersToCommon.insert(BufferToBind);
 			ParamIdx += BufferToBind->WithCounter;
 		}
 		else if(Parameter.Type == resource_type::texture_sampler)
 		{
 			Binder.SetImageSampler(Parameter.Count, Data[Offset].Resources, Parameter.ImageType, Parameter.BarrierState, Data[Offset].SubresourceIndex);
-
-			for(resource* CurrentResource : Data[Offset].Resources)
-			{
-				texture* CurrentTexture = (texture*)CurrentResource;
-				TexturesToCommon.insert(CurrentTexture);
-			}
 		}
 		else if(Parameter.Type == resource_type::texture_storage)
 		{
 			Binder.SetStorageImage(Parameter.Count, Data[Offset].Resources, Parameter.ImageType, Parameter.BarrierState, Data[Offset].SubresourceIndex);
-
-			for(resource* CurrentResource : Data[Offset].Resources)
-			{
-				texture* CurrentTexture = (texture*)CurrentResource;
-				TexturesToCommon.insert(CurrentTexture);
-			}
-		}
-	}
-
-	for(u32 LayoutIdx = 1; LayoutIdx < CurrContext->ParameterLayout.size(); ++LayoutIdx)
-	{
-		for(u32 ParamIdx = 0; ParamIdx < CurrContext->ParameterLayout[LayoutIdx].size(); ++ParamIdx, ++Offset)
-		{
-			descriptor_param Parameter = CurrContext->ParameterLayout[LayoutIdx][ParamIdx];
-			if(Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform)
-			{
-				assert(false && "Buffer in static storage. Currently is not available, use buffers in the inputs");
-			}
-			else if(Parameter.Type == resource_type::texture_sampler)
-			{
-				for(resource* CurrentResource : Data[Offset].Resources)
-				{
-					texture* CurrentTexture = (texture*)CurrentResource;
-					TexturesToCommon.insert(CurrentTexture);
-				}
-			}
-			else if(Parameter.Type == resource_type::texture_storage)
-			{
-				assert(false && "Storage image in static storage. Check the shader bindings. Could be image sampler or buffer");
-			}
 		}
 	}
 
@@ -920,15 +815,13 @@ void vulkan_command_list::
 FillBuffer(buffer* Buffer, u32 Value)
 {
 	vulkan_buffer* VulkanBuffer = static_cast<vulkan_buffer*>(Buffer);
-
+	SetBufferBarriers({{Buffer, AF_TransferWrite, PSF_Transfer}});
 	vkCmdFillBuffer(CommandList, VulkanBuffer->Handle, 0, VulkanBuffer->Size, Value);
 }
 
 void vulkan_command_list::
 FillTexture(texture* Texture, vec4 Value)
 {
-	SetImageBarriers({{Texture, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
-
 	VkClearColorValue ClearColor = {};
 	ClearColor.float32[0] = Value.x;
 	ClearColor.float32[1] = Value.y;
@@ -942,6 +835,7 @@ FillTexture(texture* Texture, vec4 Value)
 	ClearRange.levelCount = VK_REMAINING_MIP_LEVELS;
 	ClearRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
+	SetImageBarriers({{Texture, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
 	vkCmdClearColorImage(CommandList, static_cast<vulkan_texture*>(Texture)->Handle, GetVKLayout(Texture->CurrentState[0]), &ClearColor, 1, &ClearRange);
 }
 
@@ -1004,6 +898,7 @@ SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 	for(const buffer_barrier& Data : BarrierData)
 	{
 		vulkan_buffer* Buffer = static_cast<vulkan_buffer*>(Data.Buffer);
+		BuffersToCommon.insert(Buffer);
 
 		u32 BufferPrevShader = Buffer->PrevShader;
 		    BufferPrevShader = BufferPrevShader & PSF_BottomOfPipe ? PSF_TopOfPipe : BufferPrevShader;
@@ -1029,7 +924,7 @@ SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 	}
 
 	if(Barriers.size())
-		vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), VK_DEPENDENCY_BY_REGION_BIT, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
+		vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 0, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
 }
 
 void vulkan_command_list::
@@ -1042,6 +937,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 	for(const texture_barrier& Data : BarrierData)
 	{
 		vulkan_texture* Texture = static_cast<vulkan_texture*>(Data.Texture);
+		TexturesToCommon.insert(Texture);
 
 		barrier_state ResourceStateNext = Data.State;
 
@@ -1118,7 +1014,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 
 	if(Barriers.size())
 		vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 
-							 VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 
+							 0, 0, 0, 0, 0, 
 							 (u32)Barriers.size(), Barriers.data());
 }
 
@@ -1254,12 +1150,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
 			{
 				BindingFlags[LayoutIdx].push_back(0);
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
-			}
-			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-			{
-				BindingFlags[LayoutIdx].push_back(0);
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_uniform, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, Writables[LayoutIdx][BindingIdx] ? u32(AF_ShaderWrite) : u32(AF_ShaderRead)});
 			}
 		}
 	}
@@ -1544,12 +1435,7 @@ vulkan_compute_context(renderer_backend* Backend, const std::string& Shader, con
 			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
 			{
 				BindingFlags[LayoutIdx].push_back(0);
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, AF_ShaderWrite});
-			}
-			else if(Parameter.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-			{
-				BindingFlags[LayoutIdx].push_back(0);
-				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_uniform, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::shader_read, AF_ShaderRead});
+				ParameterLayout[LayoutIdx].push_back({resource_type::buffer_storage, Parameter.descriptorCount, Writables[LayoutIdx][BindingIdx], image_type::unknown, GetVKShaderStageRev(Parameter.stageFlags), barrier_state::general, Writables[LayoutIdx][BindingIdx] ? u32(AF_ShaderWrite) : u32(AF_ShaderRead)});
 			}
 		}
 	}

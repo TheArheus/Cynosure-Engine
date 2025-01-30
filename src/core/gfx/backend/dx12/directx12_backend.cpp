@@ -279,7 +279,7 @@ dx12_descriptor_type GetDXSpvDescriptorType(const std::vector<op_info>& ShaderIn
 }
 
 
-// TODO: Implement a better shader compilation
+// TODO: Implement a better shader compilation(SIPMLIFY IT!)
 [[nodiscard]] D3D12_SHADER_BYTECODE directx12_backend::
 LoadShaderModule(const char* Path, shader_stage ShaderType, bool& HaveDrawID, std::map<u32, std::map<u32, descriptor_param>>& ParameterLayout, std::map<u32, std::map<u32, u32>>& NewBindings, std::map<u32, std::map<u32, std::map<u32, D3D12_ROOT_PARAMETER>>>& ShaderRootLayout, bool& HavePushConstant, u32& PushConstantSize, std::unordered_map<u32, u32>& DescriptorHeapSizes, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)
 {

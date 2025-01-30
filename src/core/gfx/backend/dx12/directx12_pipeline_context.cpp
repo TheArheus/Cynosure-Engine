@@ -1,5 +1,5 @@
 
-
+// TODO: Improve and optimize pipeline descriptor setup
 void directx12_resource_binder::
 SetBufferView(resource* Buffer, u32 Set)
 {
@@ -464,12 +464,6 @@ SetColorTarget(const std::vector<texture*>& ColorAttachments, vec4 Clear)
 
 	ColorClear = Clear;
 	ColorAttachmentsToBind = ColorAttachments;
-	for(u32 i = 0; i < ColorAttachments.size(); i++)
-	{
-		texture* ColorTarget = ColorAttachments[i];
-		directx12_texture* Attachment = static_cast<directx12_texture*>(ColorTarget);
-		TexturesToCommon.insert(Attachment);
-	}
 }
 
 void directx12_command_list::
@@ -477,9 +471,6 @@ SetDepthTarget(texture* DepthAttachment, vec2 Clear)
 {
 	assert(CurrContext->Type == pass_type::raster);
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
-
-	directx12_texture* Attachment = static_cast<directx12_texture*>(DepthAttachment);
-	TexturesToCommon.insert(Attachment);
 
 	DepthClear = Clear;
 	DepthStencilAttachmentToBind = DepthAttachment;
@@ -490,20 +481,6 @@ SetStencilTarget(texture* StencilAttachment, vec2 Clear)
 {
 	assert(CurrContext->Type == pass_type::raster);
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
-
-#if 0
-	directx12_texture* Attachment = static_cast<directx12_texture*>(StencilAttachment);
-	TexturesToCommon.insert(Attachment);
-
-	DepthStencilTarget = Attachment->DepthStencilViews[0];
-	if(Context->LoadOp == load_op::clear)
-	{
-		CommandList->ClearDepthStencilView(DepthStencilTarget, D3D12_CLEAR_FLAG_STENCIL, Clear.x, Clear.y, 0, nullptr);
-	}
-	std::fill(Texture->CurrentLayout.begin(), Texture->CurrentLayout.end(), AF_DepthStencilAttachmentWrite);
-	std::fill(Texture->CurrentState.begin(), Texture->CurrentState.end(), barrier_state::depth_stencil_attachment);
-	Texture->PrevShader = PSF_EarlyFragment;
-#endif
 };
 
 void directx12_command_list::
@@ -511,37 +488,6 @@ BindShaderParameters(const array<binding_packet>& Data)
 {
 	if(!Data.size()) return;
     directx12_resource_binder Binder(CurrContext);
-
-	u32 Offset = 0;
-    auto DX12BindImageSampler = [&](const binding_packet& Packet, const descriptor_param& Parameter, u32 LayoutIdx) 
-	{
-        Binder.SetImageSampler(Parameter.Count, Packet.Resources, Parameter.ImageType, Parameter.BarrierState, Packet.SubresourceIndex, LayoutIdx);
-
-        for (resource* CurrentResource : Packet.Resources) 
-		{
-			texture* CurrentTexture = (texture*)CurrentResource;
-            TexturesToCommon.insert(CurrentTexture);
-        }
-    };
-
-    auto DX12BindStorageTexture = [&](const binding_packet& Packet, const descriptor_param& Parameter, u32 LayoutIdx) 
-	{
-        Binder.SetStorageImage(Parameter.Count, Packet.Resources, Parameter.ImageType, Parameter.BarrierState, Packet.SubresourceIndex, LayoutIdx);
-
-        for (resource* CurrentResource : Packet.Resources) 
-		{
-			texture* CurrentTexture = (texture*)CurrentResource;
-            TexturesToCommon.insert(CurrentTexture);
-        }
-    };
-
-    auto DX12BindBuffer = [&](buffer* BufferToBind, const descriptor_param& Parameter) 
-	{
-        Binder.SetBufferView(BufferToBind);
-        BuffersToCommon.insert(BufferToBind);
-		BuffersToCommon.insert(BufferToBind->UpdateBuffer);
-		BuffersToCommon.insert(BufferToBind->UploadBuffer);
-    };
 
     auto DX12SetRootDescriptors = [&](auto* ContextToBind, auto SetDescriptorTable, auto SetShaderResourceView, auto SetUnorderedAccessView) 
 	{
@@ -573,6 +519,7 @@ BindShaderParameters(const array<binding_packet>& Data)
         }
     };
 
+	u32 Offset = 0;
     for (u32 ParamIdx = 0; ParamIdx < CurrContext->ParameterLayout[0].size(); ++ParamIdx, ++Offset) 
 	{
         const auto& Parameter = CurrContext->ParameterLayout[0][ParamIdx];
@@ -594,7 +541,7 @@ BindShaderParameters(const array<binding_packet>& Data)
 			}
 			else if (Parameter.Type == resource_type::texture_sampler) 
 			{
-				DX12BindImageSampler(Data[Offset], Parameter, LayoutIdx);
+				Binder.SetImageSampler(Parameter.Count, Data[Offset].Resources, Parameter.ImageType, Parameter.BarrierState, Data[Offset].SubresourceIndex, LayoutIdx);
 			}
 			else if(Parameter.Type == resource_type::texture_storage)
 			{
@@ -610,17 +557,17 @@ BindShaderParameters(const array<binding_packet>& Data)
         if (Parameter.Type == resource_type::buffer_storage || Parameter.Type == resource_type::buffer_uniform) 
 		{
 			buffer* BufferToBind = (buffer*)Data[Offset].Resource;
-            DX12BindBuffer(BufferToBind, Parameter);
+			Binder.SetBufferView(BufferToBind);
 
             ParamIdx += BufferToBind->WithCounter;
         } 
 		else if (Parameter.Type == resource_type::texture_sampler)
 		{
-            DX12BindImageSampler(Data[Offset], Parameter, 0);
+			Binder.SetImageSampler(Parameter.Count, Data[Offset].Resources, Parameter.ImageType, Parameter.BarrierState, Data[Offset].SubresourceIndex, 0);
         }
 		else if (Parameter.Type == resource_type::texture_storage)
 		{
-            DX12BindStorageTexture(Data[Offset], Parameter, 0);
+			Binder.SetStorageImage(Parameter.Count, Data[Offset].Resources, Parameter.ImageType, Parameter.BarrierState, Data[Offset].SubresourceIndex, 0);
         }
     }
 
@@ -787,6 +734,7 @@ SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 	for(const buffer_barrier& Data : BarrierData)
 	{
 		directx12_buffer* Buffer = static_cast<directx12_buffer*>(Data.Buffer);
+		BuffersToCommon.insert(Buffer);
 
 		u32 ResourceLayoutPrev = Buffer->CurrentLayout;
 		u32 ResourceLayoutNext = Data.Aspect;
@@ -827,6 +775,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 	for(const texture_barrier& Data : BarrierData)
 	{
 		directx12_texture* Texture = static_cast<directx12_texture*>(Data.Texture);
+		TexturesToCommon.insert(Texture);
 
 		u32 ResourceLayoutNext = Data.Aspect;
 		barrier_state ResourceStateNext = Data.State;

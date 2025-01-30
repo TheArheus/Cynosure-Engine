@@ -23,6 +23,9 @@
 
 #include "resource_manager.cpp"
 
+
+// TODO: Combine buffer and texture barriers
+
 // NOTE: I wish this creation was not that ugly
 global_graphics_context::
 #ifdef _WIN32
@@ -562,7 +565,6 @@ Compile()
 				if(Member->Type == meta_type::gpu_buffer)
 				{
 					gpu_buffer* Data = (gpu_buffer*)((uptr)ShaderParameters + Member->Offset);
-					assert(Data->ID != ~0ull);
 
 					auto& Lifetime = Lifetimes[Data->ID];
 					Lifetime.FirstUsagePassIndex = Min(Lifetime.FirstUsagePassIndex, PassIndex);

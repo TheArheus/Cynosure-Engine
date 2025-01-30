@@ -115,19 +115,16 @@ float GetShadowFactor(sampler2D ShadowSampler, vec2 ShadowUV, float FragZ)
 	float e_p = evsm.z;    // e^(+αz)
 	float e_n = evsm.w;    // e^(-αz)
 
-	// 1) Variance part
 	float Variance = max(z2 - z*z, 0.0001);
 	float d = (FragZ) - z;
 	float p_vsm = Variance / (Variance + d*d);
 
-	// 2) Exponential part
 	float FragEP = exp( 40 * FragZ);
 	float p_plus = clamp(FragEP / e_p, 0.0, 1.0);
 
 	float FragEN = exp(-40 * FragZ);
 	float p_minus = clamp(FragEN / e_n, 0.0, 1.0);
 
-	// 3) Combine
 	float Result = min(p_vsm, min(p_plus, p_minus));
 	return Result;
 }

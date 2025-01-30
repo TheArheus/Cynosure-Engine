@@ -603,7 +603,7 @@ bool GlslCompile(std::vector<u32>& SpirvOut, const std::string& Name, const std:
 	return false;
 }
 
-// TODO: Implement a better shader compilation
+// TODO: Implement a better shader compilation(SIMPLIFY IT!)
 // TODO: Maybe handle OpTypeRuntimeArray in the future if it will be possible
 VkShaderModule vulkan_backend::
 LoadShaderModule(const char* Path, shader_stage ShaderType, std::map<u32, std::map<u32, bool>>& IsWritable, std::map<u32, std::map<u32, image_type>>& TextureTypes, std::map<u32, std::map<u32, VkDescriptorSetLayoutBinding>>& ShaderRootLayout, std::map<VkDescriptorType, u32>& DescriptorTypeCounts, bool& HavePushConstant, u32& PushConstantSize, const std::vector<shader_define>& ShaderDefines, u32* LocalSizeX, u32* LocalSizeY, u32* LocalSizeZ)

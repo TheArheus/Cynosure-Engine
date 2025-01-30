@@ -52,9 +52,14 @@ struct vulkan_buffer : public buffer
     vulkan_buffer(const vulkan_buffer&) = delete;
     vulkan_buffer& operator=(const vulkan_buffer&) = delete;
 
-	vulkan_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 Flags)
+	vulkan_buffer(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewSize, u64 Count, u32 Flags, bool IsStagingCreated = false)
 	{
 		CreateResource(Backend, DebugName, NewSize, Count, Flags);
+		if(!IsStagingCreated)
+		{
+			UpdateBuffer = new vulkan_buffer(Gfx, Name + ".update_staging_buffer", nullptr, NewSize, Count, RF_CpuWrite, true);
+			UploadBuffer = new vulkan_buffer(Gfx, Name + ".upload_staging_buffer", nullptr, NewSize, Count, RF_CpuRead, true);
+		}
 		if(Data) Update(Backend, Data);
 	}
 
@@ -96,6 +101,7 @@ struct vulkan_buffer : public buffer
 
 	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) override
 	{
+		Name = DebugName;
 		Usage = Flags;
 		Gfx = static_cast<vulkan_backend*>(Backend);
 		WithCounter = Flags & RF_WithCounter;
@@ -124,46 +130,24 @@ struct vulkan_buffer : public buffer
 			CreateInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 		VmaAllocationCreateInfo AllocCreateInfo = {};
-		AllocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+		AllocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+		AllocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 		if(Flags & RF_CpuWrite)
-			AllocCreateInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+		{
+			AllocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		}
 		if(Flags & RF_CpuRead)
-			AllocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+		{
+			AllocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		}
 		VmaAllocationInfo AllocationInfo;
 		VK_CHECK(vmaCreateBuffer(Gfx->AllocatorHandle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
-		Memory = AllocationInfo.deviceMemory;
 
-		Name = DebugName;
 #ifdef CE_DEBUG
 		std::string TempName = (DebugName + ".buffer");
 		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 		DebugNameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
 		DebugNameInfo.objectHandle = (u64)Handle;
-		DebugNameInfo.pObjectName = TempName.c_str();
-		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
-#endif
-
-		CreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-		CreateInfo.size = Size;
-		vkCreateBuffer(Device, &CreateInfo, 0, &Temp);
-
-		VkMemoryRequirements Requirements;
-		vkGetBufferMemoryRequirements(Device, Temp, &Requirements);
-		u32 MemoryTypeIndex = SelectMemoryType(Gfx->MemoryProperties, Requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-		assert(MemoryTypeIndex != ~0u);
-
-		VkMemoryAllocateInfo AllocateInfo = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-		AllocateInfo.memoryTypeIndex = MemoryTypeIndex;
-		AllocateInfo.allocationSize = Requirements.size;
-		vkAllocateMemory(Device, &AllocateInfo, 0, &TempMemory);
-
-		vkBindBufferMemory(Device, Temp, TempMemory, 0);
-
-#ifdef CE_DEBUG
-		TempName += ".temp";
-		DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
-		DebugNameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
-		DebugNameInfo.objectHandle = (u64)Temp;
 		DebugNameInfo.pObjectName = TempName.c_str();
 		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
 #endif
@@ -177,32 +161,28 @@ struct vulkan_buffer : public buffer
 			{
 				vmaDestroyBuffer(Gfx->AllocatorHandle, Handle, Allocation);
 				Allocation = VK_NULL_HANDLE;
+				Handle = VK_NULL_HANDLE;
 			}
-			Handle = VK_NULL_HANDLE;
 		}
-		if(TempMemory)
+		if(UpdateBuffer)
 		{
-			vkFreeMemory(Device, TempMemory, nullptr);
-			TempMemory = 0;
+			delete UpdateBuffer;
+			UpdateBuffer = nullptr;
 		}
-		if(Temp != VK_NULL_HANDLE)
+		if(UploadBuffer)
 		{
-			vkDestroyBuffer(Device, Temp, nullptr);
-			Temp = VK_NULL_HANDLE;
+			delete UploadBuffer;
+			UploadBuffer = nullptr;
 		}
 
-		Memory = 0;
 		Gfx = nullptr;
 	}
 
 	VkBuffer Handle = VK_NULL_HANDLE;
-	VkDeviceMemory Memory = 0;
 	VmaAllocation Allocation = VK_NULL_HANDLE;
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
-	VkBuffer Temp = VK_NULL_HANDLE;
-	VkDeviceMemory TempMemory = VK_NULL_HANDLE;
 	vulkan_backend* Gfx = nullptr;
 };
 
@@ -218,7 +198,8 @@ struct vulkan_texture : public texture
 	vulkan_texture(renderer_backend* Backend, std::string DebugName, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData)
 	{
 		CreateResource(Backend, DebugName, NewWidth, NewHeight, DepthOrArraySize, InputData);
-		CreateStagingResource();
+		UpdateBuffer = new vulkan_buffer(Gfx, Name + ".update_staging_buffer", nullptr, Size, 1, RF_CpuWrite, true);
+		UploadBuffer = new vulkan_buffer(Gfx, Name + ".upload_staging_buffer", nullptr, Size, 1, RF_CpuRead, true);
 		if(Data) Update(Backend, Data);
 
 		VkSamplerReductionModeCreateInfoEXT ReductionMode = {VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT};
@@ -258,6 +239,7 @@ struct vulkan_texture : public texture
 
 	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
 	{
+		Name = DebugName;
 		Gfx = static_cast<vulkan_backend*>(Backend);
 
 		CurrentLayout.resize(InputData.MipLevels);
@@ -337,17 +319,16 @@ struct vulkan_texture : public texture
 		AllocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 		VmaAllocationInfo AllocationInfo;
 		VK_CHECK(vmaCreateImage(Gfx->AllocatorHandle, &CreateInfo, &AllocCreateInfo, &Handle, &Allocation, &AllocationInfo));
-		Memory = AllocationInfo.deviceMemory;
 		Size = AllocationInfo.size;
 
-		Name = DebugName;
-
+#ifdef CE_DEBUG
 		std::string TempName = (DebugName + ".texture");
 		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
 		DebugNameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
 		DebugNameInfo.objectHandle = (u64)Handle;
 		DebugNameInfo.pObjectName = TempName.c_str();
 		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
+#endif
 
 		VkImageViewCreateInfo ViewCreateInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
 		ViewCreateInfo.format = CreateInfo.format;
@@ -375,39 +356,14 @@ struct vulkan_texture : public texture
 			VK_CHECK(vkCreateImageView(Device, &ViewCreateInfo, 0, &Result));
 			Views.push_back(Result);
 
+#ifdef CE_DEBUG
 			std::string NewImageViewName = (Name + ".image_view #" + std::to_string(MipIdx));
 			DebugNameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
 			DebugNameInfo.objectHandle = (u64)Result;
 			DebugNameInfo.pObjectName = NewImageViewName.c_str();
 			vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
+#endif
 		}
-	}
-
-	void CreateStagingResource()
-	{
-		VkBufferCreateInfo TempCreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-		TempCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		TempCreateInfo.size = Size;
-		VK_CHECK(vkCreateBuffer(Device, &TempCreateInfo, 0, &Temp));
-
-		VkMemoryRequirements MemoryRequirements;
-		vkGetBufferMemoryRequirements(Device, Temp, &MemoryRequirements);
-
-		u32 MemoryTypeIndex = SelectMemoryType(MemoryProperties, MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-		assert(MemoryTypeIndex != ~0u);
-
-		VkMemoryAllocateInfo AllocateInfo = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-		AllocateInfo.memoryTypeIndex = MemoryTypeIndex;
-		AllocateInfo.allocationSize = Size;
-		vkAllocateMemory(Device, &AllocateInfo, 0, &TempMemory);
-		vkBindBufferMemory(Device, Temp, TempMemory, 0);
-
-		std::string TempName = (Name + ".buffer.temp");
-		VkDebugUtilsObjectNameInfoEXT DebugNameInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
-		DebugNameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
-		DebugNameInfo.objectHandle = (u64)Temp;
-		DebugNameInfo.pObjectName = TempName.c_str();
-		vkSetDebugUtilsObjectNameEXT(Device, &DebugNameInfo);
 	}
 
 	void DestroyResource() override
@@ -432,26 +388,24 @@ struct vulkan_texture : public texture
 		}
 
 		Gfx = nullptr;
-		Memory = 0;
 		Views.clear();
 	}
 
 	void DestroyStagingResource() override
 	{
-		if(TempMemory)
+		if(UpdateBuffer)
 		{
-			vkFreeMemory(Device, TempMemory, nullptr);
-			TempMemory = 0;
+			delete UpdateBuffer;
+			UpdateBuffer = nullptr;
 		}
-		if(Temp != VK_NULL_HANDLE)
+		if(UploadBuffer)
 		{
-			vkDestroyBuffer(Device, Temp, nullptr);
-			Temp = VK_NULL_HANDLE;
+			delete UploadBuffer;
+			UploadBuffer = nullptr;
 		}
 	}
 
 	VkImage Handle = VK_NULL_HANDLE;
-	VkDeviceMemory Memory = 0;
 	VkImageAspectFlags Aspect;
 	std::vector<VkImageView> Views;
 
@@ -460,8 +414,6 @@ struct vulkan_texture : public texture
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
-	VkBuffer Temp = VK_NULL_HANDLE;
-	VkDeviceMemory TempMemory = VK_NULL_HANDLE;
 	VkPhysicalDeviceMemoryProperties MemoryProperties;
 	vulkan_backend* Gfx = nullptr;
 };

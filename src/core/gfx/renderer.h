@@ -107,7 +107,7 @@ public:
 	template<typename context_type, typename param_type, typename raster_param_type>
 	RENDERER_API void AddRasterPass(std::string Name, u32 Width, u32 Height, param_type Parameters, raster_param_type RasterParameters, execute_func Exec, execute_func SetupExec = [](command_list* Cmd){});
 	template<typename context_type, typename param_type>
-	RENDERER_API void AddComputePass(std::string Name, param_type Parameters, execute_func Exec);
+	RENDERER_API void AddComputePass(std::string Name, param_type Parameters, execute_func Exec, execute_func SetupExec = [](command_list* Cmd){});
 
 	RENDERER_API void Compile();
 	RENDERER_API void ExecuteAsync();
@@ -177,7 +177,7 @@ AddRasterPass(std::string Name, u32 Width, u32 Height, param_type Parameters, ra
 
 template<typename context_type, typename param_type>
 void global_graphics_context::
-AddComputePass(std::string Name, param_type Parameters, execute_func Exec)
+AddComputePass(std::string Name, param_type Parameters, execute_func Exec, execute_func SetupExec)
 {
 	shader_pass* NewPass = PushStruct(shader_pass);
 	NewPass->Name = string(Name);
@@ -192,7 +192,7 @@ AddComputePass(std::string Name, param_type Parameters, execute_func Exec)
 
 	Passes.push_back(NewPass);
 	Dispatches[NewPass] = Exec;
-	SetupDispatches[NewPass] = [](command_list* Cmd){};
+	SetupDispatches[NewPass] = SetupExec;
 	PassToContext.emplace(NewPass, std::type_index(typeid(context_type)));
 
 	auto FindIt = ContextMap.find(std::type_index(typeid(context_type)));

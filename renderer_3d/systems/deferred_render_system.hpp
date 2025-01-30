@@ -464,11 +464,14 @@ struct deferred_raster_system : public entity_system
 
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
 			Gfx.AddComputePass<frustum_culling>("Frustum culling/indirect command generation", Parameters,
-			[Input, StaticMeshInstancesCount = StaticMeshInstances.size(), IndirectCommands = Gfx.GpuMemoryHeap->GetBuffer(IndirectDrawIndexedCommands)](command_list* Cmd)
+			[Input, StaticMeshInstancesCount = StaticMeshInstances.size()](command_list* Cmd)
 			{
-				Cmd->FillBuffer(IndirectCommands, 0);
 				Cmd->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
 				Cmd->Dispatch(StaticMeshInstancesCount);
+			},
+			[IndirectCommands = Gfx.GpuMemoryHeap->GetBuffer(IndirectDrawIndexedCommands)](command_list* Cmd)
+			{
+				Cmd->FillBuffer(IndirectCommands, 0);
 			});
 		}
 
@@ -483,11 +486,14 @@ struct deferred_raster_system : public entity_system
 
 			indirect_command_generation_input Input = {MeshCommonCullingInput.DrawCount, MeshCommonCullingInput.MeshCount};
 			Gfx.AddComputePass<generate_all>("Frustum culling/indirect command generation for shadow maps", Parameters,
-			[Input, StaticMeshInstancesCount = StaticMeshInstances.size(), IndirectCommands = Gfx.GpuMemoryHeap->GetBuffer(ShadowIndirectDrawIndexedCommands)](command_list* Cmd)
+			[Input, StaticMeshInstancesCount = StaticMeshInstances.size()](command_list* Cmd)
 			{
-				Cmd->FillBuffer(IndirectCommands, 0);
 				Cmd->SetConstant((void*)&Input, sizeof(indirect_command_generation_input));
 				Cmd->Dispatch(StaticMeshInstancesCount);
+			}, 
+			[IndirectCommands = Gfx.GpuMemoryHeap->GetBuffer(ShadowIndirectDrawIndexedCommands)](command_list* Cmd)
+			{
+				Cmd->FillBuffer(IndirectCommands, 0);
 			});
 		}
 
