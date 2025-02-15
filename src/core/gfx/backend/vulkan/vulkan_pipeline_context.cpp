@@ -181,82 +181,29 @@ SetImageSampler(u32 DescriptorCount, const array<resource*>& Textures, image_typ
 	SetIndices[Set] += 1;
 }
 
-
 void vulkan_command_list::
-CreateResource(renderer_backend* Backend)
+Reset()
 {
-	Gfx = static_cast<vulkan_backend*>(Backend);
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	Device = CommandQueue->Device;
-
-	VkSemaphoreCreateInfo SemaphoreCreateInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-	VK_CHECK(vkCreateSemaphore(Device, &SemaphoreCreateInfo, nullptr, &AcquireSemaphore));
-	VK_CHECK(vkCreateSemaphore(Device, &SemaphoreCreateInfo, nullptr, &ReleaseSemaphore));
-
-	VkFenceCreateInfo FenceCreateInfo = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-	FenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-	VK_CHECK(vkCreateFence(Device, &FenceCreateInfo, nullptr, &RenderFence));
-
-	CommandList = CommandQueue->AllocateCommandList();
-}
-
-void vulkan_command_list::
-DestroyObject()
-{
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	vkWaitForFences(Device, 1, &RenderFence, VK_TRUE, UINT64_MAX);
-	vkResetFences(Device, 1, &RenderFence);
-
-	if(AcquireSemaphore)
-	{
-		vkDestroySemaphore(Device, AcquireSemaphore, nullptr);
-		AcquireSemaphore = 0;
-	}
-	if(ReleaseSemaphore)
-	{
-		vkDestroySemaphore(Device, ReleaseSemaphore, nullptr);
-		ReleaseSemaphore = 0;
-	}
-	if(RenderFence)
-	{
-		vkDestroyFence(Device, RenderFence, nullptr);
-		RenderFence = 0;
-	}
-	if(CommandList)
-	{
-		CommandQueue->Remove(&CommandList);
-		CommandList = nullptr;
-	}
-}
-
-void vulkan_command_list::
-AcquireNextImage()
-{
-	vkWaitForFences(Device, 1, &RenderFence, VK_TRUE, UINT64_MAX);
-	vkResetFences(Device, 1, &RenderFence);
-	BackBufferIndex = Gfx->GetCurrentBackBufferIndex(this);
+	SwapChainWillBeUsed = false;
+	vkResetCommandBuffer(Handle, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
 }
 
 void vulkan_command_list::
 Begin()
 {
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	CommandQueue->Reset(&CommandList);
-}
+	VkCommandBufferBeginInfo CommandBufferBeginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+	CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; // VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+	vkBeginCommandBuffer(Handle, &CommandBufferBeginInfo);
 
-void vulkan_command_list::
-DeviceWaitIdle()
-{
-	vkDeviceWaitIdle(Device);
+	IsRunning = true;
 }
 
 void vulkan_command_list::
 PlaceEndOfFrameBarriers()
 {
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
 	std::vector<VkImageMemoryBarrier> ImageEndRenderBarriers = 
 	{
-		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], GetVKAccessMask(AF_TransferWrite, PSF_Transfer), 0, GetVKLayout(barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+		CreateImageBarrier(Gfx->SwapchainImages[Gfx->BackBufferIndex], GetVKAccessMask(AF_TransferWrite, PSF_Transfer), 0, GetVKLayout(barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
 	};
 
 	std::vector<buffer_barrier> AttachmentBufferBarriers;
@@ -286,7 +233,7 @@ PlaceEndOfFrameBarriers()
 #endif
 	}
 
-	ImageBarrier(CommandList, GetVKPipelineStage(PSF_Transfer), GetVKPipelineStage(PSF_BottomOfPipe), ImageEndRenderBarriers);
+	if(SwapChainWillBeUsed) ImageBarrier(Handle, GetVKPipelineStage(PSF_Transfer), GetVKPipelineStage(PSF_BottomOfPipe), ImageEndRenderBarriers);
 #if USE_BOTTOM_OF_PIPE_BARRIERS
 	SetImageBarriers(AttachmentImageBarriers);
 	SetBufferBarriers(AttachmentBufferBarriers);
@@ -298,56 +245,17 @@ PlaceEndOfFrameBarriers()
 }
 
 void vulkan_command_list::
-End()
-{
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	CommandQueue->Execute(&CommandList);
-
-	PrevContext = nullptr;
-	CurrContext = nullptr;
-}
-
-void vulkan_command_list::
-EndOneTime()
-{
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	CommandQueue->ExecuteAndRemove(&CommandList);
-
-	PrevContext = nullptr;
-	CurrContext = nullptr;
-}
-
-void vulkan_command_list::
-Present()
-{
-	vulkan_command_queue* CommandQueue = static_cast<vulkan_command_queue*>(Gfx->CommandQueue);
-	PlaceEndOfFrameBarriers();
-	CommandQueue->Execute(&CommandList, &ReleaseSemaphore, &AcquireSemaphore, &RenderFence);
-
-	VkPresentInfoKHR PresentInfo = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
-	PresentInfo.waitSemaphoreCount = 1;
-	PresentInfo.pWaitSemaphores = &ReleaseSemaphore;
-	PresentInfo.swapchainCount = 1;
-	PresentInfo.pSwapchains = &Gfx->Swapchain;
-	PresentInfo.pImageIndices = &BackBufferIndex;
-	vkQueuePresentKHR(CommandQueue->Handle, &PresentInfo);
-
-	PrevContext = nullptr;
-	CurrContext = nullptr;
-}
-
-
-void vulkan_command_list::
 EmplaceColorTarget(texture* RenderTexture)
 {
+	SwapChainWillBeUsed = true;
 	vulkan_texture* Texture = static_cast<vulkan_texture*>(RenderTexture);
 
 	std::vector<VkImageMemoryBarrier> ImageCopyBarriers = 
 	{
 		CreateImageBarrier(Texture->Handle, GetVKAccessMask(Texture->CurrentLayout[0], Texture->PrevShader), GetVKAccessMask(AF_TransferRead, PSF_Transfer), GetVKLayout(Texture->CurrentState[0]), GetVKLayout(barrier_state::transfer_src)),
-		CreateImageBarrier(Gfx->SwapchainImages[BackBufferIndex], 0, GetVKAccessMask(AF_TransferWrite, PSF_Transfer), GetVKLayout(barrier_state::undefined), GetVKLayout(barrier_state::transfer_dst)),
+		CreateImageBarrier(Gfx->SwapchainImages[Gfx->BackBufferIndex], 0, GetVKAccessMask(AF_TransferWrite, PSF_Transfer), GetVKLayout(barrier_state::undefined), GetVKLayout(barrier_state::transfer_dst)),
 	};
-	ImageBarrier(CommandList, GetVKPipelineStage(Texture->PrevShader), GetVKPipelineStage(PSF_Transfer), ImageCopyBarriers);
+	ImageBarrier(Handle, GetVKPipelineStage(Texture->PrevShader), GetVKPipelineStage(PSF_Transfer), ImageCopyBarriers);
 
 	VkImageCopy ImageCopyRegion = {};
 	ImageCopyRegion.srcSubresource.aspectMask = Texture->Aspect;
@@ -356,7 +264,9 @@ EmplaceColorTarget(texture* RenderTexture)
 	ImageCopyRegion.dstSubresource.layerCount = 1;
 	ImageCopyRegion.extent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
 
-	vkCmdCopyImage(CommandList, Texture->Handle, GetVKLayout(barrier_state::transfer_src), Gfx->SwapchainImages[BackBufferIndex], GetVKLayout(barrier_state::transfer_dst), 1, &ImageCopyRegion);
+	vkCmdCopyImage(Handle, Texture->Handle, GetVKLayout(barrier_state::transfer_src), Gfx->SwapchainImages[Gfx->BackBufferIndex], GetVKLayout(barrier_state::transfer_dst), 1, &ImageCopyRegion);
+
+	CurrentStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
 void vulkan_command_list::
@@ -373,7 +283,9 @@ Update(buffer* BufferToUpdate, void* Data)
 	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
 
 	VkBufferCopy Region = {0, 0, VkDeviceSize(Buffer->Size)};
-	vkCmdCopyBuffer(CommandList, Staging->Handle, Buffer->Handle, 1, &Region);
+	vkCmdCopyBuffer(Handle, Staging->Handle, Buffer->Handle, 1, &Region);
+
+	CurrentStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
 void vulkan_command_list::
@@ -394,7 +306,9 @@ UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
 
 	VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-	vkCmdCopyBuffer(CommandList, Staging->Handle, Buffer->Handle, 1, &Region);
+	vkCmdCopyBuffer(Handle, Staging->Handle, Buffer->Handle, 1, &Region);
+
+	CurrentStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
 void vulkan_command_list::
@@ -407,12 +321,14 @@ ReadBack(buffer* BufferToRead, void* Data)
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferRead, PSF_Transfer}});
 
 	VkBufferCopy Region = {0, 0, VkDeviceSize(Buffer->Size)};
-	vkCmdCopyBuffer(CommandList, Buffer->Handle, Staging->Handle, 1, &Region);
+	vkCmdCopyBuffer(Handle, Buffer->Handle, Staging->Handle, 1, &Region);
 
 	void* CpuPtr;
 	vmaMapMemory(Gfx->AllocatorHandle, Staging->Allocation, &CpuPtr);
 	memcpy(Data, CpuPtr, Buffer->Size);
 	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
+
+	CurrentStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
 void vulkan_command_list::
@@ -428,12 +344,14 @@ ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferRead, PSF_Transfer}});
 
 	VkBufferCopy Region = {0, 0, VkDeviceSize(UpdateByteSize)};
-	vkCmdCopyBuffer(CommandList, Buffer->Handle, Staging->Handle, 1, &Region);
+	vkCmdCopyBuffer(Handle, Buffer->Handle, Staging->Handle, 1, &Region);
 
 	void* CpuPtr;
 	vmaMapMemory(Gfx->AllocatorHandle, Staging->Allocation, &CpuPtr);
 	memcpy(Data, CpuPtr, UpdateByteSize);
 	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
+
+	CurrentStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
 void vulkan_command_list::
@@ -460,7 +378,9 @@ Update(texture* TextureToUpdate, void* Data)
 	Region.imageSubresource.layerCount = Texture->Info.Type != image_type::Texture3D ? Texture->Depth : 1;
 	Region.imageOffset = {0, 0, 0};
 	Region.imageExtent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
-	vkCmdCopyBufferToImage(CommandList, Staging->Handle, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
+	vkCmdCopyBufferToImage(Handle, Staging->Handle, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
+
+	CurrentStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
 void vulkan_command_list::
@@ -483,12 +403,14 @@ ReadBack(texture* TextureToRead, void* Data)
 	Region.imageOffset = {0, 0, 0};
 	Region.imageExtent = {u32(Texture->Width), u32(Texture->Height), u32(Texture->Depth)};
 
-	vkCmdCopyImageToBuffer(CommandList, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Staging->Handle, 1, &Region);
+	vkCmdCopyImageToBuffer(Handle, Texture->Handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Staging->Handle, 1, &Region);
 
 	void* CpuPtr;
 	vmaMapMemory(Gfx->AllocatorHandle, Staging->Allocation, &CpuPtr);
 	memcpy(Data, CpuPtr, Texture->Width * Texture->Height * Texture->Depth * GetPixelSize(Texture->Info.Format));
 	vmaUnmapMemory(Gfx->AllocatorHandle, Staging->Allocation);
+
+	CurrentStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
 void vulkan_command_list::
@@ -617,7 +539,7 @@ BindShaderParameters(const array<binding_packet>& Data)
 		}
 	}
 
-	vkCmdPushDescriptorSetKHR(CommandList, BindPoint, Layout, 0, Binder.PushDescriptorBindings.size(), Binder.PushDescriptorBindings.data());
+	vkCmdPushDescriptorSetKHR(Handle, BindPoint, Layout, 0, Binder.PushDescriptorBindings.size(), Binder.PushDescriptorBindings.data());
 }
 
 void vulkan_command_list::
@@ -651,11 +573,11 @@ BeginRendering(u32 RenderWidth, u32 RenderHeight)
 		Context->FrameBufferIdx++;
 
 		RenderPassInfo.framebuffer = FrameBuffer;
-		vkCmdBeginRenderPass(CommandList, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBeginRenderPass(Handle, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 	}
 	else
 	{
-		vkCmdBeginRenderingKHR(CommandList, &RenderingInfo);
+		vkCmdBeginRenderingKHR(Handle, &RenderingInfo);
 	}
 }
 
@@ -673,11 +595,11 @@ EndRendering()
 	{
 		if(!Gfx->Features13.dynamicRendering)
 		{
-			vkCmdEndRenderPass(CommandList);
+			vkCmdEndRenderPass(Handle);
 		}
 		else
 		{
-			vkCmdEndRenderingKHR(CommandList);
+			vkCmdEndRenderingKHR(Handle);
 		}
 	}
 
@@ -697,7 +619,9 @@ Draw(u32 FirstVertex, u32 VertexCount, u32 FirstInstance, u32 InstanceCount)
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	assert(CurrContext->Type == pass_type::raster);
 
-	vkCmdDraw(*PipelineContext->CommandList, VertexCount, InstanceCount, FirstVertex, FirstInstance);
+	vkCmdDraw(*PipelineContext->Handle, VertexCount, InstanceCount, FirstVertex, FirstInstance);
+
+	CurrentStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 }
 #endif
 
@@ -707,7 +631,9 @@ DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance,
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	assert(CurrContext->Type == pass_type::raster);
 
-	vkCmdDrawIndexed(CommandList, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
+	vkCmdDrawIndexed(Handle, IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
+
+	CurrentStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 }
 
 void vulkan_command_list::
@@ -719,9 +645,11 @@ DrawIndirect(u32 ObjectDrawCount, u32 CommandStructureSize)
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 	vulkan_buffer* IndirectCommandsAttachment = static_cast<vulkan_buffer*>(IndirectCommands);
 
-	vkCmdDrawIndexedIndirectCount(CommandList, IndirectCommandsAttachment->Handle, 4, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
+	vkCmdDrawIndexedIndirectCount(Handle, IndirectCommandsAttachment->Handle, 4, IndirectCommandsAttachment->Handle, IndirectCommandsAttachment->CounterOffset, ObjectDrawCount, CommandStructureSize);
 
 	IndirectCommands = nullptr;
+
+	CurrentStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 }
 
 void vulkan_command_list::
@@ -730,7 +658,9 @@ Dispatch(u32 X, u32 Y, u32 Z)
 	assert(CurrContext->Type == pass_type::compute);
 
 	vulkan_compute_context* Context = static_cast<vulkan_compute_context*>(CurrContext);
-	vkCmdDispatch(CommandList, (X + Context->BlockSizeX - 1) / Context->BlockSizeX, (Y + Context->BlockSizeY - 1) / Context->BlockSizeY, (Z + Context->BlockSizeZ - 1) / Context->BlockSizeZ);
+	vkCmdDispatch(Handle, (X + Context->BlockSizeX - 1) / Context->BlockSizeX, (Y + Context->BlockSizeY - 1) / Context->BlockSizeY, (Z + Context->BlockSizeZ - 1) / Context->BlockSizeZ);
+
+	CurrentStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 }
 
 bool vulkan_command_list::
@@ -741,7 +671,7 @@ SetGraphicsPipelineState(render_context* Context)
 
 	CurrContext = Context;
 	vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(Context);
-	vkCmdBindPipeline(CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, ContextToBind->Pipeline);
+	vkCmdBindPipeline(Handle, VK_PIPELINE_BIND_POINT_GRAPHICS, ContextToBind->Pipeline);
 
 	std::vector<VkDescriptorSet> SetsToBind;
 	for(const VkDescriptorSet& DescriptorSet : ContextToBind->Sets)
@@ -750,7 +680,7 @@ SetGraphicsPipelineState(render_context* Context)
 	}
 
 	if(SetsToBind.size())
-		vkCmdBindDescriptorSets(CommandList, VK_PIPELINE_BIND_POINT_GRAPHICS, ContextToBind->RootSignatureHandle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
+		vkCmdBindDescriptorSets(Handle, VK_PIPELINE_BIND_POINT_GRAPHICS, ContextToBind->RootSignatureHandle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
 
 	return true;
 }
@@ -763,7 +693,7 @@ SetComputePipelineState(compute_context* Context)
 
 	CurrContext = Context;
 	vulkan_compute_context* ContextToBind = static_cast<vulkan_compute_context*>(Context);
-	vkCmdBindPipeline(CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, ContextToBind->Pipeline);
+	vkCmdBindPipeline(Handle, VK_PIPELINE_BIND_POINT_COMPUTE, ContextToBind->Pipeline);
 
 	std::vector<VkDescriptorSet> SetsToBind;
 	for(const VkDescriptorSet& DescriptorSet : ContextToBind->Sets)
@@ -772,7 +702,7 @@ SetComputePipelineState(compute_context* Context)
 	}
 
 	if(SetsToBind.size())
-		vkCmdBindDescriptorSets(CommandList, VK_PIPELINE_BIND_POINT_COMPUTE, ContextToBind->RootSignatureHandle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
+		vkCmdBindDescriptorSets(Handle, VK_PIPELINE_BIND_POINT_COMPUTE, ContextToBind->RootSignatureHandle, 1, SetsToBind.size(), SetsToBind.data(), 0, nullptr);
 
 	return true;
 }
@@ -783,12 +713,12 @@ SetConstant(void* Data, size_t Size)
 	if(CurrContext->Type == pass_type::raster)
 	{
 		vulkan_render_context* ContextToBind = static_cast<vulkan_render_context*>(CurrContext);
-		vkCmdPushConstants(CommandList, ContextToBind->RootSignatureHandle, ContextToBind->ConstantRange.stageFlags, 0, Size, Data);
+		vkCmdPushConstants(Handle, ContextToBind->RootSignatureHandle, ContextToBind->ConstantRange.stageFlags, 0, Size, Data);
 	}
 	else if(CurrContext->Type == pass_type::compute)
 	{
 		vulkan_compute_context* ContextToBind = static_cast<vulkan_compute_context*>(CurrContext);
-		vkCmdPushConstants(CommandList, ContextToBind->RootSignatureHandle, ContextToBind->ConstantRange.stageFlags, 0, Size, Data);
+		vkCmdPushConstants(Handle, ContextToBind->RootSignatureHandle, ContextToBind->ConstantRange.stageFlags, 0, Size, Data);
 	}
 }
 
@@ -798,17 +728,17 @@ SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight)
 	vulkan_render_context* Context = static_cast<vulkan_render_context*>(CurrContext);
 
 	VkViewport Viewport = {(float)StartX, (float)(GfxHeight - StartY), (float)RenderWidth, -(float)RenderHeight, 0, 1};
-	vkCmdSetViewport(CommandList, 0, 1, &Viewport);
+	vkCmdSetViewport(Handle, 0, 1, &Viewport);
 
 	VkRect2D Scissor = {{(s32)StartX, (s32)(GfxHeight - (RenderHeight + StartY))}, {RenderWidth, RenderHeight}};
-	vkCmdSetScissor(CommandList, 0, 1, &Scissor);
+	vkCmdSetScissor(Handle, 0, 1, &Scissor);
 }
 
 void vulkan_command_list::
 SetIndexBuffer(buffer* Buffer)
 {
 	vulkan_buffer* IndexAttachment = static_cast<vulkan_buffer*>(Buffer);
-	vkCmdBindIndexBuffer(CommandList, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(Handle, IndexAttachment->Handle, 0, VK_INDEX_TYPE_UINT32);
 }
 
 void vulkan_command_list::
@@ -816,7 +746,7 @@ FillBuffer(buffer* Buffer, u32 Value)
 {
 	vulkan_buffer* VulkanBuffer = static_cast<vulkan_buffer*>(Buffer);
 	SetBufferBarriers({{Buffer, AF_TransferWrite, PSF_Transfer}});
-	vkCmdFillBuffer(CommandList, VulkanBuffer->Handle, 0, VulkanBuffer->Size, Value);
+	vkCmdFillBuffer(Handle, VulkanBuffer->Handle, 0, VulkanBuffer->Size, Value);
 }
 
 void vulkan_command_list::
@@ -836,7 +766,7 @@ FillTexture(texture* Texture, vec4 Value)
 	ClearRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
 	SetImageBarriers({{Texture, AF_TransferWrite, barrier_state::transfer_dst, SUBRESOURCES_ALL, PSF_Transfer}});
-	vkCmdClearColorImage(CommandList, static_cast<vulkan_texture*>(Texture)->Handle, GetVKLayout(Texture->CurrentState[0]), &ClearColor, 1, &ClearRange);
+	vkCmdClearColorImage(Handle, static_cast<vulkan_texture*>(Texture)->Handle, GetVKLayout(Texture->CurrentState[0]), &ClearColor, 1, &ClearRange);
 }
 
 void vulkan_command_list::
@@ -855,7 +785,7 @@ FillTexture(texture* Texture, float Depth, u32 Stencil)
 	ClearRange.levelCount = VK_REMAINING_MIP_LEVELS;
 	ClearRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
-	vkCmdClearDepthStencilImage(CommandList, static_cast<vulkan_texture*>(Texture)->Handle, GetVKLayout(Texture->CurrentState[0]), &ClearDepthStencil, 1, &ClearRange);
+	vkCmdClearDepthStencilImage(Handle, static_cast<vulkan_texture*>(Texture)->Handle, GetVKLayout(Texture->CurrentState[0]), &ClearDepthStencil, 1, &ClearRange);
 }
 
 void vulkan_command_list::
@@ -874,7 +804,7 @@ CopyImage(texture* Dst, texture* Src)
 	ImageCopyRegion.dstSubresource.layerCount = 1;
 	ImageCopyRegion.extent = {(u32)Src->Width, (u32)Src->Height, 1};
 
-	vkCmdCopyImage(CommandList, SrcTexture->Handle, GetVKLayout(barrier_state::transfer_src), DstTexture->Handle, GetVKLayout(barrier_state::transfer_dst), 1, &ImageCopyRegion);
+	vkCmdCopyImage(Handle, SrcTexture->Handle, GetVKLayout(barrier_state::transfer_src), DstTexture->Handle, GetVKLayout(barrier_state::transfer_dst), 1, &ImageCopyRegion);
 }
 
 void vulkan_command_list::
@@ -885,7 +815,7 @@ SetMemoryBarrier(u32 SrcAccess, u32 DstAccess,
 	Barrier.srcAccessMask = GetVKAccessMask(SrcAccess, SrcStageMask);
 	Barrier.dstAccessMask = GetVKAccessMask(DstAccess, DstStageMask);
 
-	vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), VK_DEPENDENCY_BY_REGION_BIT, 1, &Barrier, 0, 0, 0, 0);
+	vkCmdPipelineBarrier(Handle, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), VK_DEPENDENCY_BY_REGION_BIT, 1, &Barrier, 0, 0, 0, 0);
 }
 
 void vulkan_command_list::
@@ -924,7 +854,7 @@ SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 	}
 
 	if(Barriers.size())
-		vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 0, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
+		vkCmdPipelineBarrier(Handle, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 0, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
 }
 
 void vulkan_command_list::
@@ -1013,7 +943,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 	}
 
 	if(Barriers.size())
-		vkCmdPipelineBarrier(CommandList, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 
+		vkCmdPipelineBarrier(Handle, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 
 							 0, 0, 0, 0, 0, 
 							 (u32)Barriers.size(), Barriers.data());
 }
@@ -1041,16 +971,16 @@ DebugGuiBegin(texture* RenderTarget)
 	//Clr->PrevShader = PSF_ColorAttachment;
 
 	if(Gfx->Features13.dynamicRendering)
-		vkCmdBeginRenderingKHR(CommandList, &RenderingInfoGui);
+		vkCmdBeginRenderingKHR(Handle, &RenderingInfoGui);
 }
 
 void vulkan_command_list::
 DebugGuiEnd()
 {
-	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), CommandList);
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), Handle);
 
 	if(Gfx->Features13.dynamicRendering)
-		vkCmdEndRenderingKHR(CommandList);
+		vkCmdEndRenderingKHR(Handle);
 }
 
 vulkan_render_context::
@@ -1285,12 +1215,14 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	if(InputData.UseDepth)
 		AttachmentDescriptions.push_back(DepthAttachDesc);
 
+#if 0
 	VkRenderPassMultiviewCreateInfo MultiviewCreateInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO};
 	MultiviewCreateInfo.subpassCount         = 1;
 	MultiviewCreateInfo.dependencyCount      = Dependencies.size();
 	MultiviewCreateInfo.pViewMasks           = &InputData.ViewMask;
 	MultiviewCreateInfo.correlationMaskCount = 0;
 	MultiviewCreateInfo.pCorrelationMasks    = nullptr;
+#endif
 
 	Subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	Subpass.colorAttachmentCount    = InputData.UseColor ? AttachmentReferences.size() : 0;
@@ -1298,7 +1230,7 @@ vulkan_render_context(renderer_backend* Backend, load_op NewLoadOp, store_op New
 	Subpass.pDepthStencilAttachment = InputData.UseDepth ? &DepthAttachRef : nullptr;
 
 	VkRenderPassCreateInfo RenderPassCreateInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-	RenderPassCreateInfo.pNext           = InputData.UseMultiview ? &MultiviewCreateInfo : nullptr;
+	//RenderPassCreateInfo.pNext           = InputData.UseMultiview ? &MultiviewCreateInfo : nullptr;
 	RenderPassCreateInfo.attachmentCount = AttachmentDescriptions.size();
 	RenderPassCreateInfo.pAttachments    = AttachmentDescriptions.data();
 	RenderPassCreateInfo.subpassCount    = 1;

@@ -4,8 +4,8 @@
 void engine::
 Init(const std::vector<std::string>& args)
 {
-	Window.InitVulkanGraphics();
-	//Window.InitDirectx12Graphics();
+	//Window.InitVulkanGraphics();
+	Window.InitDirectx12Graphics();
 
 	CreateGuiContext(&Window);
 

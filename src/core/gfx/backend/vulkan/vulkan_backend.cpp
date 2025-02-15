@@ -136,7 +136,6 @@ vulkan_backend(GLFWwindow* Handle)
 	vkEnumeratePhysicalDevices(Instance, &PhysicalDeviceCount, PhysicalDevices.data());
 
 	PhysicalDevice = PickPhysicalDevice(PhysicalDevices);
-	FamilyIndex = GetGraphicsQueueFamilyIndex(PhysicalDevice);
 
 	u32 QueueFamilyPropertiesCount = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &QueueFamilyPropertiesCount, nullptr);
@@ -146,12 +145,26 @@ vulkan_backend(GLFWwindow* Handle)
 	u32 PrimaryQueueIdx = 0;
 	u32 SecondaryQueueIdx = 0;
 	u32 TransferQueueIdx = 0;
+
+	std::vector<u32> FamilyIndices;
 	for(u32 Idx = 0; Idx < QueueFamilyProperties.size(); ++Idx)
 	{
 		VkQueueFamilyProperties Property = QueueFamilyProperties[Idx];
-		if((Property.queueFlags & (VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) PrimaryQueueIdx = Idx;
-		if((Property.queueFlags & (VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) SecondaryQueueIdx = Idx;
-		if((Property.queueFlags & (VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_TRANSFER_BIT)) TransferQueueIdx = Idx;
+		if((Property.queueFlags & (VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT))
+		{ 
+			FamilyIndices.push_back(Idx); 
+			PrimaryQueueIdx = Idx;
+		}
+		if((Property.queueFlags & (VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT))
+		{
+			if(Idx != PrimaryQueueIdx) FamilyIndices.push_back(Idx);
+			SecondaryQueueIdx = Idx;
+		}
+		if((Property.queueFlags & (VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_TRANSFER_BIT))
+		{
+			if(Idx != SecondaryQueueIdx && Idx != PrimaryQueueIdx) FamilyIndices.push_back(Idx);
+			TransferQueueIdx = Idx;
+		}
 	}
 
 	vkGetPhysicalDeviceMemoryProperties(PhysicalDevice, &MemoryProperties);
@@ -187,6 +200,7 @@ vulkan_backend(GLFWwindow* Handle)
 		"VK_EXT_descriptor_indexing",
 		"VK_EXT_shader_atomic_float",
 		"VK_EXT_conservative_rasterization",
+		"VK_KHR_timeline_semaphore",
 	};
 
 	u32 DeviceExtensionsCount = 0;
@@ -299,8 +313,8 @@ vulkan_backend(GLFWwindow* Handle)
 	SwapchainCreateInfo.imageExtent.height = Height;
 	SwapchainCreateInfo.imageArrayLayers = 1;
 	SwapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-	SwapchainCreateInfo.queueFamilyIndexCount = 1;
-	SwapchainCreateInfo.pQueueFamilyIndices = &FamilyIndex;
+	SwapchainCreateInfo.queueFamilyIndexCount = FamilyIndices.size();
+	SwapchainCreateInfo.pQueueFamilyIndices = FamilyIndices.data();
 	SwapchainCreateInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 	SwapchainCreateInfo.compositeAlpha = CompositeAlpha;
 	SwapchainCreateInfo.presentMode = VK_PRESENT_MODE_MAILBOX_KHR; //VK_PRESENT_MODE_FIFO_KHR;
@@ -311,7 +325,11 @@ vulkan_backend(GLFWwindow* Handle)
 	SwapchainImages.resize(SwapchainImageCount);
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, SwapchainImages.data());
 
-	CommandQueue = new vulkan_command_queue(Device, FamilyIndex);
+	PrimaryQueue = new vulkan_command_queue(this, PrimaryQueueIdx);
+	for(u32 QueueIdx = 0; QueueIdx < QueueFamilyProperties[SecondaryQueueIdx].queueCount; ++QueueIdx)
+	{
+		SecondaryQueues.push_back(new vulkan_command_queue(this, SecondaryQueueIdx, QueueIdx));
+	}
 
 	{
 		VmaVulkanFunctions VulkanFunctions = {};
@@ -360,8 +378,8 @@ vulkan_backend(GLFWwindow* Handle)
 	InitInfo.PhysicalDevice = PhysicalDevice;
 	InitInfo.Device = Device;
 	InitInfo.DescriptorPool = ImGuiPool;
-	InitInfo.QueueFamily = FamilyIndex;
-	InitInfo.Queue = CommandQueue->Handle;
+	InitInfo.QueueFamily = PrimaryQueueIdx;
+	InitInfo.Queue = static_cast<vulkan_command_queue*>(PrimaryQueue)->Handle;
 	InitInfo.MinImageCount = ImageCount;
 	InitInfo.ImageCount = SwapchainImages.size();
 	InitInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT; //MsaaQuality;
@@ -455,7 +473,10 @@ DestroyObject()
 
 	vmaDestroyAllocator(AllocatorHandle);
 
-	delete CommandQueue;
+	for(command_queue* Queue : SecondaryQueues) delete Queue;
+	SecondaryQueues.clear();
+
+	delete PrimaryQueue;
 
 	for (VkImageView ImageView : SwapchainImageViews)
 	{
@@ -472,12 +493,29 @@ DestroyObject()
 	vkDestroyInstance(Instance, nullptr);
 }
 
-u32 vulkan_backend::
-GetCurrentBackBufferIndex(command_list* Cmd)
+void vulkan_backend::
+GetCurrentBackBufferIndex()
 {
-	vulkan_command_list* VkCmd = static_cast<vulkan_command_list*>(Cmd);
-	vkAcquireNextImageKHR(Device, Swapchain, ~0ull, VkCmd->AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
-	return BackBufferIndex;
+	vkAcquireNextImageKHR(Device, Swapchain, ~0ull, static_cast<vulkan_command_queue*>(PrimaryQueue)->AcquireSemaphore, VK_NULL_HANDLE, &BackBufferIndex);
+}
+
+void vulkan_backend::
+Wait(const std::vector<gpu_sync*>& Syncs)
+{
+	std::vector<u64> Values;
+	std::vector<VkSemaphore> Semaphores;
+	for(gpu_sync* Sync : Syncs)
+	{
+		Values.push_back(Sync->CurrentWaitValue);
+		Semaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+	}
+
+	VkSemaphoreWaitInfo WaitInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
+	//WaitInfo.flags = VK_SEMAPHORE_WAIT_ANY_BIT;
+	WaitInfo.semaphoreCount = Semaphores.size();
+	WaitInfo.pSemaphores = Semaphores.data();
+	WaitInfo.pValues = Values.data();
+	VK_CHECK(vkWaitSemaphoresKHR(Device, &WaitInfo, UINT64_MAX));
 }
 
 void vulkan_backend::

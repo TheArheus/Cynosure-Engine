@@ -76,10 +76,9 @@ class global_graphics_context
 	using execute_func = std::function<void(command_list*)>;
 
 	resource_binder* CreateResourceBinder();
-	command_list* CreateGlobalPipelineContext();
 
 	render_context* CreateRenderContext(load_op LoadOp, store_op StoreOp, std::vector<std::string> ShaderList, const std::vector<image_format>& ColorTargets, 
-										const utils::render_context::input_data& InputData = {cull_mode::back, blend_factor::src_alpha, blend_factor::one_minus_src_alpha, topology::triangle_list, front_face::counter_clock_wise, true, true, true, false, false, 0}, const std::vector<shader_define>& ShaderDefines = {});
+										const utils::render_context::input_data& InputData = {cull_mode::back, blend_factor::src_alpha, blend_factor::one_minus_src_alpha, topology::triangle_list, front_face::counter_clock_wise, true, true, true, false}, const std::vector<shader_define>& ShaderDefines = {});
 	compute_context* CreateComputeContext(const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
 
 public:
@@ -100,6 +99,8 @@ public:
 	RENDERER_API global_graphics_context& operator=(global_graphics_context&& Oth) noexcept;
 
 	RENDERER_API void DestroyObject();
+
+	RENDERER_API gpu_sync* CreateGpuSync(renderer_backend* BackendToUse);
 
 	RENDERER_API general_context* GetOrCreateContext(shader_pass* Pass);
 	RENDERER_API bool SetContext(shader_pass* Pass, command_list* Context);
@@ -124,17 +125,20 @@ public:
 	std::unordered_map<shader_pass*, execute_func> SetupDispatches;
 	std::unordered_map<shader_pass*, std::type_index> PassToContext;
 
+	std::vector<gpu_sync*> GpuSyncs;
 	std::vector<shader_pass*> Passes;
 
 	resource_binder* Binder = nullptr;
 	general_context* CurrentContext = nullptr;
 	gpu_memory_heap* GpuMemoryHeap = nullptr;
 	std::vector<command_list*> ExecutionContexts;
+	std::vector<command_list*> SecondaryExecutionContexts;
 
 	std::vector<u32> InDegree;
 	std::vector<std::vector<u32>> Adjacency;
 
 	//////////////////////////////////////////////////////
+
 	u32 BackBufferIndex = 0;
 
 	resource_descriptor QuadVertexBuffer;

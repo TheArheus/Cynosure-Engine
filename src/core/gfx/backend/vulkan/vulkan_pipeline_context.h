@@ -19,28 +19,12 @@ union descriptor_info
 struct vulkan_command_list : public command_list
 {
 	vulkan_command_list() = default;
+	~vulkan_command_list() override = default;
 
-	vulkan_command_list(renderer_backend* Backend)
-	{
-		CreateResource(Backend);
-	}
-
-	~vulkan_command_list() override { DestroyObject(); };
-	
-	void DestroyObject() override;
-
-	void CreateResource(renderer_backend* Backend) override;
-
-	void AcquireNextImage() override;
-
+	void Reset() override;
 	void Begin() override;
 
-	void End() override;
-
-	void DeviceWaitIdle() override;
-	void PlaceEndOfFrameBarriers();
-
-	void EndOneTime() override;
+	void PlaceEndOfFrameBarriers() override;
 
 	void Update(buffer* BufferToUpdate, void* Data) override;
 	void UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize) override;
@@ -59,8 +43,6 @@ struct vulkan_command_list : public command_list
 	void SetIndexBuffer(buffer* Buffer) override;
 
 	void EmplaceColorTarget(texture* RenderTexture) override;
-
-	void Present() override;
 
 	void SetColorTarget(const std::vector<texture*>& Targets, vec4 Clear = {0, 0, 0, 1}) override;
 	void SetDepthTarget(texture* Target, vec2 Clear = {1, 0}) override;
@@ -95,11 +77,10 @@ struct vulkan_command_list : public command_list
 
 	VkDevice Device;
 	u32 LayerCount = 1;
+	bool SwapChainWillBeUsed = false;
 
-	VkPipelineStageFlags CurrentStage;
-	VkCommandBuffer CommandList;
-	VkSemaphore AcquireSemaphore, ReleaseSemaphore;
-	VkFence AcquireFence, RenderFence;
+	VkPipelineStageFlags CurrentStage = 0;
+	VkCommandBuffer Handle;
 
 	vulkan_backend* Gfx = nullptr;
 

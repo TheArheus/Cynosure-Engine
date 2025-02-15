@@ -193,7 +193,6 @@ namespace utils
 {
 	namespace render_context
 	{
-		// TODO: Make better abstraction
 		struct input_data
 		{
 			cull_mode CullMode;
@@ -204,9 +203,7 @@ namespace utils
 			bool UseColor;
 			bool UseDepth;
 			bool UseBlend;
-			bool UseMultiview;
 			bool UseConservativeRaster;
-			u32  ViewMask;
 		};
 	};
 
@@ -602,6 +599,21 @@ struct gpu_texture_array
 };
 #pragma pack(pop)
 
+
+class command_queue;
+struct gpu_sync
+{
+	virtual ~gpu_sync() = default;
+
+	virtual void CreateObject() = 0;
+	virtual void DestroyObject() = 0;
+
+	virtual void Signal(command_queue*) = 0;
+	virtual void Reset() = 0;
+
+	u64 CurrentWaitValue = 0;
+};
+
 struct command_list;
 struct renderer_backend
 {
@@ -609,11 +621,16 @@ struct renderer_backend
 	virtual void DestroyObject() = 0;
 	virtual void ImGuiNewFrame() = 0;
 	virtual void RecreateSwapchain(u32 NewWidth, u32 NewHeight) = 0;
-	virtual u32 GetCurrentBackBufferIndex(command_list* Cmd) = 0;
+	virtual void GetCurrentBackBufferIndex() = 0;
+	virtual void Wait(const std::vector<gpu_sync*>& Syncs) = 0;
+
+	command_queue* PrimaryQueue = nullptr;
+	std::vector<command_queue*> SecondaryQueues;
+	//std::vector<command_queue*> TransferQueues;
 
 	u32 Width;
 	u32 Height;
-	u32 ImageCount = 2;
+	u32 ImageCount = 3;
 	u32 BackBufferIndex = 0;
 	backend_type Type;
 };
@@ -670,20 +687,11 @@ struct command_list
 	command_list() = default;
 
 	virtual ~command_list() = default;
-	
-	virtual void DestroyObject() = 0;
 
-	virtual void CreateResource(renderer_backend* Backend) = 0;
+	virtual void PlaceEndOfFrameBarriers() = 0;
 
-	virtual void AcquireNextImage() = 0;
-
+	virtual void Reset() = 0;
 	virtual void Begin() = 0;
-
-	virtual void End() = 0;
-
-	virtual void DeviceWaitIdle() = 0;
-
-	virtual void EndOneTime() = 0;
 
 	virtual void Update(buffer* BufferToUpdate, void* Data) = 0;
 	virtual void UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize) = 0;
@@ -702,8 +710,6 @@ struct command_list
 	virtual void SetIndexBuffer(buffer* Buffer) = 0;
 
 	virtual void EmplaceColorTarget(texture* RenderTexture) = 0;
-
-	virtual void Present() = 0;
 
 	virtual void SetColorTarget(const std::vector<texture*>& Targets, vec4 Clear = {0, 0, 0, 1}) = 0;
 	virtual void SetDepthTarget(texture* Target, vec2 Clear = {1, 0}) = 0;
@@ -731,11 +737,12 @@ struct command_list
 	virtual void SetImageBarriers(const std::vector<texture_barrier>& BarrierData) = 0;
 
 	virtual void DebugGuiBegin(texture* RenderTarget) = 0;
-	virtual void DebugGuiEnd()   = 0;
+	virtual void DebugGuiEnd() = 0;
 
-	u32 BackBufferIndex = 0;
 	u32 GfxWidth;
 	u32 GfxHeight;
+
+	bool IsRunning = false;
 
 	buffer* IndirectCommands = nullptr;
 	general_context* CurrContext = nullptr;
@@ -743,6 +750,31 @@ struct command_list
 
 	std::unordered_set<buffer*>  BuffersToCommon;
 	std::unordered_set<texture*> TexturesToCommon;
+};
+
+class command_queue
+{
+protected:
+	renderer_backend* Gfx;
+	std::vector<command_list*> CommandLists;
+	queue_type Type;
+
+public:
+	virtual ~command_queue() = default;
+
+	virtual void DestroyObject() = 0;
+	virtual void Reset() = 0;
+
+	virtual command_list* AllocateCommandList(command_list_level Level = command_list_level::primary) = 0;
+	virtual void Remove(command_list* CommandList) = 0;
+
+	virtual void Execute(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
+	virtual void Present(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
+
+	virtual void Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
+	virtual void Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
+
+	virtual void ExecuteAndRemove(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
 };
 
 struct resource_binder
@@ -762,7 +794,6 @@ struct resource_binder
 
 	virtual void SetBufferView(resource* Buffer, u32 Set = 0) = 0;
 
-	// TODO: Remove image layouts and move them inside texture structure
 	virtual void SetSampledImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 	virtual void SetStorageImage(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;
 	virtual void SetImageSampler(u32 Count, const array<resource*>& Textures, image_type Type, barrier_state State, u32 ViewIdx = 0, u32 Set = 0) = 0;

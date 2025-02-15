@@ -17,8 +17,9 @@
 
 #if _WIN32
 	#include "core/gfx/backend/dx12/directx12_gfx.hpp"
-	#include "core/gfx/backend/dx12/directx12_backend.cpp"
+	#include "core/gfx/backend/dx12/directx12_command_queue.cpp"
 	#include "core/gfx/backend/dx12/directx12_pipeline_context.cpp"
+	#include "core/gfx/backend/dx12/directx12_backend.cpp"
 #endif
 
 #include "resource_manager.cpp"
@@ -48,8 +49,15 @@ global_graphics_context(backend_type _BackendType, GLFWwindow* Window, global_me
 	else
 		assert("Backend type is unavalable");
 
+	GpuSyncs.push_back(CreateGpuSync(Backend));
+
 	Binder = CreateResourceBinder();
-	for(u32 i = 0; i < Backend->ImageCount; i++) ExecutionContexts.push_back(CreateGlobalPipelineContext());
+	for(u32 i = 0; i < Backend->ImageCount; i++) ExecutionContexts.push_back(Backend->PrimaryQueue->AllocateCommandList());
+	for(u32 i = 0; i < Backend->SecondaryQueues.size(); i++)
+	{
+		GpuSyncs.push_back(CreateGpuSync(Backend));
+		SecondaryExecutionContexts.push_back(Backend->SecondaryQueues[i]->AllocateCommandList(command_list_level::secondary));
+	}
 	GpuMemoryHeap = new gpu_memory_heap(Backend);
 
 	utils::texture::input_data TextureInputData = {};
@@ -89,7 +97,8 @@ DestroyObject()
 {
 	GeneralShaderViewMap.clear();
 
-	for(command_list* ExecutionContext : ExecutionContexts) delete ExecutionContext;
+	for(gpu_sync* Sync : GpuSyncs) delete Sync;
+
 	ContextMap.clear();
 
 	if(GpuMemoryHeap) delete GpuMemoryHeap;
@@ -98,15 +107,18 @@ DestroyObject()
 
 	Binder = nullptr;
     Backend = nullptr;
+	GpuSyncs.clear();
 	GpuMemoryHeap = nullptr;
     CurrentContext = nullptr;
     ExecutionContexts.clear();
+    SecondaryExecutionContexts.clear();
 }
 
 global_graphics_context::
 global_graphics_context(global_graphics_context&& Oth) noexcept
     : Binder(Oth.Binder),
 	  Backend(Oth.Backend),
+	  GpuSyncs(std::move(Oth.GpuSyncs)),
 	  GpuMemoryHeap(Oth.GpuMemoryHeap),
       ContextMap(std::move(Oth.ContextMap)),
       GeneralShaderViewMap(std::move(Oth.GeneralShaderViewMap)),
@@ -115,13 +127,13 @@ global_graphics_context(global_graphics_context&& Oth) noexcept
       PassToContext(std::move(Oth.PassToContext)),
       Passes(std::move(Oth.Passes)),
       CurrentContext(Oth.CurrentContext),
-      BackBufferIndex(Oth.BackBufferIndex),
       DepthTarget(std::move(Oth.DepthTarget)),
       QuadVertexBuffer(std::move(Oth.QuadVertexBuffer)),
       QuadIndexBuffer(std::move(Oth.QuadIndexBuffer))
 {
 	ColorTarget = std::move(Oth.ColorTarget);
 	ExecutionContexts = std::move(Oth.ExecutionContexts),
+	SecondaryExecutionContexts = std::move(Oth.SecondaryExecutionContexts),
 
 	Oth.Binder = nullptr;
     Oth.Backend = nullptr;
@@ -136,6 +148,7 @@ operator=(global_graphics_context&& Oth) noexcept
 	{
 		Binder = Oth.Binder;
         Backend = Oth.Backend;
+		GpuSyncs = std::move(Oth.GpuSyncs);
 		GpuMemoryHeap = Oth.GpuMemoryHeap;
         ContextMap = std::move(Oth.ContextMap);
         GeneralShaderViewMap = std::move(Oth.GeneralShaderViewMap);
@@ -144,9 +157,8 @@ operator=(global_graphics_context&& Oth) noexcept
         PassToContext = std::move(Oth.PassToContext);
         Passes = std::move(Oth.Passes);
         CurrentContext = Oth.CurrentContext;
-		ExecutionContexts = std::move(Oth.ExecutionContexts),
-
-        BackBufferIndex = Oth.BackBufferIndex;
+		ExecutionContexts = std::move(Oth.ExecutionContexts);
+		SecondaryExecutionContexts = std::move(Oth.SecondaryExecutionContexts);
 
 		ColorTarget = std::move(Oth.ColorTarget);
 		DepthTarget = std::move(Oth.DepthTarget);
@@ -180,16 +192,16 @@ CreateResourceBinder()
 	}
 }
 
-command_list* global_graphics_context::
-CreateGlobalPipelineContext()
+gpu_sync* global_graphics_context::
+CreateGpuSync(renderer_backend* BackendToUse)
 {
 	switch(Backend->Type)
 	{
 		case backend_type::vulkan:
-			return new vulkan_command_list(Backend);
+			return new vulkan_gpu_sync(BackendToUse);
 #if _WIN32
 		case backend_type::directx12:
-			return new directx12_command_list(Backend);
+			return new directx12_gpu_sync(BackendToUse);
 #endif
 		default:
 			return nullptr;
@@ -661,6 +673,7 @@ Compile()
 
 // TODO: Better memory arena usage
 // TODO: Consider of pushing pass work in different thread if some of them are not dependent and can use different queue type
+// TODO: Multithreaded execution
 void global_graphics_context::
 ExecuteAsync()
 {
@@ -673,7 +686,9 @@ ExecuteAsync()
 	}
 
 	command_list* MainExecutionContext = ExecutionContexts[BackBufferIndex];
-	MainExecutionContext->AcquireNextImage();
+	Backend->GetCurrentBackBufferIndex();
+	Backend->PrimaryQueue->Reset();
+	MainExecutionContext->Reset();
 	MainExecutionContext->Begin();
 
 	texture* CurrentColorTarget = GpuMemoryHeap->GetTexture(MainExecutionContext, ColorTarget[BackBufferIndex]);
@@ -854,7 +869,8 @@ ExecuteAsync()
 	MainExecutionContext->DebugGuiEnd();
 
 	MainExecutionContext->EmplaceColorTarget(CurrentColorTarget);
-	MainExecutionContext->Present();
+	Backend->PrimaryQueue->Present(MainExecutionContext, {GpuSyncs[0]});
+	Backend->Wait({GpuSyncs[0]});
 }
 
 void global_graphics_context::

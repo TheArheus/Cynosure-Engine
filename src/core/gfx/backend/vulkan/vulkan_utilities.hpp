@@ -32,29 +32,6 @@ DebugReportCallback(VkDebugReportFlagsEXT Flags,
 	return VK_FALSE;
 }
 
-u32 GetGraphicsQueueFamilyIndex(VkPhysicalDevice Device)
-{
-	u32 Result = VK_QUEUE_FAMILY_IGNORED;
-
-	u32 QueueFamilyPropertiesCount = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties(Device, &QueueFamilyPropertiesCount, nullptr);
-	std::vector<VkQueueFamilyProperties> QueueFamilyProperties(QueueFamilyPropertiesCount);
-	vkGetPhysicalDeviceQueueFamilyProperties(Device, &QueueFamilyPropertiesCount, QueueFamilyProperties.data());
-
-	for(u32 FamilyPropertyIndex = 0;
-		FamilyPropertyIndex < QueueFamilyPropertiesCount;
-		++FamilyPropertyIndex)
-	{
-		if(QueueFamilyProperties[FamilyPropertyIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-		{
-			Result = FamilyPropertyIndex;
-			break;
-		}
-	}
-
-	return Result;
-}
-
 VkPhysicalDevice
 PickPhysicalDevice(const std::vector<VkPhysicalDevice>& PhysicalDevices)
 {
@@ -825,6 +802,19 @@ VkSamplerMipmapMode GetVKMipmapMode(mipmap_mode Mode)
 		return VK_SAMPLER_MIPMAP_MODE_LINEAR;
 	default:
 		return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	}
+}
+
+VkCommandBufferLevel GetVKCommandListLevel(command_list_level Level)
+{
+	switch (Level)
+	{
+		case command_list_level::primary:
+			return VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		case command_list_level::secondary:
+			return VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+		default:
+			return VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	}
 }
 

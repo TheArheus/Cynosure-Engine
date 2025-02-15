@@ -23,6 +23,19 @@ enum class pass_type
 	compute,
 };
 
+enum class queue_type
+{
+	graphics,
+	compute,
+	transfer,
+};
+
+enum class command_list_level
+{
+	primary,
+	secondary,
+};
+
 enum class preferred_gpu_type
 {
 	integrated,

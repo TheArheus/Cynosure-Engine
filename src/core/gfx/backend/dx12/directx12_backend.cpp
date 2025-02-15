@@ -69,10 +69,12 @@ directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 	Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &RendererOptions, sizeof(RendererOptions));
 	if(RendererOptions.TiledResourcesTier >= 2) MinMaxFilterAvailable = true;
 
-	Fence = new directx12_fence(Device.Get());
-	CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT); // D3D12_COMMAND_LIST_TYPE_BUNDLE);
-	//CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_COMPUTE);
-	//CommandQueue = new directx12_command_queue(Device.Get(), D3D12_COMMAND_LIST_TYPE_COPY);
+	InnerFence = new directx12_gpu_sync(this);
+	PrimaryQueue = new directx12_command_queue(this, D3D12_COMMAND_LIST_TYPE_DIRECT);
+	for(u32 QueueIdx = 0; QueueIdx < 8; ++QueueIdx)
+	{
+		SecondaryQueues.push_back(new directx12_command_queue(this, D3D12_COMMAND_LIST_TYPE_COMPUTE));
+	}
 
 	{
 		ComPtr<IDXGISwapChain1> _SwapChain;
@@ -86,7 +88,7 @@ directx12_backend(HWND Handle, ImGuiContext* _imguiContext)
 		SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		SwapChainDesc.SampleDesc.Count = 1;
 		SwapChainDesc.SampleDesc.Quality = 0;
-		Factory->CreateSwapChainForHwnd(CommandQueue->Handle.Get(), Handle, &SwapChainDesc, nullptr, nullptr, &_SwapChain);
+		Factory->CreateSwapChainForHwnd(static_cast<directx12_command_queue*>(PrimaryQueue)->Handle.Get(), Handle, &SwapChainDesc, nullptr, nullptr, &_SwapChain);
 		_SwapChain.As(&SwapChain);
 
 		SwapchainImages.resize(ImageCount);
@@ -185,11 +187,11 @@ DestroyObject()
 	AllocatorHandle->Release(); 
 	AllocatorHandle = nullptr;
 
-    delete CommandQueue;
-    CommandQueue = nullptr;
+	for(command_queue* Queue : SecondaryQueues) delete Queue;
+	SecondaryQueues.clear();
 
-	delete Fence;
-	Fence = nullptr;
+	delete PrimaryQueue;
+	PrimaryQueue = nullptr;
 
 	SwapchainImages.clear();
 
@@ -209,11 +211,24 @@ DestroyObject()
     Device.Reset();
 }
 
-u32 directx12_backend::
-GetCurrentBackBufferIndex(command_list* Cmd)
+void directx12_backend::
+GetCurrentBackBufferIndex()
 {
 	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
-	return BackBufferIndex;
+}
+
+void directx12_backend::
+Wait(const std::vector<gpu_sync*>& Syncs)
+{
+	for(gpu_sync* Sync : Syncs)
+	{
+		directx12_gpu_sync* D3D12Sync = static_cast<directx12_gpu_sync*>(Sync);
+		if(D3D12Sync->Handle->GetCompletedValue() < D3D12Sync->CurrentWaitValue)
+		{
+			D3D12Sync->Handle->SetEventOnCompletion(D3D12Sync->CurrentWaitValue, D3D12Sync->FenceEvent);
+			WaitForSingleObject(D3D12Sync->FenceEvent, INFINITE);
+		}
+	}
 }
 
 void directx12_backend::

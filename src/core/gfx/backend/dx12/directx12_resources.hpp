@@ -57,7 +57,7 @@ struct directx12_buffer : public buffer
 		if(Data) Update(Backend, Data);
 	}
 
-	~directx12_buffer() override { Gfx->Fence->Wait(); DestroyResource(); Gfx = nullptr; };
+	~directx12_buffer() override { DestroyResource(); Gfx = nullptr; };
 
     directx12_buffer(const directx12_buffer&) = delete;
     directx12_buffer& operator=(const directx12_buffer&) = delete;
@@ -65,37 +65,45 @@ struct directx12_buffer : public buffer
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
 		if(!Data) return;
-		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->Update(this, Data);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd, {static_cast<directx12_backend*>(Backend)->InnerFence});
 	}
 
 	void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
 	{
 		if(!Data) return;
-		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->UpdateSize(this, Data, UpdateByteSize);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd, {static_cast<directx12_backend*>(Backend)->InnerFence});
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override
 	{
 		if(!Data) return;
-		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->ReadBack(this, Data);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd, {static_cast<directx12_backend*>(Backend)->InnerFence});
 	}
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override 
 	{
 		if(!Data) return;
-		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->ReadBackSize(this, Data, UpdateByteSize);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd, {static_cast<directx12_backend*>(Backend)->InnerFence});
 	}
 
 	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 NewUsage) override 
@@ -253,7 +261,7 @@ struct directx12_texture : public texture
         Gfx->Device->CreateSampler(&SamplerDesc, Sampler);
 	}
 
-	~directx12_texture() override { Gfx->Fence->Wait(); DestroyStagingResource(); DestroyResource(); Gfx = nullptr; };
+	~directx12_texture() override { DestroyStagingResource(); DestroyResource(); Gfx = nullptr; };
 
     directx12_texture(const directx12_texture&) = delete;
     directx12_texture& operator=(const directx12_texture&) = delete;
@@ -261,19 +269,23 @@ struct directx12_texture : public texture
 	void Update(renderer_backend* Backend, void* Data) override 
 	{
 		if(!Data) return;
-		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->Update(this, Data);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd, {static_cast<directx12_backend*>(Backend)->InnerFence});
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override 
 	{
 		if(!Data) return;
-		std::unique_ptr<directx12_command_list> Cmd = std::make_unique<directx12_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->ReadBack(this, Data);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd, {static_cast<directx12_backend*>(Backend)->InnerFence});
 	}
 
 	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override 

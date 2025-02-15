@@ -12,32 +12,12 @@ struct descriptor_binding
 struct directx12_command_list : public command_list
 {
 	directx12_command_list() = default;
-
-	directx12_command_list(renderer_backend* Backend)
-	{
-		CreateResource(Backend);
-	}
-
-	~directx12_command_list() override { DestroyObject(); };
-	
-	void DestroyObject() override;
-
-	void CreateResource(renderer_backend* Backend) override;
-
-	void AcquireNextImage() override;
+	~directx12_command_list() override = default;
 
 	void Begin() override;
-
-	void End() override;
-
-	void PlaceEndOfFrameBarriers();
-
-	void DeviceWaitIdle() override 
-	{
-		Gfx->Fence->Wait();
-	}
-
-	void EndOneTime() override;
+	void Reset() override;
+	
+	void PlaceEndOfFrameBarriers() override;
 
 	void Update(buffer* BufferToUpdate, void* Data) override;
 	void UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize) override;
@@ -56,8 +36,6 @@ struct directx12_command_list : public command_list
 	void SetIndexBuffer(buffer* Buffer) override;
 
 	void EmplaceColorTarget(texture* RenderTexture) override;
-
-	void Present() override;
 
 	void SetColorTarget(const std::vector<texture*>& Targets, vec4 Clear = {0, 0, 0, 1}) override;
 	void SetDepthTarget(texture* Target, vec2 Clear = {1, 0}) override;
@@ -89,7 +67,8 @@ struct directx12_command_list : public command_list
 	directx12_backend* Gfx = nullptr;
 
 	ID3D12Device6* Device = nullptr;
-	ID3D12GraphicsCommandList* CommandList = nullptr;
+	ID3D12GraphicsCommandList* Handle = nullptr;
+	ID3D12CommandAllocator* CommandAlloc;
 
 	std::vector<texture*> ColorAttachmentsToBind;
 	texture* DepthStencilAttachmentToBind;

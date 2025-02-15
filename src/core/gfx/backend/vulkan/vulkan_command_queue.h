@@ -1,39 +1,75 @@
 #pragma once
 
-// TODO: better command lists allocation
-class vulkan_command_queue
+
+class vulkan_command_queue : public command_queue
 {
-	std::vector<VkCommandBuffer> CommandLists;
+	VkFence SubmitFence;
+	VkDevice Device;
+	VkCommandPool CommandAlloc;
 
 public:
 	VkQueue Handle;
-	VkCommandPool CommandAlloc;
-	VkDevice Device;
+
+	VkSemaphore AcquireSemaphore;
+	VkSemaphore ReleaseSemaphore;
 
 	vulkan_command_queue() = default;
-	~vulkan_command_queue() { DestroyObject(); };
+	~vulkan_command_queue() override { DestroyObject(); };
 
-	vulkan_command_queue(VkDevice NewDevice, u32 NewFamilyIndex)
+	vulkan_command_queue(renderer_backend* Backend, u32 NewFamilyIndex, u32 QueueIndex = 0)
 	{
-		Init(NewDevice, NewFamilyIndex);
+		Init(Backend, NewFamilyIndex, QueueIndex);
 	}
 
-	void Init(VkDevice NewDevice, u32 NewFamilyIndex);
+	void Init(renderer_backend* Backend, u32 NewFamilyIndex, u32 QueueIndex);
 
-	void DestroyObject();
+	void DestroyObject() override;
+	void Reset() override;
 
-	VkCommandBuffer AllocateCommandList();
+	command_list* AllocateCommandList(command_list_level Level = command_list_level::primary) override;
+	void Remove(command_list* CommandList) override;
 
-	void Reset();
-	void Reset(VkCommandBuffer* CommandList);
+	void Execute(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
+	void Present(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
 
-	void Remove(VkCommandBuffer* CommandList);
+	void Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
+	void Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
 
-	void Execute();
-	void Execute(VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore, VkFence* Fence = nullptr);
-	void Execute(VkCommandBuffer* CommandList);
-	void Execute(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore, VkFence* Fence = nullptr);
-
-	void ExecuteAndRemove(VkCommandBuffer* CommandList);
-	void ExecuteAndRemove(VkCommandBuffer* CommandList, VkSemaphore* ReleaseSemaphore, VkSemaphore* AcquireSemaphore);
+	void ExecuteAndRemove(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
 };
+
+struct vulkan_backend;
+struct vulkan_gpu_sync : gpu_sync
+{
+	friend vulkan_backend;
+	friend vulkan_command_queue;
+
+public:
+	vulkan_gpu_sync(renderer_backend* Gfx);
+	~vulkan_gpu_sync() override;
+
+	void CreateObject() override;
+	void DestroyObject() override;
+
+	void Signal(command_queue*) override;
+	void Reset() override;
+
+private:
+	VkSemaphore Handle = 0;
+	VkDevice Device;
+};
+
+class vulkan_queue_manager
+{
+	std::unordered_map<u32, std::vector<command_queue*>> Queues;
+
+public:
+	vulkan_queue_manager(std::vector<VkDeviceQueueCreateInfo> DeviceQueuesCreateInfo)
+	{
+	}
+
+	vulkan_command_queue* GetQueue()
+	{
+	}
+};
+

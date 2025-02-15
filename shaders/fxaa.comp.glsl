@@ -85,12 +85,12 @@ void main()
 	}
 	else
 	{
-		LumaLocalAvg = 0.5 * (Luma2 * LumaC);
+		LumaLocalAvg = 0.5 * (Luma2 + LumaC);
 	}
 
 	vec2 CurrTextCoord = TextCoordN;
 	if(IsHorizontal)
-		CurrTextCoord.y += StepLength * 0.5;
+		CurrTextCoord.y += StepLength * 0.5f;
 	else
 		CurrTextCoord.x += StepLength * 0.5f;
 
@@ -133,8 +133,8 @@ void main()
 		}
 	}
 
-	float Dist1 = IsHorizontal ? (TextCoord.x - uv1.x) : (TextCoord.y - uv1.y);
-	float Dist2 = IsHorizontal ? (uv2.x - TextCoord.x) : (uv2.y - TextCoord.y);
+	float Dist1 = IsHorizontal ? (TextCoordN.x - uv1.x) : (TextCoordN.y - uv1.y);
+	float Dist2 = IsHorizontal ? (uv2.x - TextCoordN.x) : (uv2.y - TextCoordN.y);
 
 	bool IsDirection1 = Dist1 < Dist2;
 	float DistFinal   = min(Dist1, Dist2);
@@ -152,7 +152,7 @@ void main()
 
 	float SubPixOffset  = SubPixOffset2 * SubPixOffset2 * SUBPIXEL_QUALITY;
 
-	vec2 FinalTextCoord = TextCoord;
+	vec2 FinalTextCoord = TextCoordN;
 	if(IsHorizontal)
 		FinalTextCoord.y += FinalOffset * StepLength;
 	else

@@ -66,37 +66,45 @@ struct vulkan_buffer : public buffer
 	void Update(renderer_backend* Backend, void* Data) override
 	{
 		if(!Data) return;
-		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->Update(this, Data);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd);
 	}
 
 	void UpdateSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
 	{
 		if(!Data) return;
-		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->UpdateSize(this, Data, UpdateByteSize);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd);
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override
 	{
 		if(!Data) return;
-		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->ReadBack(this, Data);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd);
 	}
 
 	void ReadBackSize(renderer_backend* Backend, void* Data, u32 UpdateByteSize) override
 	{
 		if(!Data) return;
-		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->ReadBackSize(this, Data, UpdateByteSize);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd);
 	}
 
 	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewSize, u64 Count, u32 Flags) override
@@ -112,6 +120,8 @@ struct vulkan_buffer : public buffer
 		CounterOffset = NewSize * Count;
 
 		VkBufferCreateInfo CreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+		CreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+		//CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		CreateInfo.size = Size;
 
 		if(Flags & RF_VertexBuffer)
@@ -222,19 +232,23 @@ struct vulkan_texture : public texture
 	void Update(renderer_backend* Backend, void* Data) override
 	{
 		if(!Data) return;
-		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->Update(this, Data);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd);
 	}
 
 	void ReadBack(renderer_backend* Backend, void* Data) override
 	{
 		if(!Data) return;
-		std::unique_ptr<vulkan_command_list> Cmd = std::make_unique<vulkan_command_list>(Backend);
+		command_list* Cmd = Backend->PrimaryQueue->AllocateCommandList();
+		Backend->PrimaryQueue->Reset();
+		Cmd->Reset();
 		Cmd->Begin();
 		Cmd->ReadBack(this, Data);
-		Cmd->EndOneTime();
+		Backend->PrimaryQueue->ExecuteAndRemove(Cmd);
 	}
 
 	void CreateResource(renderer_backend* Backend, std::string DebugName, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize, const utils::texture::input_data& InputData) override
@@ -273,7 +287,8 @@ struct vulkan_texture : public texture
 		CreateInfo.mipLevels = InputData.MipLevels;
 		CreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;//Gfx->MsaaQuality;
 		CreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		CreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+		//CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		CreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 		if(Info.Usage & image_flags::TF_CubeMap)

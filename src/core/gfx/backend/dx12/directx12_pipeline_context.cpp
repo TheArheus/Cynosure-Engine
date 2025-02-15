@@ -1,5 +1,5 @@
 
-// TODO: Improve and optimize pipeline descriptor setup
+// TODO: Improve and optimize pipeline descriptor setup, reduce descriptors copy
 void directx12_resource_binder::
 SetBufferView(resource* Buffer, u32 Set)
 {
@@ -108,47 +108,25 @@ SetImageSampler(u32 BindingCount, const array<resource*>& Textures, image_type T
 }
 
 void directx12_command_list::
-CreateResource(renderer_backend* Backend)
+Reset()
 {
-	Gfx = static_cast<directx12_backend*>(Backend);
-	Device = Gfx->Device.Get();
-
-	CommandList = Gfx->CommandQueue->AllocateCommandList();
-}
-
-void directx12_command_list::
-DestroyObject()
-{
-	Gfx->Fence->Flush(Gfx->CommandQueue);
-	if(CommandList)
-	{
-		Gfx->CommandQueue->Remove(&CommandList);
-		CommandList = nullptr;
-	}
-}
-
-void directx12_command_list::
-AcquireNextImage()
-{
-	// NOTE: For directx12 this happens in the end of the frame
-	BackBufferIndex = Gfx->GetCurrentBackBufferIndex(this);
+	Handle->Reset(CommandAlloc, nullptr);
 }
 
 void directx12_command_list::
 Begin()
 {
-	Gfx->CommandQueue->Reset();
-	CommandList->Reset(Gfx->CommandQueue->CommandAlloc.Get(), nullptr);
+	IsRunning = true;
 }
 
 void directx12_command_list::
 PlaceEndOfFrameBarriers()
 {
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers;
-	if(Gfx->SwapchainCurrentState[BackBufferIndex] != D3D12_RESOURCE_STATE_COMMON)
+	if(Gfx->SwapchainCurrentState[Gfx->BackBufferIndex] != D3D12_RESOURCE_STATE_COMMON)
 	{
-		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[BackBufferIndex].Get(), Gfx->SwapchainCurrentState[BackBufferIndex], D3D12_RESOURCE_STATE_COMMON));
-		Gfx->SwapchainCurrentState[BackBufferIndex] = D3D12_RESOURCE_STATE_COMMON;
+		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[Gfx->BackBufferIndex].Get(), Gfx->SwapchainCurrentState[Gfx->BackBufferIndex], D3D12_RESOURCE_STATE_COMMON));
+		Gfx->SwapchainCurrentState[Gfx->BackBufferIndex] = D3D12_RESOURCE_STATE_COMMON;
 	}
 
 #ifdef CE_DEBUG
@@ -198,39 +176,10 @@ PlaceEndOfFrameBarriers()
 	}
 #endif
 	if(Barriers.size())
-		CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
+		Handle->ResourceBarrier(Barriers.size(), Barriers.data());
 
 	BuffersToCommon.clear();
 	TexturesToCommon.clear();
-}
-
-void directx12_command_list::
-End()
-{
-	PlaceEndOfFrameBarriers();
-	Gfx->CommandQueue->Execute(&CommandList);
-	Gfx->Fence->Flush(Gfx->CommandQueue);
-	CurrContext = nullptr;
-}
-
-void directx12_command_list::
-EndOneTime()
-{
-	PlaceEndOfFrameBarriers();
-	Gfx->CommandQueue->ExecuteAndRemove(&CommandList);
-	Gfx->Fence->Flush(Gfx->CommandQueue);
-	CurrContext = nullptr;
-}
-
-void directx12_command_list::
-Present()
-{
-	PlaceEndOfFrameBarriers();
-	Gfx->CommandQueue->Execute(&CommandList);
-	Gfx->Fence->Flush(Gfx->CommandQueue);
-
-	Gfx->SwapChain->Present(0, Gfx->TearingSupport * DXGI_PRESENT_ALLOW_TEARING);
-	CurrContext = nullptr;
 }
 
 void directx12_command_list::
@@ -248,7 +197,7 @@ Update(buffer* BufferToUpdate, void* Data)
 	memcpy(CpuPtr, Data, Buffer->Size);
 	Staging->Handle->Unmap(0, 0);
 
-	CommandList->CopyResource(Buffer->Handle.Get(), Staging->Handle.Get());
+	Handle->CopyResource(Buffer->Handle.Get(), Staging->Handle.Get());
 }
 
 void directx12_command_list::
@@ -269,7 +218,7 @@ UpdateSize(buffer* BufferToUpdate, void* Data, u32 UpdateByteSize)
 	memcpy(CpuPtr, Data, UpdateByteSize);
 	Staging->Handle->Unmap(0, 0);
 
-	CommandList->CopyBufferRegion(Buffer->Handle.Get(), 0, Staging->Handle.Get(), 0, UpdateByteSize);
+	Handle->CopyBufferRegion(Buffer->Handle.Get(), 0, Staging->Handle.Get(), 0, UpdateByteSize);
 }
 
 void directx12_command_list::
@@ -282,7 +231,7 @@ ReadBack(buffer* BufferToRead, void* Data)
 
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferWrite, PSF_Transfer}});
 
-	CommandList->CopyBufferRegion(Staging->Handle.Get(), 0, Buffer->Handle.Get(), 0, Buffer->Size);
+	Handle->CopyBufferRegion(Staging->Handle.Get(), 0, Buffer->Handle.Get(), 0, Buffer->Size);
 
 	void* CpuPtr = nullptr;
 	Staging->Handle->Map(0, nullptr, &CpuPtr);
@@ -300,7 +249,7 @@ ReadBackSize(buffer* BufferToRead, void* Data, u32 UpdateByteSize)
 
 	SetBufferBarriers({{BufferToRead, AF_TransferRead, PSF_Transfer}, {Staging, AF_TransferWrite, PSF_Transfer}});
 
-	CommandList->CopyBufferRegion(Staging->Handle.Get(), 0, Buffer->Handle.Get(), 0, UpdateByteSize);
+	Handle->CopyBufferRegion(Staging->Handle.Get(), 0, Buffer->Handle.Get(), 0, UpdateByteSize);
 
 	void* CpuPtr = nullptr;
 	Staging->Handle->Map(0, nullptr, &CpuPtr);
@@ -352,7 +301,7 @@ Update(texture* TextureToUpdate, void* Data)
 	DstCopyLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 	DstCopyLocation.SubresourceIndex = 0;
 
-	CommandList->CopyTextureRegion(&DstCopyLocation, 0, 0, 0, 
+	Handle->CopyTextureRegion(&DstCopyLocation, 0, 0, 0, 
 								   &SrcCopyLocation, nullptr);
 }
 
@@ -367,7 +316,7 @@ ReadBack(texture* TextureToRead, void* Data)
 	SetBufferBarriers({{Staging, AF_TransferWrite, PSF_Transfer}});
 	SetImageBarriers({{TextureToRead, AF_TransferRead, barrier_state::transfer_src, SUBRESOURCES_ALL, PSF_Transfer}});
 
-	CommandList->CopyResource(Staging->Handle.Get(), Texture->Handle.Get());
+	Handle->CopyResource(Staging->Handle.Get(), Texture->Handle.Get());
 
 	void* CpuPtr = nullptr;
 	Staging->Handle->Map(0, nullptr, &CpuPtr);
@@ -383,9 +332,9 @@ SetGraphicsPipelineState(render_context* Context)
 
 	CurrContext = Context;
 	directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(Context);
-	CommandList->SetGraphicsRootSignature(ContextToBind->RootSignatureHandle.Get());
-	CommandList->SetPipelineState(ContextToBind->Pipeline.Get());
-	CommandList->IASetPrimitiveTopology(ContextToBind->PipelineTopology);
+	Handle->SetGraphicsRootSignature(ContextToBind->RootSignatureHandle.Get());
+	Handle->SetPipelineState(ContextToBind->Pipeline.Get());
+	Handle->IASetPrimitiveTopology(ContextToBind->PipelineTopology);
 	return true;
 }
 
@@ -397,8 +346,8 @@ SetComputePipelineState(compute_context* Context)
 
 	CurrContext = Context;
 	directx12_compute_context* ContextToBind = static_cast<directx12_compute_context*>(Context);
-	CommandList->SetComputeRootSignature(ContextToBind->RootSignatureHandle.Get());
-	CommandList->SetPipelineState(ContextToBind->Pipeline.Get());
+	Handle->SetComputeRootSignature(ContextToBind->RootSignatureHandle.Get());
+	Handle->SetPipelineState(ContextToBind->Pipeline.Get());
 	return true;
 }
 
@@ -409,13 +358,13 @@ SetConstant(void* Data, size_t Size)
 	{
 		directx12_render_context* ContextToBind = static_cast<directx12_render_context*>(CurrContext);
 		assert(ContextToBind->HavePushConstant);
-		CommandList->SetGraphicsRoot32BitConstants(ContextToBind->PushConstantOffset, Size / sizeof(u32), Data, 0);
+		Handle->SetGraphicsRoot32BitConstants(ContextToBind->PushConstantOffset, Size / sizeof(u32), Data, 0);
 	}
 	else if(CurrContext->Type == pass_type::compute)
 	{
 		directx12_compute_context* ContextToBind = static_cast<directx12_compute_context*>(CurrContext);
 		assert(ContextToBind->HavePushConstant);
-		CommandList->SetComputeRoot32BitConstants(ContextToBind->PushConstantOffset, Size / sizeof(u32), Data, 0);
+		Handle->SetComputeRoot32BitConstants(ContextToBind->PushConstantOffset, Size / sizeof(u32), Data, 0);
 	}
 }
 
@@ -423,10 +372,10 @@ void directx12_command_list::
 SetViewport(u32 StartX, u32 StartY, u32 RenderWidth, u32 RenderHeight)
 {
 	D3D12_VIEWPORT Viewport = {(r32)StartX, (r32)(GfxHeight - StartY), (r32)RenderWidth, -(r32)RenderHeight, 0, 1};
-	CommandList->RSSetViewports(1, &Viewport);
+	Handle->RSSetViewports(1, &Viewport);
 
 	D3D12_RECT Scissors = {(LONG)StartX, (LONG)(GfxHeight - (RenderHeight + StartY)), (LONG)RenderWidth, (LONG)RenderHeight};
-	CommandList->RSSetScissorRects(1, &Scissors);
+	Handle->RSSetScissorRects(1, &Scissors);
 }
 
 void directx12_command_list::
@@ -434,7 +383,7 @@ SetIndexBuffer(buffer* Buffer)
 {
 	directx12_buffer* IndexAttachment = static_cast<directx12_buffer*>(Buffer);
 	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {IndexAttachment->Handle->GetGPUVirtualAddress(), (u32)IndexAttachment->Size, DXGI_FORMAT_R32_UINT};
-	CommandList->IASetIndexBuffer(&IndexBufferView);
+	Handle->IASetIndexBuffer(&IndexBufferView);
 }
 
 void directx12_command_list::
@@ -445,15 +394,15 @@ EmplaceColorTarget(texture* RenderTexture)
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers = 
 	{
 		CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), GetDXImageLayout(Texture->CurrentState[0], Texture->CurrentLayout[0]), D3D12_RESOURCE_STATE_COPY_SOURCE),
-		CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[BackBufferIndex].Get(), Gfx->SwapchainCurrentState[BackBufferIndex], D3D12_RESOURCE_STATE_COPY_DEST)
+		CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[Gfx->BackBufferIndex].Get(), Gfx->SwapchainCurrentState[Gfx->BackBufferIndex], D3D12_RESOURCE_STATE_COPY_DEST)
 	};
 
 	std::fill(Texture->CurrentLayout.begin(), Texture->CurrentLayout.end(), AF_TransferRead);
 	std::fill(Texture->CurrentState.begin(), Texture->CurrentState.end(), barrier_state::general);
-	Gfx->SwapchainCurrentState[BackBufferIndex] = D3D12_RESOURCE_STATE_COPY_DEST;
-	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
+	Gfx->SwapchainCurrentState[Gfx->BackBufferIndex] = D3D12_RESOURCE_STATE_COPY_DEST;
+	Handle->ResourceBarrier(Barriers.size(), Barriers.data());
 
-	CommandList->CopyResource(Gfx->SwapchainImages[BackBufferIndex].Get(), Texture->Handle.Get());
+	Handle->CopyResource(Gfx->SwapchainImages[Gfx->BackBufferIndex].Get(), Texture->Handle.Get());
 }
 
 void directx12_command_list::
@@ -497,7 +446,7 @@ BindShaderParameters(const array<binding_packet>& Data)
         std::vector<ID3D12DescriptorHeap*> Heaps;
         if (ContextToBind->IsResourceHeapInited) Heaps.push_back(ContextToBind->ResourceHeap->Handle.Get());
         if (ContextToBind->IsSamplersHeapInited) Heaps.push_back(ContextToBind->SamplersHeap->Handle.Get());
-        CommandList->SetDescriptorHeaps(Heaps.size(), Heaps.data());
+        Handle->SetDescriptorHeaps(Heaps.size(), Heaps.data());
 
         for (const auto& BindingDesc : Binder.BindingDescriptions) 
 		{
@@ -507,13 +456,13 @@ BindShaderParameters(const array<binding_packet>& Data)
                 case dx12_descriptor_type::unordered_access_table:
                 case dx12_descriptor_type::constant_buffer_table:
                 case dx12_descriptor_type::sampler:
-                    (CommandList->*SetDescriptorTable)(BindingDesc.Idx, BindingDesc.TableBegin);
+                    (Handle->*SetDescriptorTable)(BindingDesc.Idx, BindingDesc.TableBegin);
                     break;
                 case dx12_descriptor_type::shader_resource:
-                    (CommandList->*SetShaderResourceView)(BindingDesc.Idx, BindingDesc.ResourceBegin);
+                    (Handle->*SetShaderResourceView)(BindingDesc.Idx, BindingDesc.ResourceBegin);
                     break;
                 case dx12_descriptor_type::unordered_access:
-                    (CommandList->*SetUnorderedAccessView)(BindingDesc.Idx, BindingDesc.ResourceBegin);
+                    (Handle->*SetUnorderedAccessView)(BindingDesc.Idx, BindingDesc.ResourceBegin);
                     break;
             }
         }
@@ -608,7 +557,7 @@ BeginRendering(u32 RenderWidth, u32 RenderHeight)
 		ColorTargets.push_back(Attachment->RenderTargetViews[0]);
 		if(Context->LoadOp == load_op::clear)
 		{
-			CommandList->ClearRenderTargetView(ColorTargets[i], ColorClear.E, 0, nullptr);
+			Handle->ClearRenderTargetView(ColorTargets[i], ColorClear.E, 0, nullptr);
 		}
 	}
 
@@ -618,11 +567,11 @@ BeginRendering(u32 RenderWidth, u32 RenderHeight)
 		DepthStencilTarget = static_cast<directx12_texture*>(DepthStencilAttachmentToBind)->DepthStencilViews[0];
 		if(Context->LoadOp == load_op::clear)
 		{
-			CommandList->ClearDepthStencilView(DepthStencilTarget, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, DepthClear.x, DepthClear.y, 0, nullptr);
+			Handle->ClearDepthStencilView(DepthStencilTarget, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, DepthClear.x, DepthClear.y, 0, nullptr);
 		}
 	}
 
-	CommandList->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
+	Handle->OMSetRenderTargets(ColorTargets.size(), ColorTargets.data(), Context->Info.UseDepth, Context->Info.UseDepth ? &DepthStencilTarget : nullptr);
 }
 
 void directx12_command_list::
@@ -644,7 +593,7 @@ DrawIndexed(u32 FirstIndex, u32 IndexCount, s32 VertexOffset, u32 FirstInstance,
 {
 	assert(CurrContext->Type == pass_type::raster);
 
-	CommandList->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
+	Handle->DrawIndexedInstanced(IndexCount, InstanceCount, FirstIndex, VertexOffset, FirstInstance);
 }
 
 void directx12_command_list::
@@ -656,7 +605,7 @@ DrawIndirect(u32 ObjectDrawCount, u32 CommandStructureSize)
 	directx12_render_context* Context = static_cast<directx12_render_context*>(CurrContext);
 
 	directx12_buffer* Indirect = static_cast<directx12_buffer*>(IndirectCommands);
-	CommandList->ExecuteIndirect(Context->IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), (!Context->HaveDrawID)*4, Indirect->CounterHandle.Get(), 0);
+	Handle->ExecuteIndirect(Context->IndirectSignatureHandle.Get(), ObjectDrawCount, Indirect->Handle.Get(), (!Context->HaveDrawID)*4, Indirect->CounterHandle.Get(), 0);
 
 	IndirectCommands = nullptr;
 }
@@ -667,7 +616,7 @@ Dispatch(u32 X, u32 Y, u32 Z)
 	assert(CurrContext->Type == pass_type::compute);
 
 	directx12_compute_context* Context = static_cast<directx12_compute_context*>(CurrContext);
-	CommandList->Dispatch((X + Context->BlockSizeX - 1) / Context->BlockSizeX, (Y + Context->BlockSizeY - 1) / Context->BlockSizeY, (Z + Context->BlockSizeZ - 1) / Context->BlockSizeZ);
+	Handle->Dispatch((X + Context->BlockSizeX - 1) / Context->BlockSizeX, (Y + Context->BlockSizeY - 1) / Context->BlockSizeY, (Z + Context->BlockSizeZ - 1) / Context->BlockSizeZ);
 }
 
 void directx12_command_list::
@@ -683,7 +632,7 @@ FillTexture(texture* TextureToFill, vec4 Value)
 	SetImageBarriers({{TextureToFill, AF_ColorAttachmentWrite, barrier_state::color_attachment, SUBRESOURCES_ALL, 0}});
 	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToFill);
 	for(u32 MipIdx = 0; MipIdx < Texture->Info.MipLevels; MipIdx++)
-		CommandList->ClearRenderTargetView(Texture->RenderTargetViews[MipIdx], Value.E, 0, nullptr);
+		Handle->ClearRenderTargetView(Texture->RenderTargetViews[MipIdx], Value.E, 0, nullptr);
 }
 
 void directx12_command_list::
@@ -692,7 +641,7 @@ FillTexture(texture* TextureToFill, float Depth, u32 Stencil)
 	SetImageBarriers({{TextureToFill, AF_DepthStencilAttachmentWrite, barrier_state::depth_stencil_attachment, SUBRESOURCES_ALL, 0}});
 	directx12_texture* Texture = static_cast<directx12_texture*>(TextureToFill);
 	for(u32 MipIdx = 0; MipIdx < Texture->Info.MipLevels; MipIdx++)
-		CommandList->ClearDepthStencilView(Texture->DepthStencilViews[MipIdx], D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, Depth, Stencil, 0, nullptr);
+		Handle->ClearDepthStencilView(Texture->DepthStencilViews[MipIdx], D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, Depth, Stencil, 0, nullptr);
 }
 
 void directx12_command_list::
@@ -722,7 +671,7 @@ CopyImage(texture* Dst, texture* Src)
     SrcBox.bottom = static_cast<LONG>(Dst->Height);
     SrcBox.back = static_cast<LONG>(Dst->Depth);
 
-    CommandList->CopyTextureRegion(&DstLocation, 0, 0, 0, &SrcLocation, &SrcBox);
+    Handle->CopyTextureRegion(&DstLocation, 0, 0, 0, &SrcLocation, &SrcBox);
 }
 
 void directx12_command_list::
@@ -761,9 +710,9 @@ SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 	}
 
 	if(TransitionBarriers.size())
-		CommandList->ResourceBarrier(TransitionBarriers.size(), TransitionBarriers.data());
+		Handle->ResourceBarrier(TransitionBarriers.size(), TransitionBarriers.data());
 	if(UavBarriers.size())
-		CommandList->ResourceBarrier(UavBarriers.size(), UavBarriers.data());
+		Handle->ResourceBarrier(UavBarriers.size(), UavBarriers.data());
 }
 
 void directx12_command_list::
@@ -836,9 +785,9 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 	}
 
 	if(TransitionBarriers.size())
-		CommandList->ResourceBarrier(TransitionBarriers.size(), TransitionBarriers.data());
+		Handle->ResourceBarrier(TransitionBarriers.size(), TransitionBarriers.data());
 	if(UavBarriers.size())
-		CommandList->ResourceBarrier(UavBarriers.size(), UavBarriers.data());
+		Handle->ResourceBarrier(UavBarriers.size(), UavBarriers.data());
 }
 
 void directx12_command_list::
@@ -852,7 +801,7 @@ DebugGuiBegin(texture* RenderTarget)
 	else if(Clr->Info.Usage & TF_Storage)
 		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Clr->Handle.Get()));
 
-	CommandList->ResourceBarrier(Barriers.size(), Barriers.data());
+	Handle->ResourceBarrier(Barriers.size(), Barriers.data());
 
 	std::fill(Clr->CurrentLayout.begin(), Clr->CurrentLayout.end(), AF_ColorAttachmentWrite);
 	std::fill(Clr->CurrentState.begin(), Clr->CurrentState.end(), barrier_state::general);
@@ -860,14 +809,14 @@ DebugGuiBegin(texture* RenderTarget)
 	std::vector<ID3D12DescriptorHeap*> Heaps;
 	Heaps.push_back(Gfx->ImGuiResourcesHeap->Handle.Get());
 
-	CommandList->SetDescriptorHeaps(Heaps.size(), Heaps.data());
-	CommandList->OMSetRenderTargets(1, &Clr->RenderTargetViews[0], false, nullptr);
+	Handle->SetDescriptorHeaps(Heaps.size(), Heaps.data());
+	Handle->OMSetRenderTargets(1, &Clr->RenderTargetViews[0], false, nullptr);
 }
 
 void directx12_command_list::
 DebugGuiEnd() 
 {
-	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), CommandList);
+	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), Handle);
 }
 
 directx12_render_context::

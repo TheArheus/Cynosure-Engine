@@ -15,7 +15,8 @@ using namespace Microsoft::WRL;
 
 #include "directx12_utilities.hpp"
 
-#include "directx12_command_queue.hpp"
+#include "directx12_command_queue.h"
 #include "directx12_backend.h"
+
 #include "directx12_pipeline_context.h"
 #include "directx12_resources.hpp"
