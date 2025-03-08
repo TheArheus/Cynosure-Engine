@@ -81,6 +81,17 @@ class global_graphics_context
 										const utils::render_context::input_data& InputData = {cull_mode::back, blend_factor::src_alpha, blend_factor::one_minus_src_alpha, topology::triangle_list, front_face::counter_clock_wise, true, true, true, false}, const std::vector<shader_define>& ShaderDefines = {});
 	compute_context* CreateComputeContext(const std::string& Shader, const std::vector<shader_define>& ShaderDefines = {});
 
+	buffer*  BoundVertexBuffer = nullptr;
+	buffer*  BoundIndexBuffer = nullptr;
+	std::vector<texture*> BoundColorTargets;
+	texture* BoundDepthTarget = nullptr;
+	bool RenderingActive = false;
+
+	void RasterPassExecution(shader_pass* Pass, command_list* ExecutionContext, std::vector<buffer_barrier>& AttachmentBufferBarriers, std::vector<texture_barrier>& AttachmentImageBarriers, bool ShouldRebind, bool IsSecondary);
+	void ComputePassExecution(shader_pass* Pass, command_list* ExecutionContext, std::vector<buffer_barrier>& AttachmentBufferBarriers, std::vector<texture_barrier>& AttachmentImageBarriers, bool ShouldRebind, bool IsSecondary);
+
+	void (global_graphics_context::*PassExecutionType[pass_type_count])(shader_pass*, command_list*, std::vector<buffer_barrier>&, std::vector<texture_barrier>&, bool, bool);
+
 public:
 	RENDERER_API global_graphics_context() = default;
 
@@ -131,11 +142,12 @@ public:
 	resource_binder* Binder = nullptr;
 	general_context* CurrentContext = nullptr;
 	gpu_memory_heap* GpuMemoryHeap = nullptr;
-	std::vector<command_list*> ExecutionContexts;
+	command_list* PrimaryExecutionContext = nullptr;
 	std::vector<command_list*> SecondaryExecutionContexts;
 
 	std::vector<u32> InDegree;
 	std::vector<std::vector<u32>> Adjacency;
+	std::vector<std::vector<u32>> LevelGroups;
 
 	//////////////////////////////////////////////////////
 

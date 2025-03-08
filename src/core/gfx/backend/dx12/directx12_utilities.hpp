@@ -542,9 +542,73 @@ D3D12_FILTER_REDUCTION_TYPE GetDXSamplerReductionMode(sampler_reduction_mode Mod
 	}
 }
 
-D3D12_RESOURCE_STATES GetDXBufferLayout(u32 Layouts, u32 PipelineStage = 0)
+u32 GetDXQueueSupportedStages(D3D12_COMMAND_LIST_TYPE QueueType)
 {
-    D3D12_RESOURCE_STATES Result = {};
+    u32 SupportedStages = 0;
+    switch (QueueType)
+    {
+        case D3D12_COMMAND_LIST_TYPE_DIRECT:
+            SupportedStages = PSF_TopOfPipe     | PSF_DrawIndirect   | PSF_VertexInput    |
+                              PSF_VertexShader  | PSF_FragmentShader | PSF_EarlyFragment  |
+                              PSF_LateFragment  | PSF_ColorAttachment| PSF_Compute        |
+                              PSF_Hull          | PSF_Domain         | PSF_Geometry       |
+                              PSF_Transfer      | PSF_BottomOfPipe   | PSF_Host;
+            break;
+        case D3D12_COMMAND_LIST_TYPE_COMPUTE:
+            SupportedStages = PSF_TopOfPipe  | PSF_Compute | PSF_Transfer | PSF_Host;
+            break;
+        case D3D12_COMMAND_LIST_TYPE_COPY:
+            SupportedStages = PSF_TopOfPipe  | PSF_Transfer | PSF_BottomOfPipe;
+            break;
+        default:
+            SupportedStages = 0;
+    }
+    return SupportedStages;
+}
+
+D3D12_RESOURCE_STATES GetDXSupportedResourceStates(D3D12_COMMAND_LIST_TYPE QueueType)
+{
+    switch (QueueType)
+	{
+        case D3D12_COMMAND_LIST_TYPE_DIRECT:
+            return D3D12_RESOURCE_STATE_COMMON |
+                   D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER |
+                   D3D12_RESOURCE_STATE_INDEX_BUFFER |
+                   D3D12_RESOURCE_STATE_RENDER_TARGET |
+                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS |
+                   D3D12_RESOURCE_STATE_DEPTH_WRITE |
+                   D3D12_RESOURCE_STATE_DEPTH_READ |
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE |
+                   D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
+                   D3D12_RESOURCE_STATE_STREAM_OUT |
+                   D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT |
+                   D3D12_RESOURCE_STATE_COPY_DEST |
+                   D3D12_RESOURCE_STATE_COPY_SOURCE |
+                   D3D12_RESOURCE_STATE_RESOLVE_DEST |
+                   D3D12_RESOURCE_STATE_RESOLVE_SOURCE |
+                   D3D12_RESOURCE_STATE_GENERIC_READ;
+        case D3D12_COMMAND_LIST_TYPE_COMPUTE:
+            return D3D12_RESOURCE_STATE_COMMON |
+                   D3D12_RESOURCE_STATE_UNORDERED_ACCESS |
+                   D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE |
+                   D3D12_RESOURCE_STATE_COPY_DEST |
+                   D3D12_RESOURCE_STATE_COPY_SOURCE |
+                   D3D12_RESOURCE_STATE_GENERIC_READ;
+        case D3D12_COMMAND_LIST_TYPE_COPY:
+            return D3D12_RESOURCE_STATE_COMMON |
+                   D3D12_RESOURCE_STATE_COPY_DEST |
+                   D3D12_RESOURCE_STATE_COPY_SOURCE;
+        default:
+            return D3D12_RESOURCE_STATE_COMMON;
+    }
+}
+
+D3D12_RESOURCE_STATES GetDXBufferLayout(D3D12_COMMAND_LIST_TYPE QueueType, u32 Layouts, u32 PipelineStage)
+{
+    D3D12_RESOURCE_STATES Result = D3D12_RESOURCE_STATE_COMMON;
+
+    u32 SupportedStages = GetDXQueueSupportedStages(QueueType);
+    u32 EffectivePipelineStage = PipelineStage & SupportedStages;
 
     if (Layouts & AF_IndirectCommandRead)
         Result |= D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
@@ -554,10 +618,13 @@ D3D12_RESOURCE_STATES GetDXBufferLayout(u32 Layouts, u32 PipelineStage = 0)
         Result |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
     if (Layouts & AF_ShaderWrite)
         Result |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    if (Layouts & AF_ShaderRead && (PipelineStage & PSF_EarlyFragment || PipelineStage & PSF_LateFragment || PipelineStage & PSF_FragmentShader))
-		Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-	if (Layouts & AF_ShaderRead && (PipelineStage & PSF_VertexShader || PipelineStage & PSF_Compute || PipelineStage & PSF_Hull || PipelineStage & PSF_Domain))
-		Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    if (Layouts & AF_ShaderRead)
+	{
+        if (EffectivePipelineStage & (PSF_EarlyFragment | PSF_LateFragment | PSF_FragmentShader))
+            Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        if (EffectivePipelineStage & (PSF_VertexShader | PSF_Compute | PSF_Hull | PSF_Domain))
+            Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    }
     if (Layouts & AF_TransferRead)
         Result |= D3D12_RESOURCE_STATE_COPY_SOURCE;
     if (Layouts & AF_TransferWrite)
@@ -567,26 +634,37 @@ D3D12_RESOURCE_STATES GetDXBufferLayout(u32 Layouts, u32 PipelineStage = 0)
     if (Layouts & AF_MemoryRead)
         Result |= D3D12_RESOURCE_STATE_GENERIC_READ;
 
-    if ((Result & D3D12_RESOURCE_STATE_COPY_DEST) || (Result & D3D12_RESOURCE_STATE_UNORDERED_ACCESS))
-        Result &= ~D3D12_RESOURCE_STATE_GENERIC_READ;
+    D3D12_RESOURCE_STATES SupportedStates = GetDXSupportedResourceStates(QueueType);
+    Result &= SupportedStates;
+
+    if (Result & D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+        Result = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    else if (Result & D3D12_RESOURCE_STATE_COPY_DEST)
+        Result = D3D12_RESOURCE_STATE_COPY_DEST;
 
     return Result;
 }
 
-D3D12_RESOURCE_STATES GetDXImageLayout(barrier_state State, u32 Layouts, u32 PipelineStage = 0)
+D3D12_RESOURCE_STATES GetDXImageLayout(D3D12_COMMAND_LIST_TYPE QueueType, barrier_state State, u32 Layouts, u32 PipelineStage = 0)
 {
     D3D12_RESOURCE_STATES Result = D3D12_RESOURCE_STATE_COMMON;
 
+    u32 SupportedStages = GetDXQueueSupportedStages(QueueType);
+    u32 EffectivePipelineStage = PipelineStage & SupportedStages;
+
     if (State == barrier_state::depth_stencil_attachment)
         Result |= D3D12_RESOURCE_STATE_DEPTH_WRITE;
-	if (Layouts & AF_ColorAttachmentWrite)
+    if (Layouts & AF_ColorAttachmentWrite)
         Result |= D3D12_RESOURCE_STATE_RENDER_TARGET;
     if (Layouts & AF_ShaderWrite)
         Result |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    if (Layouts & AF_ShaderRead && (PipelineStage & PSF_EarlyFragment || PipelineStage & PSF_LateFragment || PipelineStage & PSF_FragmentShader))
-		Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-	if (Layouts & AF_ShaderRead && (PipelineStage & PSF_VertexShader || PipelineStage & PSF_Compute || PipelineStage & PSF_Hull || PipelineStage & PSF_Domain))
-		Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    if (Layouts & AF_ShaderRead)
+	{
+        if (EffectivePipelineStage & (PSF_EarlyFragment | PSF_LateFragment | PSF_FragmentShader))
+            Result |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        if (EffectivePipelineStage & (PSF_VertexShader | PSF_Compute | PSF_Hull | PSF_Domain))
+            Result |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    }
     if (Layouts & AF_TransferRead)
         Result |= D3D12_RESOURCE_STATE_COPY_SOURCE;
     if (Layouts & AF_TransferWrite)
@@ -596,10 +674,19 @@ D3D12_RESOURCE_STATES GetDXImageLayout(barrier_state State, u32 Layouts, u32 Pip
     if (Layouts & AF_MemoryRead)
         Result |= D3D12_RESOURCE_STATE_GENERIC_READ;
 
-    if ((Result & D3D12_RESOURCE_STATE_COPY_DEST) || (Result & D3D12_RESOURCE_STATE_UNORDERED_ACCESS))
-        Result &= ~D3D12_RESOURCE_STATE_GENERIC_READ;
+    D3D12_RESOURCE_STATES SupportedStates = GetDXSupportedResourceStates(QueueType);
+    Result &= SupportedStates;
 
-	return Result;
+    if (Result & D3D12_RESOURCE_STATE_RENDER_TARGET)
+        Result = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    else if (Result & D3D12_RESOURCE_STATE_DEPTH_WRITE)
+        Result = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+    else if (Result & D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+        Result = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    else if (Result & D3D12_RESOURCE_STATE_COPY_DEST)
+        Result = D3D12_RESOURCE_STATE_COPY_DEST;
+
+    return Result;
 }
 
 #define DIRECTX_UTILITIES_H_

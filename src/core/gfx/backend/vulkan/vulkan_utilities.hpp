@@ -881,7 +881,38 @@ VkImageLayout GetVKLayout(barrier_state State)
     }
 }
 
-VkPipelineStageFlags GetVKPipelineStage(u32 Stages)
+VkPipelineStageFlags GetVKQueueSupportedStages(u32 QueueFlags)
+{
+    VkPipelineStageFlags SupportedStages = 0;
+
+    if (QueueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        SupportedStages |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT |
+                           VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
+                           VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+                           VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                           VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |
+                           VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
+                           VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
+    }
+
+    if (QueueFlags & VK_QUEUE_COMPUTE_BIT) {
+        SupportedStages |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    }
+
+    if (QueueFlags & VK_QUEUE_TRANSFER_BIT) {
+        SupportedStages |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+
+    SupportedStages |= VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+    return SupportedStages;
+}
+
+VkPipelineStageFlags GetVKPipelineStage(u32 Stages, u32 QueueFlags)
 {
 	VkPipelineStageFlags Result = {};
 
@@ -916,7 +947,7 @@ VkPipelineStageFlags GetVKPipelineStage(u32 Stages)
 	if(Stages & PSF_Host)
 		Result |= VK_PIPELINE_STAGE_HOST_BIT;
 
-	return Result;
+	return Result & GetVKQueueSupportedStages(QueueFlags);
 }
 
 bool IsVKAspectSupported(VkPipelineStageFlags StageMask, VkAccessFlags AccessFlag)
@@ -998,11 +1029,12 @@ bool IsVKAspectSupported(VkPipelineStageFlags StageMask, VkAccessFlags AccessFla
 	}
 }
 
-VkAccessFlags GetVKAccessMask(u32 Layouts, u32 StageFlags)
+VkAccessFlags GetVKAccessMask(u32 Layouts, u32 StageFlags, u32 QueueFlags)
 {
     VkAccessFlags Result = 0;
 
-	VkPipelineStageFlags Stage = GetVKPipelineStage(StageFlags);
+	VkPipelineStageFlags Stage = GetVKPipelineStage(StageFlags, QueueFlags);
+
     if (Layouts & AF_IndirectCommandRead && IsVKAspectSupported(Stage, VK_ACCESS_INDIRECT_COMMAND_READ_BIT)) 
 	{
         Result |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;

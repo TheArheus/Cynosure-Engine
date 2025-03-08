@@ -44,8 +44,6 @@ Reset()
 	CreateObject();
 }
 
-
-
 void directx12_command_queue::
 Init(renderer_backend* Backend, D3D12_COMMAND_LIST_TYPE NewType)
 {
@@ -94,6 +92,7 @@ AllocateCommandList(command_list_level Level)
 {
 	directx12_command_list* NewCommandList = new directx12_command_list;
 	NewCommandList->Gfx = static_cast<directx12_backend*>(Gfx);
+	NewCommandList->Type = Type;
 	NewCommandList->Device = Device;
 	NewCommandList->CommandAlloc = CommandAlloc.Get();
 
@@ -114,14 +113,14 @@ Remove(command_list* CommandList)
 }
 
 void directx12_command_queue::
-Execute(const std::vector<gpu_sync*>& Syncs)
+Execute(const std::vector<gpu_sync*>& Syncs, bool PlaceEndBarriers)
 {
 	Gfx->Wait(Syncs);
 
 	std::vector<ID3D12CommandList*> CommitLists;
 	for(command_list* CommandList : CommandLists)
 	{
-		CommandList->PlaceEndOfFrameBarriers();
+		if(PlaceEndBarriers) CommandList->PlaceEndOfFrameBarriers();
 		CommandList->IsRunning = false;
 
 		directx12_command_list* Cmd = static_cast<directx12_command_list*>(CommandList);
@@ -140,14 +139,14 @@ Execute(const std::vector<gpu_sync*>& Syncs)
 }
 
 void directx12_command_queue::
-Present(const std::vector<gpu_sync*>& Syncs)
+Present(const std::vector<gpu_sync*>& Syncs, bool PlaceEndBarriers)
 {
 	Gfx->Wait(Syncs);
 
 	std::vector<ID3D12CommandList*> CommitLists;
 	for(command_list* CommandList : CommandLists)
 	{
-		CommandList->PlaceEndOfFrameBarriers();
+		if(PlaceEndBarriers) CommandList->PlaceEndOfFrameBarriers();
 		CommandList->IsRunning = false;
 
 		directx12_command_list* Cmd = static_cast<directx12_command_list*>(CommandList);
@@ -168,13 +167,13 @@ Present(const std::vector<gpu_sync*>& Syncs)
 }
 
 void directx12_command_queue::
-Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs)
+Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs, bool PlaceEndBarriers)
 {
 	Gfx->Wait(Syncs);
 
 	ID3D12CommandList* CmdHandle = static_cast<ID3D12CommandList*>(static_cast<directx12_command_list*>(CommandList)->Handle);
 
-	CommandList->PlaceEndOfFrameBarriers();
+	if(PlaceEndBarriers) CommandList->PlaceEndOfFrameBarriers();
 	static_cast<directx12_command_list*>(CommandList)->Handle->Close();
 	Handle->ExecuteCommandLists(1, &CmdHandle);
 
@@ -188,13 +187,13 @@ Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs)
 }
 
 void directx12_command_queue::
-Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs)
+Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs, bool PlaceEndBarriers)
 {
 	Gfx->Wait(Syncs);
 
 	ID3D12CommandList* CmdHandle = static_cast<ID3D12CommandList*>(static_cast<directx12_command_list*>(CommandList)->Handle);
 
-	CommandList->PlaceEndOfFrameBarriers();
+	if(PlaceEndBarriers) CommandList->PlaceEndOfFrameBarriers();
 	static_cast<directx12_command_list*>(CommandList)->Handle->Close();
 	Handle->ExecuteCommandLists(1, &CmdHandle);
 

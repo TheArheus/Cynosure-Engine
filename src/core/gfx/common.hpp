@@ -17,10 +17,12 @@ enum class shader_stage
 	all,
 };
 
-enum class pass_type
+enum pass_type
 {
-	raster,
-	compute,
+	raster  = 0,
+	compute = 1,
+
+	pass_type_count
 };
 
 enum class queue_type

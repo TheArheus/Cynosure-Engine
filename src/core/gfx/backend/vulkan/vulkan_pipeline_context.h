@@ -77,6 +77,7 @@ struct vulkan_command_list : public command_list
 
 	VkDevice Device;
 	u32 LayerCount = 1;
+	u32 QueueFlags = 0;
 	bool SwapChainWillBeUsed = false;
 
 	VkPipelineStageFlags CurrentStage = 0;

@@ -142,11 +142,10 @@ vulkan_backend(GLFWwindow* Handle)
 	std::vector<VkQueueFamilyProperties> QueueFamilyProperties(QueueFamilyPropertiesCount);
 	vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &QueueFamilyPropertiesCount, QueueFamilyProperties.data());
 
-	u32 PrimaryQueueIdx = 0;
-	u32 SecondaryQueueIdx = 0;
-	u32 TransferQueueIdx = 0;
+	u32 PrimaryQueueIdx = 0, PrimaryQueueFlags = 0;
+	u32 SecondaryQueueIdx = 0, SecondaryQueueFlags = 0;
+	u32 TransferQueueIdx = 0, TransferQueueFlags = 0;
 
-	std::vector<u32> FamilyIndices;
 	for(u32 Idx = 0; Idx < QueueFamilyProperties.size(); ++Idx)
 	{
 		VkQueueFamilyProperties Property = QueueFamilyProperties[Idx];
@@ -154,16 +153,19 @@ vulkan_backend(GLFWwindow* Handle)
 		{ 
 			FamilyIndices.push_back(Idx); 
 			PrimaryQueueIdx = Idx;
+			PrimaryQueueFlags = Property.queueFlags;
 		}
 		if((Property.queueFlags & (VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_COMPUTE_BIT|VK_QUEUE_TRANSFER_BIT))
 		{
 			if(Idx != PrimaryQueueIdx) FamilyIndices.push_back(Idx);
 			SecondaryQueueIdx = Idx;
+			SecondaryQueueFlags = Property.queueFlags;
 		}
 		if((Property.queueFlags & (VK_QUEUE_TRANSFER_BIT)) == (VK_QUEUE_TRANSFER_BIT))
 		{
 			if(Idx != SecondaryQueueIdx && Idx != PrimaryQueueIdx) FamilyIndices.push_back(Idx);
 			TransferQueueIdx = Idx;
+			TransferQueueFlags = Property.queueFlags;
 		}
 	}
 
@@ -325,10 +327,10 @@ vulkan_backend(GLFWwindow* Handle)
 	SwapchainImages.resize(SwapchainImageCount);
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, SwapchainImages.data());
 
-	PrimaryQueue = new vulkan_command_queue(this, PrimaryQueueIdx);
+	PrimaryQueue = new vulkan_command_queue(this, PrimaryQueueIdx, PrimaryQueueFlags);
 	for(u32 QueueIdx = 0; QueueIdx < QueueFamilyProperties[SecondaryQueueIdx].queueCount; ++QueueIdx)
 	{
-		SecondaryQueues.push_back(new vulkan_command_queue(this, SecondaryQueueIdx, QueueIdx));
+		SecondaryQueues.push_back(new vulkan_command_queue(this, SecondaryQueueIdx, SecondaryQueueFlags, QueueIdx));
 	}
 
 	{
@@ -502,14 +504,21 @@ GetCurrentBackBufferIndex()
 void vulkan_backend::
 Wait(const std::vector<gpu_sync*>& Syncs)
 {
+	if(!Syncs.size()) return;
 	std::vector<u64> Values;
 	std::vector<VkSemaphore> Semaphores;
 	for(gpu_sync* Sync : Syncs)
 	{
-		Values.push_back(Sync->CurrentWaitValue);
-		Semaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		u64 SignaledValue = 0;
+		vkGetSemaphoreCounterValue(Device, static_cast<vulkan_gpu_sync*>(Sync)->Handle, &SignaledValue);
+		if(SignaledValue < Sync->CurrentWaitValue)
+		{
+			Values.push_back(Sync->CurrentWaitValue);
+			Semaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		}
 	}
 
+	if(!Semaphores.size()) return;
 	VkSemaphoreWaitInfo WaitInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
 	//WaitInfo.flags = VK_SEMAPHORE_WAIT_ANY_BIT;
 	WaitInfo.semaphoreCount = Semaphores.size();

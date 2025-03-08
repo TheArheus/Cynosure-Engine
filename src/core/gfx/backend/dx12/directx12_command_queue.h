@@ -26,11 +26,11 @@ public:
 	command_list* AllocateCommandList(command_list_level Level = command_list_level::primary) override;
 	void Remove(command_list* CommandList) override;
 
-	void Execute(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
-	void Present(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
+	void Execute(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>(), bool PlaceEndBarriers = true) override;
+	void Present(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>(), bool PlaceEndBarriers = true) override;
 
-	void Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
-	void Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
+	void Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>(), bool PlaceEndBarriers = true) override;
+	void Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>(), bool PlaceEndBarriers = true) override;
 
 	void ExecuteAndRemove(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) override;
 };

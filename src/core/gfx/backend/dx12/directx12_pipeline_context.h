@@ -73,6 +73,8 @@ struct directx12_command_list : public command_list
 	std::vector<texture*> ColorAttachmentsToBind;
 	texture* DepthStencilAttachmentToBind;
 
+	D3D12_COMMAND_LIST_TYPE Type;
+
 	vec4 ColorClear;
 	vec2 DepthClear;
 };

@@ -124,6 +124,9 @@ struct vulkan_buffer : public buffer
 		//CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		CreateInfo.size = Size;
 
+		CreateInfo.queueFamilyIndexCount = Gfx->FamilyIndices.size();
+		CreateInfo.pQueueFamilyIndices = Gfx->FamilyIndices.data();
+
 		if(Flags & RF_VertexBuffer)
 			CreateInfo.usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 		if(Flags & RF_IndexBuffer)
@@ -290,6 +293,9 @@ struct vulkan_texture : public texture
 		CreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
 		//CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		CreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		CreateInfo.queueFamilyIndexCount = Gfx->FamilyIndices.size();
+		CreateInfo.pQueueFamilyIndices = Gfx->FamilyIndices.data();
 
 		if(Info.Usage & image_flags::TF_CubeMap)
 			CreateInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;

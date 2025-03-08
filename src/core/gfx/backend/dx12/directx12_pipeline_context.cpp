@@ -136,8 +136,8 @@ PlaceEndOfFrameBarriers()
 		{
 			directx12_buffer* Resource = static_cast<directx12_buffer*>(*std::next(BuffersToCommon.begin(), Idx));
 
-			if(GetDXBufferLayout(Resource->CurrentLayout, Resource->PrevShader) == D3D12_RESOURCE_STATE_COMMON) continue;
-			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXBufferLayout(Resource->CurrentLayout, Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
+			if(GetDXBufferLayout(Type, Resource->CurrentLayout, Resource->PrevShader) == D3D12_RESOURCE_STATE_COMMON) continue;
+			Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXBufferLayout(Type, Resource->CurrentLayout, Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
 
 			Resource->CurrentLayout = 0;
 			Resource->PrevShader = 0;
@@ -156,16 +156,16 @@ PlaceEndOfFrameBarriers()
 
 			if(AreAllSubresourcesInSameState)
 			{
-				if(GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader) != D3D12_RESOURCE_STATE_COMMON)
-				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
+				if(GetDXImageLayout(Type, Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader) != D3D12_RESOURCE_STATE_COMMON)
+				Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Type, Resource->CurrentState[0], Resource->CurrentLayout[0], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON));
 
 			}
 			else
 			{
 				for(u32 MipIdx = 0; MipIdx < Resource->Info.MipLevels; ++MipIdx)
 				{
-					if(GetDXImageLayout(Resource->CurrentState[MipIdx], Resource->CurrentLayout[MipIdx], Resource->PrevShader) != D3D12_RESOURCE_STATE_COMMON)
-					Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Resource->CurrentState[MipIdx], Resource->CurrentLayout[MipIdx], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON, MipIdx));
+					if(GetDXImageLayout(Type, Resource->CurrentState[MipIdx], Resource->CurrentLayout[MipIdx], Resource->PrevShader) != D3D12_RESOURCE_STATE_COMMON)
+					Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Resource->Handle.Get(), GetDXImageLayout(Type, Resource->CurrentState[MipIdx], Resource->CurrentLayout[MipIdx], Resource->PrevShader), D3D12_RESOURCE_STATE_COMMON, MipIdx));
 				}
 			}
 
@@ -393,7 +393,7 @@ EmplaceColorTarget(texture* RenderTexture)
 
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers = 
 	{
-		CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), GetDXImageLayout(Texture->CurrentState[0], Texture->CurrentLayout[0]), D3D12_RESOURCE_STATE_COPY_SOURCE),
+		CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), GetDXImageLayout(Type, Texture->CurrentState[0], Texture->CurrentLayout[0]), D3D12_RESOURCE_STATE_COPY_SOURCE),
 		CD3DX12_RESOURCE_BARRIER::Transition(Gfx->SwapchainImages[Gfx->BackBufferIndex].Get(), Gfx->SwapchainCurrentState[Gfx->BackBufferIndex], D3D12_RESOURCE_STATE_COPY_DEST)
 	};
 
@@ -686,14 +686,14 @@ SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 		BuffersToCommon.insert(Buffer);
 
 		u32 ResourceLayoutPrev = Buffer->CurrentLayout;
-		u32 ResourceLayoutNext = Data.Aspect;
+		u32 ResourceLayoutNext = Data.Layout;
 		u32 BufferPrevShader = Buffer->PrevShader;
 		u32 BufferNextShader = Data.Shader;
 		Buffer->PrevShader = BufferNextShader;
 		Buffer->CurrentLayout = ResourceLayoutNext;
 
-		D3D12_RESOURCE_STATES CurrState = GetDXBufferLayout(ResourceLayoutPrev, BufferPrevShader);
-		D3D12_RESOURCE_STATES NextState = GetDXBufferLayout(ResourceLayoutNext, BufferNextShader);
+		D3D12_RESOURCE_STATES CurrState = GetDXBufferLayout(Type, ResourceLayoutPrev, BufferPrevShader);
+		D3D12_RESOURCE_STATES NextState = GetDXBufferLayout(Type, ResourceLayoutNext, BufferNextShader);
 
 		if(CurrState != NextState)
 		{
@@ -726,7 +726,12 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 		directx12_texture* Texture = static_cast<directx12_texture*>(Data.Texture);
 		TexturesToCommon.insert(Texture);
 
-		u32 ResourceLayoutNext = Data.Aspect;
+		if(Texture->Name == "VoxelGridTarget")
+		{
+			int f = 5;
+		}
+
+		u32 ResourceLayoutNext = Data.Layout;
 		barrier_state ResourceStateNext = Data.State;
 		u32 TexturePrevShader = Texture->PrevShader;
 		u32 TextureNextShader = Data.Shader;
@@ -744,8 +749,8 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 
 			if(AreAllSubresourcesInSameState)
 			{
-				D3D12_RESOURCE_STATES CurrState = GetDXImageLayout(Texture->CurrentState[0], Texture->CurrentLayout[0], TexturePrevShader);
-				D3D12_RESOURCE_STATES NextState = GetDXImageLayout(ResourceStateNext, ResourceLayoutNext, TextureNextShader);
+				D3D12_RESOURCE_STATES CurrState = GetDXImageLayout(Type, Texture->CurrentState[0], Texture->CurrentLayout[0], TexturePrevShader);
+				D3D12_RESOURCE_STATES NextState = GetDXImageLayout(Type, ResourceStateNext, ResourceLayoutNext, TextureNextShader);
 
 				if(CurrState != NextState)
 					TransitionBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), CurrState, NextState, MipToUse));
@@ -756,8 +761,8 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 			{
 				for(u32 MipIdx = 0; MipIdx < Texture->Info.MipLevels; ++MipIdx)
 				{
-					D3D12_RESOURCE_STATES CurrState = GetDXImageLayout(Texture->CurrentState[MipIdx], Texture->CurrentLayout[MipIdx], TexturePrevShader);
-					D3D12_RESOURCE_STATES NextState = GetDXImageLayout(ResourceStateNext, ResourceLayoutNext, TextureNextShader);
+					D3D12_RESOURCE_STATES CurrState = GetDXImageLayout(Type, Texture->CurrentState[MipIdx], Texture->CurrentLayout[MipIdx], TexturePrevShader);
+					D3D12_RESOURCE_STATES NextState = GetDXImageLayout(Type, ResourceStateNext, ResourceLayoutNext, TextureNextShader);
 
 					if(CurrState != NextState)
 						TransitionBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), CurrState, NextState, MipIdx));
@@ -771,8 +776,8 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 		}
 		else
 		{
-			D3D12_RESOURCE_STATES CurrState = GetDXImageLayout(Texture->CurrentState[MipToUse], Texture->CurrentLayout[MipToUse], TexturePrevShader);
-			D3D12_RESOURCE_STATES NextState = GetDXImageLayout(ResourceStateNext, ResourceLayoutNext, TextureNextShader);
+			D3D12_RESOURCE_STATES CurrState = GetDXImageLayout(Type, Texture->CurrentState[MipToUse], Texture->CurrentLayout[MipToUse], TexturePrevShader);
+			D3D12_RESOURCE_STATES NextState = GetDXImageLayout(Type, ResourceStateNext, ResourceLayoutNext, TextureNextShader);
 
 			if(CurrState != NextState)
 				TransitionBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Texture->Handle.Get(), CurrState, NextState, MipToUse));
@@ -796,8 +801,8 @@ DebugGuiBegin(texture* RenderTarget)
 	directx12_texture* Clr = static_cast<directx12_texture*>(RenderTarget);
 
 	std::vector<CD3DX12_RESOURCE_BARRIER> Barriers;
-	if(GetDXImageLayout(Clr->CurrentState[0], Clr->CurrentLayout[0]) != D3D12_RESOURCE_STATE_RENDER_TARGET) 
-		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Clr->Handle.Get(), GetDXImageLayout(Clr->CurrentState[0], Clr->CurrentLayout[0]), D3D12_RESOURCE_STATE_RENDER_TARGET));
+	if(GetDXImageLayout(Type, Clr->CurrentState[0], Clr->CurrentLayout[0]) != D3D12_RESOURCE_STATE_RENDER_TARGET) 
+		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(Clr->Handle.Get(), GetDXImageLayout(Type, Clr->CurrentState[0], Clr->CurrentLayout[0]), D3D12_RESOURCE_STATE_RENDER_TARGET));
 	else if(Clr->Info.Usage & TF_Storage)
 		Barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(Clr->Handle.Get()));
 

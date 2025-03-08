@@ -220,10 +220,12 @@ GetCurrentBackBufferIndex()
 void directx12_backend::
 Wait(const std::vector<gpu_sync*>& Syncs)
 {
+	if(!Syncs.size()) return;
 	for(gpu_sync* Sync : Syncs)
 	{
 		directx12_gpu_sync* D3D12Sync = static_cast<directx12_gpu_sync*>(Sync);
-		if(D3D12Sync->Handle->GetCompletedValue() < D3D12Sync->CurrentWaitValue)
+		u64 SignalValue = D3D12Sync->Handle->GetCompletedValue();
+		if(SignalValue < D3D12Sync->CurrentWaitValue)
 		{
 			D3D12Sync->Handle->SetEventOnCompletion(D3D12Sync->CurrentWaitValue, D3D12Sync->FenceEvent);
 			WaitForSingleObject(D3D12Sync->FenceEvent, INFINITE);

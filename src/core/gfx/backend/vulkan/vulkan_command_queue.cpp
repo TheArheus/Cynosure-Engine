@@ -52,18 +52,47 @@ Signal(command_queue* QueueSignal)
 {
 	//if(CurrentWaitValue > UINT64_MAX - 1) Reset();
 	CurrentWaitValue++;
+
+	// TODO: Better synchronization so that it works like in d3d12
+#if 1
 	VkSemaphoreSignalInfo SignalInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO};
 	SignalInfo.semaphore = Handle;
 	SignalInfo.value     = CurrentWaitValue;
 	VK_CHECK(vkSignalSemaphoreKHR(Device, &SignalInfo));
+#else
+	std::vector<u64> SignalValues{CurrentWaitValue};
+	std::vector<VkSemaphore> SignalSemaphores{Handle};
+	std::vector<VkPipelineStageFlags> FinalPipelineStageFlags;
+	std::vector<VkCommandBuffer> ListsToCommit;
+
+	for(command_list* CommandList : QueueSignal->CommandLists)
+	{
+		ListsToCommit.push_back(static_cast<vulkan_command_list*>(CommandList)->Handle);
+		FinalPipelineStageFlags.push_back(static_cast<vulkan_command_list*>(CommandList)->CurrentStage);
+	}
+
+	VkTimelineSemaphoreSubmitInfo TimelineSubmitInfo = {VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
+	TimelineSubmitInfo.signalSemaphoreValueCount = SignalValues.size();
+	TimelineSubmitInfo.pSignalSemaphoreValues = SignalValues.data();
+
+	VkSubmitInfo SubmitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+	SubmitInfo.pNext = &TimelineSubmitInfo;
+	SubmitInfo.commandBufferCount = ListsToCommit.size();
+	SubmitInfo.pCommandBuffers = ListsToCommit.data();
+	SubmitInfo.pWaitDstStageMask = FinalPipelineStageFlags.data();
+	SubmitInfo.signalSemaphoreCount = SignalSemaphores.size();
+	SubmitInfo.pSignalSemaphores = SignalSemaphores.data();
+	VK_CHECK(vkQueueSubmit(static_cast<vulkan_command_queue*>(QueueSignal)->Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
+#endif
 }
 
 
 
 void vulkan_command_queue::
-Init(renderer_backend* Backend, u32 NewFamilyIndex, u32 QueueIndex)
+Init(renderer_backend* Backend, u32 NewFamilyIndex, u32 NewFlags, u32 QueueIndex)
 {
 	Gfx = Backend;
+	Flags = NewFlags;
 	Device = static_cast<vulkan_backend*>(Backend)->Device;
 
 	VkCommandPoolCreateInfo CommandPoolCreateInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -117,6 +146,7 @@ AllocateCommandList(command_list_level Level)
 	vulkan_command_list* NewCommandList = new vulkan_command_list;
 	NewCommandList->Gfx = static_cast<vulkan_backend*>(Gfx);
 	NewCommandList->Device = Device;
+	NewCommandList->QueueFlags = Flags;
 
 	VkCommandBufferAllocateInfo CommandBufferAllocateInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
 	CommandBufferAllocateInfo.commandBufferCount = 1;
@@ -144,112 +174,13 @@ Remove(command_list* CommandList)
 }
 
 void vulkan_command_queue::
-Execute(const std::vector<gpu_sync*>& Syncs)
-{
-	std::vector<VkCommandBuffer> CommitLists;
-	for(command_list* CommandList : CommandLists)
-	{
-		CommandList->PlaceEndOfFrameBarriers();
-		CommandList->IsRunning = false;
-
-		vulkan_command_list* Cmd = static_cast<vulkan_command_list*>(CommandList);
-		VK_CHECK(vkEndCommandBuffer(Cmd->Handle));
-		CommitLists.push_back(Cmd->Handle);
-
-		CommandList->PrevContext = nullptr;
-		CommandList->CurrContext = nullptr;
-	}
-
-	std::vector<u64> WaitValues;
-	std::vector<u64> SignalValues;
-	std::vector<VkSemaphore> WaitSemaphores;
-	std::vector<VkSemaphore> SignalSemaphores;
-	for(gpu_sync* Sync : Syncs)
-	{
-		WaitValues.push_back(Sync->CurrentWaitValue);
-		SignalValues.push_back(++Sync->CurrentWaitValue);
-		WaitSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
-	}
-	SignalSemaphores = WaitSemaphores;
-	WaitSemaphores.push_back(AcquireSemaphore);
-	SignalSemaphores.push_back(ReleaseSemaphore);
-
-	VkTimelineSemaphoreSubmitInfo TimelineSubmitInfo = {VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
-	TimelineSubmitInfo.waitSemaphoreValueCount = WaitValues.size();
-	TimelineSubmitInfo.pWaitSemaphoreValues = WaitValues.data();
-	TimelineSubmitInfo.signalSemaphoreValueCount = SignalValues.size();
-	TimelineSubmitInfo.pSignalSemaphoreValues = SignalValues.data();
-
-	VkSubmitInfo SubmitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
-	SubmitInfo.pNext = &TimelineSubmitInfo;
-	SubmitInfo.commandBufferCount = CommitLists.size();
-	SubmitInfo.pCommandBuffers = CommitLists.data();
-	if(Syncs.size())
-	{
-		SubmitInfo.waitSemaphoreCount = WaitSemaphores.size();
-		SubmitInfo.pWaitSemaphores = WaitSemaphores.data();
-		SubmitInfo.signalSemaphoreCount = SignalSemaphores.size();
-		SubmitInfo.pSignalSemaphores = SignalSemaphores.data();
-	}
-	VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));	
-	if(!Syncs.size()) vkQueueWaitIdle(Handle);
-}
-
-void vulkan_command_queue::
-Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs)
-{
-	CommandList->PlaceEndOfFrameBarriers();
-	CommandList->IsRunning = false;
-
-	VkCommandBuffer Cmd = static_cast<vulkan_command_list*>(CommandList)->Handle;
-	VK_CHECK(vkEndCommandBuffer(Cmd));
-
-	std::vector<u64> WaitValues;
-	std::vector<u64> SignalValues;
-	std::vector<VkSemaphore> WaitSemaphores;
-	std::vector<VkSemaphore> SignalSemaphores;
-	for(gpu_sync* Sync : Syncs)
-	{
-		WaitValues.push_back(Sync->CurrentWaitValue);
-		SignalValues.push_back(++Sync->CurrentWaitValue);
-		WaitSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
-	}
-	SignalSemaphores = WaitSemaphores;
-	WaitSemaphores.push_back(AcquireSemaphore);
-	SignalSemaphores.push_back(ReleaseSemaphore);
-
-	VkTimelineSemaphoreSubmitInfo TimelineSubmitInfo = {VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
-	TimelineSubmitInfo.waitSemaphoreValueCount = WaitValues.size();
-	TimelineSubmitInfo.pWaitSemaphoreValues = WaitValues.data();
-	TimelineSubmitInfo.signalSemaphoreValueCount = SignalValues.size();
-	TimelineSubmitInfo.pSignalSemaphoreValues = SignalValues.data();
-
-	VkSubmitInfo SubmitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
-	SubmitInfo.pNext = &TimelineSubmitInfo;
-	SubmitInfo.commandBufferCount = 1;
-	SubmitInfo.pCommandBuffers = &Cmd;
-	if(Syncs.size())
-	{
-		SubmitInfo.waitSemaphoreCount = WaitSemaphores.size();
-		SubmitInfo.pWaitSemaphores = WaitSemaphores.data();
-		SubmitInfo.signalSemaphoreCount = SignalSemaphores.size();
-		SubmitInfo.pSignalSemaphores = SignalSemaphores.data();
-	}
-	VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
-	if(!Syncs.size()) vkQueueWaitIdle(Handle);
-
-	CommandList->PrevContext = nullptr;
-	CommandList->CurrContext = nullptr;
-}
-
-void vulkan_command_queue::
-Present(const std::vector<gpu_sync*>& Syncs)
+Execute(const std::vector<gpu_sync*>& Syncs, bool PlaceEndBarriers)
 {
 	VkPipelineStageFlags SubmitStageFlag = 0;
 	std::vector<VkCommandBuffer> CommitLists;
 	for(command_list* CommandList : CommandLists)
 	{
-		CommandList->PlaceEndOfFrameBarriers();
+		if(PlaceEndBarriers) CommandList->PlaceEndOfFrameBarriers();
 		CommandList->IsRunning = false;
 
 		vulkan_command_list* Cmd = static_cast<vulkan_command_list*>(CommandList);
@@ -268,10 +199,120 @@ Present(const std::vector<gpu_sync*>& Syncs)
 	std::vector<VkPipelineStageFlags> FinalPipelineStageFlags;
 	for(gpu_sync* Sync : Syncs)
 	{
-		FinalPipelineStageFlags.push_back(SubmitStageFlag);
+		u64 SignaledValue = 0;
+		vkGetSemaphoreCounterValue(Device, static_cast<vulkan_gpu_sync*>(Sync)->Handle, &SignaledValue);
 		WaitValues.push_back(Sync->CurrentWaitValue);
-		SignalValues.push_back(++Sync->CurrentWaitValue);
 		WaitSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		SignalValues.push_back(++Sync->CurrentWaitValue);
+		SignalSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		FinalPipelineStageFlags.push_back(SubmitStageFlag);
+	}
+
+	VkTimelineSemaphoreSubmitInfo TimelineSubmitInfo = {VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
+	TimelineSubmitInfo.waitSemaphoreValueCount = WaitValues.size();
+	TimelineSubmitInfo.pWaitSemaphoreValues = WaitValues.data();
+	TimelineSubmitInfo.signalSemaphoreValueCount = SignalValues.size();
+	TimelineSubmitInfo.pSignalSemaphoreValues = SignalValues.data();
+
+	VkSubmitInfo SubmitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+	SubmitInfo.pNext = &TimelineSubmitInfo;
+	SubmitInfo.commandBufferCount = CommitLists.size();
+	SubmitInfo.pCommandBuffers = CommitLists.data();
+	SubmitInfo.pWaitDstStageMask = FinalPipelineStageFlags.data();
+	if(Syncs.size())
+	{
+		SubmitInfo.waitSemaphoreCount = WaitSemaphores.size();
+		SubmitInfo.pWaitSemaphores = WaitSemaphores.data();
+		SubmitInfo.signalSemaphoreCount = SignalSemaphores.size();
+		SubmitInfo.pSignalSemaphores = SignalSemaphores.data();
+	}
+	VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));	
+	if(!Syncs.size()) vkQueueWaitIdle(Handle);
+}
+
+void vulkan_command_queue::
+Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs, bool PlaceEndBarriers)
+{
+	if(PlaceEndBarriers) CommandList->PlaceEndOfFrameBarriers();
+	CommandList->IsRunning = false;
+
+	VkCommandBuffer Cmd = static_cast<vulkan_command_list*>(CommandList)->Handle;
+	VK_CHECK(vkEndCommandBuffer(Cmd));
+
+	std::vector<u64> WaitValues;
+	std::vector<u64> SignalValues;
+	std::vector<VkSemaphore> WaitSemaphores;
+	std::vector<VkSemaphore> SignalSemaphores;
+	std::vector<VkPipelineStageFlags> FinalPipelineStageFlags;
+	for(gpu_sync* Sync : Syncs)
+	{
+		u64 SignaledValue = 0;
+		vkGetSemaphoreCounterValue(Device, static_cast<vulkan_gpu_sync*>(Sync)->Handle, &SignaledValue);
+		WaitValues.push_back(Sync->CurrentWaitValue);
+		WaitSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		SignalValues.push_back(++Sync->CurrentWaitValue);
+		SignalSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		FinalPipelineStageFlags.push_back(static_cast<vulkan_command_list*>(CommandList)->CurrentStage);
+	}
+
+	VkTimelineSemaphoreSubmitInfo TimelineSubmitInfo = {VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
+	TimelineSubmitInfo.waitSemaphoreValueCount = WaitValues.size();
+	TimelineSubmitInfo.pWaitSemaphoreValues = WaitValues.data();
+	TimelineSubmitInfo.signalSemaphoreValueCount = SignalValues.size();
+	TimelineSubmitInfo.pSignalSemaphoreValues = SignalValues.data();
+
+	VkSubmitInfo SubmitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+	SubmitInfo.pNext = &TimelineSubmitInfo;
+	SubmitInfo.commandBufferCount = 1;
+	SubmitInfo.pCommandBuffers = &Cmd;
+	SubmitInfo.pWaitDstStageMask = FinalPipelineStageFlags.data();
+	if(Syncs.size())
+	{
+		SubmitInfo.waitSemaphoreCount = WaitSemaphores.size();
+		SubmitInfo.pWaitSemaphores = WaitSemaphores.data();
+		SubmitInfo.signalSemaphoreCount = SignalSemaphores.size();
+		SubmitInfo.pSignalSemaphores = SignalSemaphores.data();
+	}
+	VK_CHECK(vkQueueSubmit(Handle, 1, &SubmitInfo, VK_NULL_HANDLE));
+	if(!Syncs.size()) vkQueueWaitIdle(Handle);
+
+	CommandList->PrevContext = nullptr;
+	CommandList->CurrContext = nullptr;
+}
+
+void vulkan_command_queue::
+Present(const std::vector<gpu_sync*>& Syncs, bool PlaceEndBarriers)
+{
+	VkPipelineStageFlags SubmitStageFlag = 0;
+	std::vector<VkCommandBuffer> CommitLists;
+	for(command_list* CommandList : CommandLists)
+	{
+		if(PlaceEndBarriers) CommandList->PlaceEndOfFrameBarriers();
+		CommandList->IsRunning = false;
+
+		vulkan_command_list* Cmd = static_cast<vulkan_command_list*>(CommandList);
+		VK_CHECK(vkEndCommandBuffer(Cmd->Handle));
+		CommitLists.push_back(Cmd->Handle);
+
+		SubmitStageFlag |= Cmd->CurrentStage;
+		CommandList->PrevContext = nullptr;
+		CommandList->CurrContext = nullptr;
+	}
+
+	std::vector<u64> WaitValues;
+	std::vector<u64> SignalValues;
+	std::vector<VkSemaphore> WaitSemaphores;
+	std::vector<VkSemaphore> SignalSemaphores;
+	std::vector<VkPipelineStageFlags> FinalPipelineStageFlags;
+	for(gpu_sync* Sync : Syncs)
+	{
+		u64 SignaledValue = 0;
+		vkGetSemaphoreCounterValue(Device, static_cast<vulkan_gpu_sync*>(Sync)->Handle, &SignaledValue);
+		WaitValues.push_back(Sync->CurrentWaitValue);
+		WaitSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		SignalValues.push_back(++Sync->CurrentWaitValue);
+		SignalSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		FinalPipelineStageFlags.push_back(SubmitStageFlag);
 	}
 	SignalSemaphores = WaitSemaphores;
 	WaitValues.push_back(0);
@@ -306,9 +347,9 @@ Present(const std::vector<gpu_sync*>& Syncs)
 }
 
 void vulkan_command_queue::
-Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs)
+Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs, bool PlaceEndBarriers)
 {
-	CommandList->PlaceEndOfFrameBarriers();
+	if(PlaceEndBarriers) CommandList->PlaceEndOfFrameBarriers();
 	CommandList->IsRunning = false;
 
 	VkCommandBuffer Cmd = static_cast<vulkan_command_list*>(CommandList)->Handle;
@@ -321,17 +362,20 @@ Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs)
 	std::vector<VkPipelineStageFlags> FinalPipelineStageFlags;
 	for(gpu_sync* Sync : Syncs)
 	{
-		FinalPipelineStageFlags.push_back(static_cast<vulkan_command_list*>(CommandList)->CurrentStage);
+		u64 SignaledValue = 0;
+		vkGetSemaphoreCounterValue(Device, static_cast<vulkan_gpu_sync*>(Sync)->Handle, &SignaledValue);
 		WaitValues.push_back(Sync->CurrentWaitValue);
-		SignalValues.push_back(++Sync->CurrentWaitValue);
 		WaitSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		SignalValues.push_back(++Sync->CurrentWaitValue);
+		SignalSemaphores.push_back(static_cast<vulkan_gpu_sync*>(Sync)->Handle);
+		FinalPipelineStageFlags.push_back(static_cast<vulkan_command_list*>(CommandList)->CurrentStage);
 	}
 	SignalSemaphores = WaitSemaphores;
 	WaitValues.push_back(0);
 	SignalValues.push_back(0);
-	FinalPipelineStageFlags.push_back(static_cast<vulkan_command_list*>(CommandList)->CurrentStage);
 	WaitSemaphores.push_back(AcquireSemaphore);
 	SignalSemaphores.push_back(ReleaseSemaphore);
+	FinalPipelineStageFlags.push_back(static_cast<vulkan_command_list*>(CommandList)->CurrentStage);
 
 	VkTimelineSemaphoreSubmitInfo TimelineSubmitInfo = {VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
 	TimelineSubmitInfo.waitSemaphoreValueCount = WaitValues.size();

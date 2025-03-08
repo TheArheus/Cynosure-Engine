@@ -59,6 +59,7 @@ struct vulkan_backend : public renderer_backend
 
 	VkSampleCountFlagBits MsaaQuality = VK_SAMPLE_COUNT_1_BIT;
 
+	std::vector<u32> FamilyIndices;
 	std::vector<VkImage> SwapchainImages;
 	std::vector<VkImageView> SwapchainImageViews;
 

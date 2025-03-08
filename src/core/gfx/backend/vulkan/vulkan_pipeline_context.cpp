@@ -203,7 +203,7 @@ PlaceEndOfFrameBarriers()
 {
 	std::vector<VkImageMemoryBarrier> ImageEndRenderBarriers = 
 	{
-		CreateImageBarrier(Gfx->SwapchainImages[Gfx->BackBufferIndex], GetVKAccessMask(AF_TransferWrite, PSF_Transfer), 0, GetVKLayout(barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+		CreateImageBarrier(Gfx->SwapchainImages[Gfx->BackBufferIndex], GetVKAccessMask(AF_TransferWrite, PSF_Transfer, QueueFlags), 0, GetVKLayout(barrier_state::transfer_dst), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
 	};
 
 	std::vector<buffer_barrier> AttachmentBufferBarriers;
@@ -233,7 +233,7 @@ PlaceEndOfFrameBarriers()
 #endif
 	}
 
-	if(SwapChainWillBeUsed) ImageBarrier(Handle, GetVKPipelineStage(PSF_Transfer), GetVKPipelineStage(PSF_BottomOfPipe), ImageEndRenderBarriers);
+	if(SwapChainWillBeUsed) ImageBarrier(Handle, GetVKPipelineStage(PSF_Transfer, QueueFlags), GetVKPipelineStage(PSF_BottomOfPipe, QueueFlags), ImageEndRenderBarriers);
 #if USE_BOTTOM_OF_PIPE_BARRIERS
 	SetImageBarriers(AttachmentImageBarriers);
 	SetBufferBarriers(AttachmentBufferBarriers);
@@ -252,10 +252,10 @@ EmplaceColorTarget(texture* RenderTexture)
 
 	std::vector<VkImageMemoryBarrier> ImageCopyBarriers = 
 	{
-		CreateImageBarrier(Texture->Handle, GetVKAccessMask(Texture->CurrentLayout[0], Texture->PrevShader), GetVKAccessMask(AF_TransferRead, PSF_Transfer), GetVKLayout(Texture->CurrentState[0]), GetVKLayout(barrier_state::transfer_src)),
-		CreateImageBarrier(Gfx->SwapchainImages[Gfx->BackBufferIndex], 0, GetVKAccessMask(AF_TransferWrite, PSF_Transfer), GetVKLayout(barrier_state::undefined), GetVKLayout(barrier_state::transfer_dst)),
+		CreateImageBarrier(Texture->Handle, GetVKAccessMask(Texture->CurrentLayout[0], Texture->PrevShader, QueueFlags), GetVKAccessMask(AF_TransferRead, PSF_Transfer, QueueFlags), GetVKLayout(Texture->CurrentState[0]), GetVKLayout(barrier_state::transfer_src)),
+		CreateImageBarrier(Gfx->SwapchainImages[Gfx->BackBufferIndex], 0, GetVKAccessMask(AF_TransferWrite, PSF_Transfer, QueueFlags), GetVKLayout(barrier_state::undefined), GetVKLayout(barrier_state::transfer_dst)),
 	};
-	ImageBarrier(Handle, GetVKPipelineStage(Texture->PrevShader), GetVKPipelineStage(PSF_Transfer), ImageCopyBarriers);
+	ImageBarrier(Handle, GetVKPipelineStage(Texture->PrevShader, QueueFlags), GetVKPipelineStage(PSF_Transfer, QueueFlags), ImageCopyBarriers);
 
 	VkImageCopy ImageCopyRegion = {};
 	ImageCopyRegion.srcSubresource.aspectMask = Texture->Aspect;
@@ -812,10 +812,10 @@ SetMemoryBarrier(u32 SrcAccess, u32 DstAccess,
 				 u32 SrcStageMask, u32 DstStageMask)
 {
 	VkMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-	Barrier.srcAccessMask = GetVKAccessMask(SrcAccess, SrcStageMask);
-	Barrier.dstAccessMask = GetVKAccessMask(DstAccess, DstStageMask);
+	Barrier.srcAccessMask = GetVKAccessMask(SrcAccess, SrcStageMask, QueueFlags);
+	Barrier.dstAccessMask = GetVKAccessMask(DstAccess, DstStageMask, QueueFlags);
 
-	vkCmdPipelineBarrier(Handle, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), VK_DEPENDENCY_BY_REGION_BIT, 1, &Barrier, 0, 0, 0, 0);
+	vkCmdPipelineBarrier(Handle, GetVKPipelineStage(SrcStageMask, QueueFlags), GetVKPipelineStage(DstStageMask, QueueFlags), VK_DEPENDENCY_BY_REGION_BIT, 1, &Barrier, 0, 0, 0, 0);
 }
 
 void vulkan_command_list::
@@ -834,7 +834,7 @@ SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 		    BufferPrevShader = BufferPrevShader & PSF_BottomOfPipe ? PSF_TopOfPipe : BufferPrevShader;
 		u32 BufferNextShader = Data.Shader;
 		u32 ResourceLayoutPrev = BufferPrevShader & PSF_TopOfPipe ? 0 : Buffer->CurrentLayout;
-		u32 ResourceLayoutNext = BufferNextShader & PSF_BottomOfPipe ? 0 : Data.Aspect;
+		u32 ResourceLayoutNext = BufferNextShader & PSF_BottomOfPipe ? 0 : Data.Layout;
 		Buffer->CurrentLayout = ResourceLayoutNext;
 		Buffer->PrevShader = BufferNextShader;
 
@@ -843,8 +843,8 @@ SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 
 		VkBufferMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
 		Barrier.buffer = Buffer->Handle;
-		Barrier.srcAccessMask = GetVKAccessMask(ResourceLayoutPrev, BufferPrevShader);
-		Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, BufferNextShader);
+		Barrier.srcAccessMask = GetVKAccessMask(ResourceLayoutPrev, BufferPrevShader, QueueFlags);
+		Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, BufferNextShader, QueueFlags);
 		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.offset = 0;
@@ -854,7 +854,7 @@ SetBufferBarriers(const std::vector<buffer_barrier>& BarrierData)
 	}
 
 	if(Barriers.size())
-		vkCmdPipelineBarrier(Handle, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 0, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
+		vkCmdPipelineBarrier(Handle, GetVKPipelineStage(SrcStageMask, QueueFlags), GetVKPipelineStage(DstStageMask, QueueFlags), 0, 0, 0, Barriers.size(), Barriers.data(), 0, 0);
 }
 
 void vulkan_command_list::
@@ -874,7 +874,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 		u32 TexturePrevShader = Texture->PrevShader;
 		    TexturePrevShader = TexturePrevShader & PSF_BottomOfPipe ? PSF_TopOfPipe : TexturePrevShader;
 		u32 TextureNextShader = Data.Shader;
-		u32 ResourceLayoutNext = TextureNextShader & PSF_BottomOfPipe ? 0 : Data.Aspect;
+		u32 ResourceLayoutNext = TextureNextShader & PSF_BottomOfPipe ? 0 : Data.Layout;
 		Texture->PrevShader = TextureNextShader;
 
 		SrcStageMask |= TexturePrevShader;
@@ -882,7 +882,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 
 		u32 MipToUse = Data.Mips;
 		VkImageMemoryBarrier Barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-		Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, TextureNextShader);
+		Barrier.dstAccessMask = GetVKAccessMask(ResourceLayoutNext, TextureNextShader, QueueFlags);
 		Barrier.newLayout = GetVKLayout(ResourceStateNext);
 		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -899,7 +899,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 
 			if(AreAllSubresourcesInSameState)
 			{
-				Barrier.srcAccessMask = GetVKAccessMask(TexturePrevShader & PSF_TopOfPipe ? 0 : Texture->CurrentLayout[0], TexturePrevShader);
+				Barrier.srcAccessMask = GetVKAccessMask(TexturePrevShader & PSF_TopOfPipe ? 0 : Texture->CurrentLayout[0], TexturePrevShader, QueueFlags);
 				Barrier.oldLayout = GetVKLayout(TexturePrevShader & PSF_TopOfPipe ? barrier_state::undefined : Texture->CurrentState[0]);
 
 				Barrier.subresourceRange.baseMipLevel   = 0;
@@ -912,7 +912,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 			{
 				for(u32 MipIdx = 0; MipIdx < Texture->Info.MipLevels; ++MipIdx)
 				{
-					Barrier.srcAccessMask = GetVKAccessMask(TexturePrevShader & PSF_TopOfPipe ? 0 : Texture->CurrentLayout[MipIdx], TexturePrevShader);
+					Barrier.srcAccessMask = GetVKAccessMask(TexturePrevShader & PSF_TopOfPipe ? 0 : Texture->CurrentLayout[MipIdx], TexturePrevShader, QueueFlags);
 					Barrier.oldLayout = GetVKLayout(TexturePrevShader & PSF_TopOfPipe ? barrier_state::undefined : Texture->CurrentState[MipIdx]);
 
 					Barrier.subresourceRange.baseMipLevel   = MipIdx;
@@ -928,7 +928,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 		}
 		else
 		{
-			Barrier.srcAccessMask = GetVKAccessMask(TexturePrevShader & PSF_TopOfPipe ? 0 : Texture->CurrentLayout[MipToUse], TexturePrevShader);
+			Barrier.srcAccessMask = GetVKAccessMask(TexturePrevShader & PSF_TopOfPipe ? 0 : Texture->CurrentLayout[MipToUse], TexturePrevShader, QueueFlags);
 			Barrier.oldLayout = GetVKLayout(TexturePrevShader & PSF_TopOfPipe ? barrier_state::undefined : Texture->CurrentState[MipToUse]);
 
 			Barrier.subresourceRange.baseMipLevel   = MipToUse;
@@ -943,7 +943,7 @@ SetImageBarriers(const std::vector<texture_barrier>& BarrierData)
 	}
 
 	if(Barriers.size())
-		vkCmdPipelineBarrier(Handle, GetVKPipelineStage(SrcStageMask), GetVKPipelineStage(DstStageMask), 
+		vkCmdPipelineBarrier(Handle, GetVKPipelineStage(SrcStageMask, QueueFlags), GetVKPipelineStage(DstStageMask, QueueFlags), 
 							 0, 0, 0, 0, 0, 
 							 (u32)Barriers.size(), Barriers.data());
 }

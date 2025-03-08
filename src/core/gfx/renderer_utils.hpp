@@ -666,18 +666,81 @@ struct buffer;
 struct buffer_barrier
 {
 	buffer* Buffer;
-	u32 Aspect;
+	u32 Layout;
 	u32 Shader;
+
+	buffer_barrier() = default;
+	buffer_barrier(buffer* Ptr, u32 NewLayout, u32 NewShader) : Buffer(Ptr), Layout(NewLayout), Shader(NewShader) {}
+
+    bool operator==(const buffer_barrier& Oth) const
+    {
+        return (Buffer == Oth.Buffer) &&
+			   (Layout == Oth.Layout) && 
+               (Shader == Oth.Shader);
+    }
+
+	bool operator!=(const buffer_barrier& Oth) const
+	{
+		return !(*this == Oth);
+	}
 };
 
 struct texture;
 struct texture_barrier
 {
 	texture* Texture;
-	u32 Aspect;
+	u32 Layout;
 	barrier_state State;
 	u64 Mips;
 	u32 Shader;
+
+	texture_barrier() = default;
+	texture_barrier(texture* Ptr, u32 NewLayout, barrier_state NewState, u64 MipsToUse, u32 NewShader) : Texture(Ptr), Layout(NewLayout), State(NewState), Mips(MipsToUse), Shader(NewShader) {}
+
+    bool operator==(const texture_barrier& Oth) const
+    {
+        return (Texture == Oth.Texture) &&
+               (Layout == Oth.Layout) &&
+			   (State == Oth.State) && 
+               (Mips == Oth.Mips) &&
+			   (Shader == Oth.Shader);
+    }
+
+	bool operator!=(const texture_barrier& Oth) const
+	{
+		return !(*this == Oth);
+	}
+};
+
+namespace std
+{
+	template<>
+    struct hash<buffer_barrier>
+    {
+        size_t operator()(const buffer_barrier& b) const
+        {
+            size_t Result = 0;
+            hash_combine(Result, hash<uintptr_t>{}((uintptr_t)b.Buffer));
+            hash_combine(Result, hash<u32>{}(b.Layout));
+            hash_combine(Result, hash<u32>{}(b.Shader));
+            return Result;
+        }
+    };
+
+	template<>
+    struct hash<texture_barrier>
+    {
+        size_t operator()(const texture_barrier& t) const
+        {
+            size_t Result = 0;
+            hash_combine(Result, hash<uintptr_t>{}((uintptr_t)t.Texture));
+            hash_combine(Result, hash<u32>{}(t.Layout));
+            hash_combine(Result, hash<u64>{}(static_cast<u64>(t.State)));
+            hash_combine(Result, hash<u64>{}(t.Mips));
+            hash_combine(Result, hash<u32>{}(t.Shader));
+            return Result;
+        }
+    };
 };
 
 class render_context;
@@ -754,12 +817,11 @@ struct command_list
 
 class command_queue
 {
-protected:
+public:
 	renderer_backend* Gfx;
 	std::vector<command_list*> CommandLists;
 	queue_type Type;
 
-public:
 	virtual ~command_queue() = default;
 
 	virtual void DestroyObject() = 0;
@@ -768,11 +830,11 @@ public:
 	virtual command_list* AllocateCommandList(command_list_level Level = command_list_level::primary) = 0;
 	virtual void Remove(command_list* CommandList) = 0;
 
-	virtual void Execute(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
-	virtual void Present(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
+	virtual void Execute(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>(), bool PlaceEndBarriers = true) = 0;
+	virtual void Present(const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>(), bool PlaceEndBarriers = true) = 0;
 
-	virtual void Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
-	virtual void Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
+	virtual void Execute(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>(), bool PlaceEndBarriers = true) = 0;
+	virtual void Present(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>(), bool PlaceEndBarriers = true) = 0;
 
 	virtual void ExecuteAndRemove(command_list* CommandList, const std::vector<gpu_sync*>& Syncs = std::vector<gpu_sync*>()) = 0;
 };
